@@ -1,0 +1,51 @@
+# gitignore template for Jupyter Notebooks
+# website: http://jupyter.org/
+
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IPython
+profile_default/
+ipython_config.py
+
+# Remove previous ipynb_checkpoints
+#   git rm -r .ipynb_checkpoints/
+*.py[cod]
+data/
+
+.vscode/
+
+# Editors
+.vscode/
+.idea/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Python artefacts
+__pycache__/
+*.py[cod]
+*.so
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Static‑analysis / test caches
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Coverage
+.coverage*
+htmlcov/
+
+# OS cruft
+.DS_Store
+.vscode/settings.json
