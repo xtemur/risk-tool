@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "risk-management"
+name = "risk-tool"
 version = "0.1.0"
 description = "A risk-management toolkit for trading"
 authors = ["Temurbek temurbekkhujaev@gmail.com"]
