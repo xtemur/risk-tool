@@ -147,10 +147,10 @@ def get_totals_by_date_per_account(token, overall_start, overall_end, account_id
 
 
 def get_fills_per_account(token, overall_start, overall_end, account_id_list):
-    fills_data = {"action": "fills", "type": "totalsByDate", "token": token}
+    fills_data = {"action": "fills", "token": token}
 
     for account_id in account_id_list:
-        base_data = reports_data.copy()
+        base_data = fills_data.copy()
         base_data["accountId"] = account_id
         for month_start in month_date_range(overall_start, overall_end):
             month_end = get_last_day_of_month(month_start)
@@ -182,19 +182,31 @@ def get_fills_per_account(token, overall_start, overall_end, account_id_list):
 
 def main():
 
-    overall_start = date(2022, 4, 1)
-    overall_end = date(2025, 2, 28)
+    overall_start = date(2023, 4, 1)
+    overall_end = date(2025, 4, 30)
+    random_five = [
+        "NETS012_OLD",
+        "NECS008OP_OLD",
+        "NEL004_OLD",
+        "NEO006MS_OLD",
+        "NEO004OP_OLD",
+    ]
 
     # Your API token and IDs
-    token = "5a764d70b5640a56243e131cb52183fd:2523"
+    token = "0b8f3c5ee57fc7dd376af28ae83e4c2c:2523"
 
     account_df = get_account_df(token)
 
-    all_accounts = account_df["Account Id"].tolist()
-    print(all_accounts)
-    get_totals_by_date_per_account(token, overall_start, overall_end, all_accounts)
+    # five_random = account_df[account_df['Last Traded'] > str(overall_end)].sample(5)#
+    random_five_ids = account_df[account_df["Account Name"].isin(random_five)][
+        "Account Id"
+    ].tolist()
 
-    print(accounts_id)
+    print(random_five_ids)
+
+    get_fills_per_account(token, overall_start, overall_end, random_five_ids)
+
+    get_totals_by_date_per_account(token, overall_start, overall_end, random_five_ids)
 
     # get_totals_by_date(token, overall_start, overall_end, accounts_id)
 

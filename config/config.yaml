@@ -1,0 +1,47 @@
+# config/config.yaml
+data:
+  raw_data_path: "data/raw"
+  processed_data_path: "data/processed"
+  traders:
+    - "trader_001"
+    - "trader_002"
+    # ... up to 20 traders
+  
+  validation:
+    test_months: 2
+    validation_months: 3
+    gap_days: 5
+    min_training_samples: 100
+
+model:
+  global_model:
+    type: "lightgbm"
+    params:
+      objective: "binary"
+      metric: "auc"
+      num_leaves: 31
+      learning_rate: 0.05
+      feature_fraction: 0.8
+      bagging_fraction: 0.8
+      early_stopping_rounds: 50
+  
+  trader_models:
+    type: "lightgbm"
+    params:
+      objective: "binary"
+      metric: "auc"
+      num_leaves: 15
+      learning_rate: 0.1
+      feature_fraction: 0.9
+      early_stopping_rounds: 30
+  
+  ensemble:
+    default_global_weight: 0.7
+    min_trader_samples: 100
+    dynamic_weighting: true
+
+features:
+  rolling_windows: [3, 7, 14, 30]
+  risk_lookback: 60
+  behavioral_features: true
+  market_regime_features: false
