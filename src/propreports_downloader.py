@@ -11,6 +11,8 @@ import requests
 import yaml
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
+import re
+from io import StringIO
 
 # Setup logging
 logging.basicConfig(
@@ -242,6 +244,62 @@ class PropreportsDownloader:
             logger.warning("No data retrieved")
             return pd.DataFrame()
 
+    def _fetch_all_tbd_pages(self, base_data: Dict[str, str]) -> pd.DataFrame:
+        """Fetch all pages for a request and return combined DataFrame"""
+        page_num = 0
+        header = None
+        all_data_lines = []
+
+        logger.debug(f"Fetching data for account {base_data.get('accountId')}")
+        result = pd.DataFrame()
+        while True:
+            page_num += 1
+            request_data = base_data.copy()
+            request_data["page"] = str(page_num)
+
+            csv_text = self.api_client.make_request(request_data)
+            if not csv_text:
+                logger.warning(f"Failed to fetch page {page_num}")
+                break
+
+            text, current_page, total_pages = self.data_processor.parse_csv_response(csv_text)
+
+            if not text:
+                break
+
+            text_str = "\n".join(text)
+
+            day_blocks = re.split(r"(?=^\d{1,2}/\d{1,2}/\d{2,4})", text_str, flags=re.MULTILINE)
+
+            for block in day_blocks:
+                block_lines = block.strip().splitlines()
+                if not block_lines:
+                    continue
+
+                # Parse date from block header
+                date_str = block_lines[0].strip()
+                body_text = "\n".join(block_lines[1:])
+                body = re.split(r"(?=^(?:Fee|Daily|Cash))", body_text, flags=re.MULTILINE)[0]
+
+
+                df = pd.read_csv(StringIO(body))
+                if df is not None and not df.empty:
+                    df['Date'] = pd.to_datetime(date_str)  # Add date column
+                    result = pd.concat([result, df], ignore_index=True)
+
+            logger.debug(f"Fetched page {current_page}/{total_pages}")
+
+            # Break if we've reached the last page
+            if current_page >= total_pages:
+                break
+
+        # Convert to DataFrame
+        if result is not None and not result.empty:
+            return result
+        else:
+            logger.warning("No data retrieved")
+            return pd.DataFrame()
+
     def download_totals_by_date(self, start_date: date, end_date: date,
                               account_ids: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
         """Download totals by date for entire period at once"""
@@ -266,7 +324,7 @@ class PropreportsDownloader:
             request_data = base_request.copy()
             request_data["accountId"] = account_id
 
-            df = self._fetch_all_pages(request_data)
+            df = self._fetch_all_tbd_pages(request_data)
 
             if not df.empty:
                 # Save to file
@@ -418,9 +476,14 @@ class PropreportsDownloader:
 
                     # Check required columns
                     if file_type == "totals":
-                        required_cols = ["Date", "Net", "Gross", "Orders", "Fills", "Qty"]
+                        required_cols = ["Symbol", "Orders", "Fills", "Qty", "Gross", "Comm", "Ecn Fee", "SEC", "ORF", "CAT", "TAF",
+                                         "FTT", "NSCC", "Acc", "Clr", "Misc", "Net", "Unrealized δ", "Total δ", "Unrealized", "Date"]
+                        # Add other required columns as needed
                     else:  # fills
-                        required_cols = ["Date"]  # Add other required columns as needed
+                        required_cols = ["Date/Time", "Account", "B/S", "Qty", "Symbol", "Price", "Route", "Liq", "Comm", "Ecn Fee",
+                                         "SEC", "ORF", "CAT", "TAF", "FTT", "NSCC", "Acc", "Clr", "Misc", "Order Id", "Fill Id", "Currency",
+                                         "ISIN", "CUSIP", "Status", "PropReports Id"]
+
 
                     missing_cols = [col for col in required_cols if col not in df.columns]
                     if missing_cols:
@@ -451,7 +514,7 @@ class PropreportsDownloader:
 def main():
     """Main execution function"""
     # Configuration - move to environment variables in production
-    TOKEN = "e36ede9281f67cf867456a95230ca0c7:2523"
+    TOKEN = "c4739f336752e7687b616cecb28bc262:2523"
 
     try:
         # Initialize downloader
