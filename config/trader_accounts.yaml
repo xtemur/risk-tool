@@ -1,0 +1,13 @@
+traders:
+  - account_id: "TRADER001"
+    name: "John Doe"
+    strategy: "Scalping"
+    start_date: "2023-01-01"
+  - account_id: "TRADER002"
+    name: "Jane Smith"
+    strategy: "Swing"
+    start_date: "2023-02-15"
+  - account_id: "TRADER003"
+    name: "Mike Johnson"
+    strategy: "Day Trading"
+    start_date: "2023-01-10"

@@ -1,47 +1,36 @@
-# config/config.yaml
-data:
-  raw_data_path: "data/raw"
-  processed_data_path: "data/processed"
-  traders:
-    - "trader_001"
-    - "trader_002"
-    # ... up to 20 traders
+trading:
+  timezone: "US/Eastern"
+  market_open: "09:30"
+  email_time: "09:00"
   
-  validation:
-    test_months: 2
-    validation_months: 3
-    gap_days: 5
-    min_training_samples: 100
-
 model:
   global_model:
-    type: "lightgbm"
-    params:
-      objective: "binary"
-      metric: "auc"
-      num_leaves: 31
-      learning_rate: 0.05
-      feature_fraction: 0.8
-      bagging_fraction: 0.8
-      early_stopping_rounds: 50
-  
-  trader_models:
-    type: "lightgbm"
-    params:
-      objective: "binary"
-      metric: "auc"
-      num_leaves: 15
-      learning_rate: 0.1
-      feature_fraction: 0.9
-      early_stopping_rounds: 30
-  
+    n_estimators: 100
+    learning_rate: 0.1
+    max_depth: 6
+    random_state: 42
+  personal_model:
+    min_trading_days: 30
+    n_estimators: 50
+    learning_rate: 0.1
+    max_depth: 4
+    random_state: 42
   ensemble:
-    default_global_weight: 0.7
-    min_trader_samples: 100
-    dynamic_weighting: true
+    global_weight: 0.3
+    personal_weight: 0.7
 
-features:
-  rolling_windows: [3, 7, 14, 30]
-  risk_lookback: 60
-  behavioral_features: true
-  market_regime_features: false
+data:
+  lookback_days: 252
+  feature_windows: [5, 10, 20]
+  holdout_months: 2
+  
+email:
+  smtp_server: "smtp.gmail.com"
+  smtp_port: 587
+  from_email: ""  # Set in .env
+  password: ""    # Set in .env
+  to_emails: ["admin@company.com"]
+  
+risk:
+  high_risk_threshold: 0.7
+  medium_risk_threshold: 0.5
