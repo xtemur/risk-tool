@@ -175,5 +175,5 @@ The system's hybrid architecture balances global market insights with trader-spe
 
 ---
 
-**Technical Contact**: System Architecture and Implementation  
+**Technical Contact**: System Architecture and Implementation
 **Business Contact**: Risk Management Applications and ROI Analysis

@@ -19,17 +19,17 @@
         <h1>Daily Risk Report</h1>
         <p>{{ summary.date }}</p>
     </div>
-    
+
     <div class="summary">
         <h2>Summary</h2>
         <p><strong>Total Traders:</strong> {{ summary.total_traders }}</p>
-        <p><strong>High Risk:</strong> {{ summary.high_risk_count }} | 
-           <strong>Medium Risk:</strong> {{ summary.medium_risk_count }} | 
+        <p><strong>High Risk:</strong> {{ summary.high_risk_count }} |
+           <strong>Medium Risk:</strong> {{ summary.medium_risk_count }} |
            <strong>Low Risk:</strong> {{ summary.low_risk_count }}</p>
         <p><strong>Average Risk Score:</strong> {{ "%.1f%%" | format(summary.average_risk * 100) }}</p>
         <p><strong>Total Recent P&L (5d):</strong> ${{ "{:,.2f}".format(summary.total_recent_pnl) }}</p>
     </div>
-    
+
     {% if high_risk_traders %}
     <h2 style="color: #e74c3c;">🚨 High Risk Traders</h2>
     <table>
@@ -51,7 +51,7 @@
         {% endfor %}
     </table>
     {% endif %}
-    
+
     <h2>All Traders Risk Assessment</h2>
     <table>
         <tr>
@@ -77,7 +77,7 @@
         </tr>
         {% endfor %}
     </table>
-    
+
     <div style="margin-top: 30px; font-size: 12px; color: #7f8c8d;">
         <p><strong>Risk Score:</strong> Probability that trader will have negative P&L tomorrow</p>
         <p><strong>Confidence:</strong> High = Personal model available, Medium = Global model only</p>

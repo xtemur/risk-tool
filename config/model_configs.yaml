@@ -4,12 +4,12 @@ risk_limits:
     max_loss_pct: 0.02
     warning_loss_pct: 0.015
     max_trades: 50
-  
+
   portfolio:
     max_exposure: 100000
     max_concentration: 0.1
     var_confidence: 0.95
-  
+
   position:
     max_position_size: 10000
     kelly_fraction_limit: 0.25
@@ -19,12 +19,12 @@ alerts:
   email:
     enabled: true
     recipients: ["trader@company.com"]
-  
+
   slack:
     enabled: false
     webhook_url: ""
-  
+
   severity_levels:
     - "INFO"
-    - "WARNING" 
+    - "WARNING"
     - "CRITICAL"
