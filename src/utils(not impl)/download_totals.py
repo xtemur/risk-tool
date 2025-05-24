@@ -181,7 +181,6 @@ def get_fills_per_account(token, overall_start, overall_end, account_id_list):
 
 
 def main():
-
     overall_start = date(2023, 4, 1)
     overall_end = date(2025, 4, 30)
     random_five = [
