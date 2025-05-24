@@ -1,437 +1,501 @@
-import glob
-import io
 import logging
 import os
-import re
+import time
+from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
+from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 import requests
 import yaml
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 
 # Setup logging
 logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
-# API Configuration
-API_URL = "https://neo.propreports.com/api.php"
-HEADERS = {"Content-Type": "application/x-www-form-urlencoded"}
+
+@dataclass
+class DownloadConfig:
+    """Configuration for data download"""
+    api_url: str = "https://neo.propreports.com/api.php"
+    headers: Dict[str, str] = None
+    max_retries: int = 3
+    backoff_factor: float = 0.3
+    timeout: int = 30
+    rate_limit_delay: float = 0.1  # Delay between requests
+
+    def __post_init__(self):
+        if self.headers is None:
+            self.headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
 
-class PropreportsDownloader:
-    def __init__(self, token, config_path="config/config.yaml"):
-        self.token = token
-        self.config_path = config_path
+@dataclass
+class TraderAccount:
+    """Trader account information"""
+    account_id: str
+    name: str
+    active: bool = True
 
-        # Load trader accounts from config
+
+class APIClient:
+    """Handles API communication with retry logic and rate limiting"""
+
+    def __init__(self, config: DownloadConfig):
+        self.config = config
+        self.session = self._create_session()
+
+    def _create_session(self) -> requests.Session:
+        """Create session with retry strategy"""
+        session = requests.Session()
+
+        retry_strategy = Retry(
+            total=self.config.max_retries,
+            backoff_factor=self.config.backoff_factor,
+            status_forcelist=[429, 500, 502, 503, 504],
+        )
+
+        adapter = HTTPAdapter(max_retries=retry_strategy)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+
+        return session
+
+    def make_request(self, form_data: Dict[str, str]) -> Optional[str]:
+        """Make API request with error handling and rate limiting"""
         try:
-            with open("config/trader_accounts.yaml", "r") as f:
-                trader_config = yaml.safe_load(f)
-                self.traders = trader_config["traders"]
-            logger.info(f"Loaded {len(self.traders)} trader accounts from config")
-        except FileNotFoundError:
-            logger.error(
-                "config/trader_accounts.yaml not found. Please create it first."
-            )
-            self.traders = []
+            # Rate limiting
+            time.sleep(self.config.rate_limit_delay)
 
-        # Create necessary directories
-        self.setup_directories()
-
-    def setup_directories(self):
-        """Create necessary directory structure"""
-        directories = ["data/raw", "data/raw/totals_by_date", "data/raw/fills"]
-        for directory in directories:
-            Path(directory).mkdir(parents=True, exist_ok=True)
-
-    def fetch_csv_page(self, form_data):
-        """Send a POST request with the provided form data."""
-        try:
-            response = requests.post(API_URL, data=form_data, headers=HEADERS)
-            logger.debug(
-                f"Fetching page {form_data.get('page')} for account {form_data.get('accountId')}"
+            response = self.session.post(
+                self.config.api_url,
+                data=form_data,
+                headers=self.config.headers,
+                timeout=self.config.timeout
             )
 
             if response.status_code == 200:
                 return response.text
             else:
-                logger.error(
-                    f"HTTP {response.status_code} for page {form_data.get('page')}"
-                )
+                logger.error(f"HTTP {response.status_code}: {response.text[:200]}")
                 return None
+
         except requests.RequestException as e:
             logger.error(f"Request failed: {str(e)}")
             return None
 
-    def parse_csv_response(self, csv_text):
+
+class DataProcessor:
+    """Handles CSV parsing and data processing"""
+
+    @staticmethod
+    def parse_csv_response(csv_text: str) -> Tuple[List[str], int, int]:
         """Parse CSV response and extract pagination info"""
+        import re
+
         lines = csv_text.strip().splitlines()
         current_page = 1
         total_pages = 1
 
+        # Check for pagination in last line
         if lines and re.match(r"Page\s+\d+/\d+", lines[-1].strip()):
             pagination_line = lines.pop().strip()
-            m_pagination = re.search(r"Page\s+(\d+)\s*/\s*(\d+)", pagination_line)
-            if m_pagination:
-                current_page = int(m_pagination.group(1))
-                total_pages = int(m_pagination.group(2))
+            match = re.search(r"Page\s+(\d+)\s*/\s*(\d+)", pagination_line)
+            if match:
+                current_page = int(match.group(1))
+                total_pages = int(match.group(2))
 
         return lines, current_page, total_pages
 
-    def fetch_pages(self, base_data):
-        """Fetch all pages for a given request"""
+    @staticmethod
+    def combine_csv_data(header: str, data_lines: List[str]) -> pd.DataFrame:
+        """Convert CSV data to DataFrame"""
+        if not header or not data_lines:
+            return pd.DataFrame()
+
+        # Create CSV string
+        csv_content = '\n'.join([header] + data_lines)
+
+        try:
+            # Read into DataFrame
+            from io import StringIO
+            df = pd.read_csv(StringIO(csv_content))
+
+            # Convert Date column if it exists
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+                df = df.dropna(subset=['Date'])  # Remove invalid dates
+                df = df.sort_values('Date')
+
+            return df
+
+        except Exception as e:
+            logger.error(f"Error processing CSV data: {str(e)}")
+            return pd.DataFrame()
+
+
+class PropreportsDownloader:
+    """Main downloader class with improved efficiency"""
+
+    def __init__(self, token: str, config_path: str = "config/config.yaml"):
+        self.token = token
+        self.config = DownloadConfig()
+        self.api_client = APIClient(self.config)
+        self.data_processor = DataProcessor()
+
+        # Load trader accounts
+        self.traders = self._load_trader_accounts()
+
+        # Setup directories
+        self._setup_directories()
+
+        logger.info(f"Initialized downloader with {len(self.traders)} accounts")
+
+    def _load_trader_accounts(self) -> List[TraderAccount]:
+        """Load trader accounts from config"""
+        try:
+            config_path = Path("config/trader_accounts.yaml")
+            if not config_path.exists():
+                logger.error("config/trader_accounts.yaml not found")
+                return []
+
+            with open(config_path, "r") as f:
+                config_data = yaml.safe_load(f)
+
+            traders = []
+            for trader_data in config_data.get("traders", []):
+                traders.append(TraderAccount(
+                    account_id=trader_data["account_id"],
+                    name=trader_data.get("name", trader_data["account_id"]),
+                    active=trader_data.get("active", True)
+                ))
+
+            # Filter active traders
+            active_traders = [t for t in traders if t.active]
+            logger.info(f"Loaded {len(active_traders)} active traders")
+
+            return active_traders
+
+        except Exception as e:
+            logger.error(f"Error loading trader accounts: {str(e)}")
+            return []
+
+    def _setup_directories(self):
+        """Create directory structure"""
+        directories = [
+            "data/raw",
+            "data/processed",
+            "logs"
+        ]
+
+        for directory in directories:
+            Path(directory).mkdir(parents=True, exist_ok=True)
+
+    def _fetch_all_pages(self, base_data: Dict[str, str]) -> pd.DataFrame:
+        """Fetch all pages for a request and return combined DataFrame"""
         page_num = 0
-        header = ""
+        header = None
         all_data_lines = []
+
+        logger.debug(f"Fetching data for account {base_data.get('accountId')}")
 
         while True:
             page_num += 1
-            base_data["page"] = str(page_num)
+            request_data = base_data.copy()
+            request_data["page"] = str(page_num)
 
-            csv_text = self.fetch_csv_page(base_data)
+            csv_text = self.api_client.make_request(request_data)
             if not csv_text:
-                logger.warning(f"Skipping page {page_num} due to fetch error.")
-                continue
+                logger.warning(f"Failed to fetch page {page_num}")
+                break
 
-            page_lines, current_page, total_pages = self.parse_csv_response(csv_text)
-            if not page_lines:
-                continue
+            lines, current_page, total_pages = self.data_processor.parse_csv_response(csv_text)
 
-            if header == "":
-                header = page_lines[0]
+            if not lines:
+                break
 
-            data_lines = page_lines[1:] if len(page_lines) > 1 else []
+            # Store header from first page
+            if header is None:
+                header = lines[0]
+
+            # Add data lines (skip header)
+            data_lines = lines[1:] if len(lines) > 1 else []
             all_data_lines.extend(data_lines)
 
+            logger.debug(f"Fetched page {current_page}/{total_pages}")
+
+            # Break if we've reached the last page
             if current_page >= total_pages:
                 break
 
-        return header, all_data_lines
-
-    def month_date_range(self, start_date, end_date):
-        """Generate first day of each month between start_date and end_date"""
-        current = start_date.replace(day=1)
-        while current < end_date:
-            yield current
-            next_month = (current.replace(day=28) + timedelta(days=4)).replace(day=1)
-            current = next_month
-
-    def get_last_day_of_month(self, dt):
-        """Get the last day of the month for given date"""
-        next_month = (dt.replace(day=28) + timedelta(days=4)).replace(day=1)
-        return next_month - timedelta(days=1)
-
-    def get_account_df(self):
-        """Get list of all accounts"""
-        base_data = {"action": "accounts", "token": self.token}
-        header, data_lines = self.fetch_pages(base_data)
-
-        if header is None:
-            logger.error("Failed to download accounts data.")
+        # Convert to DataFrame
+        if header and all_data_lines:
+            df = self.data_processor.combine_csv_data(header, all_data_lines)
+            logger.info(f"Downloaded {len(df)} records")
+            return df
+        else:
+            logger.warning("No data retrieved")
             return pd.DataFrame()
 
-        df = pd.read_csv(io.StringIO("\n".join([header] + data_lines)))
-        logger.info(f"Retrieved {len(df)} accounts from API")
-        return df
-
-    def download_totals_by_date(self, start_date, end_date, account_ids=None):
-        """Download totals by date for specified accounts"""
+    def download_totals_by_date(self, start_date: date, end_date: date,
+                              account_ids: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+        """Download totals by date for entire period at once"""
         if account_ids is None:
-            account_ids = [trader["account_id"] for trader in self.traders]
+            account_ids = [trader.account_id for trader in self.traders]
 
-        logger.info(f"Downloading totals by date for {len(account_ids)} accounts")
+        logger.info(f"Downloading totals from {start_date} to {end_date} for {len(account_ids)} accounts")
 
-        reports_data = {"action": "report", "type": "totalsByDate", "token": self.token}
+        results = {}
+
+        base_request = {
+            "action": "report",
+            "type": "totalsByDate",
+            "token": self.token,
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "endDate": end_date.strftime("%Y-%m-%d")
+        }
 
         for account_id in account_ids:
             logger.info(f"Processing totals for account: {account_id}")
-            base_data = reports_data.copy()
-            base_data["accountId"] = account_id
 
-            monthly_files = []
+            request_data = base_request.copy()
+            request_data["accountId"] = account_id
 
-            for month_start in self.month_date_range(start_date, end_date):
-                month_end = self.get_last_day_of_month(month_start)
-                start_date_str = month_start.strftime("%Y-%m-%d")
-                end_date_str = month_end.strftime("%Y-%m-%d")
+            df = self._fetch_all_pages(request_data)
 
-                base_data["startDate"] = start_date_str
-                base_data["endDate"] = end_date_str
+            if not df.empty:
+                # Save to file
+                output_file = f"data/raw/{account_id}_totals.csv"
+                df.to_csv(output_file, index=False)
+                logger.info(f"Saved {len(df)} records to {output_file}")
 
-                logger.debug(
-                    f"Downloading {account_id} totals: {start_date_str} to {end_date_str}"
-                )
-                header, data_lines = self.fetch_pages(base_data)
+                results[account_id] = df
+            else:
+                logger.warning(f"No totals data retrieved for {account_id}")
 
-                if header is None:
-                    logger.warning(
-                        f"Failed to download totals for {account_id}: {start_date_str} to {end_date_str}"
-                    )
-                    continue
+        return results
 
-                # Save monthly file
-                csv_combined = "\n".join([header] + data_lines)
-                month_dir = f"data/raw/totals_by_date/{account_id}"
-                Path(month_dir).mkdir(parents=True, exist_ok=True)
-
-                file_name = (
-                    f"{month_dir}/tbd_{account_id}_{month_start.strftime('%Y_%m')}.csv"
-                )
-                with open(file_name, "w", encoding="utf-8") as f:
-                    f.write(csv_combined)
-                monthly_files.append(file_name)
-
-                logger.debug(f"Saved: {file_name}")
-
-            # Combine all monthly files into single totals file
-            self.combine_monthly_files(account_id, monthly_files, "totals")
-
-    def download_fills(self, start_date, end_date, account_ids=None):
-        """Download fills data for specified accounts"""
+    def download_fills(self, start_date: date, end_date: date,
+                      account_ids: Optional[List[str]] = None) -> Dict[str, pd.DataFrame]:
+        """Download fills for entire period at once"""
         if account_ids is None:
-            account_ids = [trader["account_id"] for trader in self.traders]
+            account_ids = [trader.account_id for trader in self.traders]
 
-        logger.info(f"Downloading fills for {len(account_ids)} accounts")
+        logger.info(f"Downloading fills from {start_date} to {end_date} for {len(account_ids)} accounts")
 
-        fills_data = {"action": "fills", "token": self.token}
+        results = {}
+
+        base_request = {
+            "action": "fills",
+            "token": self.token,
+            "startDate": start_date.strftime("%Y-%m-%d"),
+            "endDate": end_date.strftime("%Y-%m-%d")
+        }
 
         for account_id in account_ids:
             logger.info(f"Processing fills for account: {account_id}")
-            base_data = fills_data.copy()
-            base_data["accountId"] = account_id
 
-            monthly_files = []
+            request_data = base_request.copy()
+            request_data["accountId"] = account_id
 
-            for month_start in self.month_date_range(start_date, end_date):
-                month_end = self.get_last_day_of_month(month_start)
-                start_date_str = month_start.strftime("%Y-%m-%d")
-                end_date_str = month_end.strftime("%Y-%m-%d")
+            df = self._fetch_all_pages(request_data)
 
-                base_data["startDate"] = start_date_str
-                base_data["endDate"] = end_date_str
+            if not df.empty:
+                # Save to file
+                output_file = f"data/raw/{account_id}_fills.csv"
+                df.to_csv(output_file, index=False)
+                logger.info(f"Saved {len(df)} records to {output_file}")
 
-                logger.debug(
-                    f"Downloading {account_id} fills: {start_date_str} to {end_date_str}"
-                )
-                header, data_lines = self.fetch_pages(base_data)
+                results[account_id] = df
+            else:
+                logger.warning(f"No fills data retrieved for {account_id}")
 
-                if header is None:
-                    logger.warning(
-                        f"Failed to download fills for {account_id}: {start_date_str} to {end_date_str}"
-                    )
-                    continue
+        return results
 
-                # Save monthly file
-                csv_combined = "\n".join([header] + data_lines)
-                month_dir = f"data/raw/fills/{account_id}"
-                Path(month_dir).mkdir(parents=True, exist_ok=True)
+    def get_accounts(self) -> pd.DataFrame:
+        """Get list of all accounts"""
+        request_data = {
+            "action": "accounts",
+            "token": self.token
+        }
 
-                file_name = f"{month_dir}/fills_{account_id}_{month_start.strftime('%Y_%m')}.csv"
-                with open(file_name, "w", encoding="utf-8") as f:
-                    f.write(csv_combined)
-                monthly_files.append(file_name)
+        df = self._fetch_all_pages(request_data)
 
-                logger.debug(f"Saved: {file_name}")
+        if not df.empty:
+            logger.info(f"Retrieved {len(df)} accounts")
 
-            # Combine all monthly files into single fills file
-            self.combine_monthly_files(account_id, monthly_files, "fills")
+        return df
 
-    def combine_monthly_files(self, account_id, monthly_files, data_type):
-        """Combine monthly CSV files into single file for the risk-tool system"""
-        if not monthly_files:
-            logger.warning(f"No monthly files to combine for {account_id} {data_type}")
-            return
-
-        try:
-            # Read and combine all monthly files
-            dfs = []
-            for file_path in monthly_files:
-                if os.path.exists(file_path):
-                    df = pd.read_csv(file_path)
-                    if not df.empty:
-                        dfs.append(df)
-
-            if not dfs:
-                logger.warning(f"No valid data found for {account_id} {data_type}")
-                return
-
-            # Combine all dataframes
-            combined_df = pd.concat(dfs, ignore_index=True)
-
-            # Remove duplicates and sort by date
-            if "Date" in combined_df.columns:
-                combined_df["Date"] = pd.to_datetime(combined_df["Date"])
-                combined_df = combined_df.drop_duplicates().sort_values("Date")
-
-            # Save combined file in the format expected by risk-tool
-            output_file = f"data/raw/{account_id}_{data_type}.csv"
-            combined_df.to_csv(output_file, index=False)
-
-            logger.info(
-                f"Combined {len(dfs)} monthly files into {output_file} ({len(combined_df)} records)"
-            )
-
-        except Exception as e:
-            logger.error(
-                f"Error combining files for {account_id} {data_type}: {str(e)}"
-            )
-
-    def download_latest_data(self, days_back=30):
-        """Download only recent data (for daily updates)"""
+    def download_recent_data(self, days_back: int = 30) -> bool:
+        """Download recent data for daily updates"""
         end_date = date.today()
         start_date = end_date - timedelta(days=days_back)
 
-        logger.info(f"Downloading latest data from {start_date} to {end_date}")
+        logger.info(f"Downloading recent data: {start_date} to {end_date}")
 
-        account_ids = [trader["account_id"] for trader in self.traders]
+        try:
+            account_ids = [trader.account_id for trader in self.traders]
 
-        # Download recent data
-        self.download_totals_by_date(start_date, end_date, account_ids)
-        self.download_fills(start_date, end_date, account_ids)
+            # Download both totals and fills
+            totals_results = self.download_totals_by_date(start_date, end_date, account_ids)
+            fills_results = self.download_fills(start_date, end_date, account_ids)
 
-        logger.info("Latest data download completed")
+            # Verify we got data for all accounts
+            success = (len(totals_results) == len(account_ids) and
+                      len(fills_results) == len(account_ids))
 
-    def download_full_history(self, start_date=None, end_date=None):
-        """Download full historical data"""
+            if success:
+                logger.info("Recent data download completed successfully")
+            else:
+                logger.warning("Some accounts may not have downloaded correctly")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Recent data download failed: {str(e)}")
+            return False
+
+    def download_full_history(self, start_date: Optional[date] = None,
+                            end_date: Optional[date] = None) -> bool:
+        """Download complete historical data"""
         if start_date is None:
-            start_date = date(2023, 4, 1)  # Default start date
+            start_date = date(2023, 4, 1)
         if end_date is None:
             end_date = date.today()
 
-        logger.info(f"Downloading full history from {start_date} to {end_date}")
+        logger.info(f"Downloading full history: {start_date} to {end_date}")
 
-        account_ids = [trader["account_id"] for trader in self.traders]
+        try:
+            account_ids = [trader.account_id for trader in self.traders]
 
-        # Download all data
-        self.download_totals_by_date(start_date, end_date, account_ids)
-        self.download_fills(start_date, end_date, account_ids)
+            # Download both totals and fills
+            totals_results = self.download_totals_by_date(start_date, end_date, account_ids)
+            fills_results = self.download_fills(start_date, end_date, account_ids)
 
-        logger.info("Full history download completed")
+            # Verify data quality
+            success = self.verify_data_quality()
 
-    def verify_data_quality(self):
-        """Verify downloaded data quality"""
+            if success:
+                logger.info("Full history download completed successfully")
+            else:
+                logger.warning("Data quality issues detected")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Full history download failed: {str(e)}")
+            return False
+
+    def verify_data_quality(self) -> bool:
+        """Comprehensive data quality verification"""
         logger.info("Verifying data quality...")
 
         issues = []
 
         for trader in self.traders:
-            account_id = trader["account_id"]
+            account_id = trader.account_id
 
-            # Check if files exist
+            # Check file existence
             totals_file = f"data/raw/{account_id}_totals.csv"
             fills_file = f"data/raw/{account_id}_fills.csv"
 
-            if not os.path.exists(totals_file):
-                issues.append(f"Missing totals file for {account_id}")
-                continue
+            for file_path, file_type in [(totals_file, "totals"), (fills_file, "fills")]:
+                if not os.path.exists(file_path):
+                    issues.append(f"Missing {file_type} file for {account_id}")
+                    continue
 
-            if not os.path.exists(fills_file):
-                issues.append(f"Missing fills file for {account_id}")
-                continue
+                try:
+                    df = pd.read_csv(file_path)
 
-            # Check data quality
-            try:
-                totals_df = pd.read_csv(totals_file)
-                fills_df = pd.read_csv(fills_file)
+                    if df.empty:
+                        issues.append(f"Empty {file_type} data for {account_id}")
+                        continue
 
-                if totals_df.empty:
-                    issues.append(f"Empty totals data for {account_id}")
+                    # Check required columns
+                    if file_type == "totals":
+                        required_cols = ["Date", "Net", "Gross", "Orders", "Fills", "Qty"]
+                    else:  # fills
+                        required_cols = ["Date"]  # Add other required columns as needed
 
-                if fills_df.empty:
-                    issues.append(f"Empty fills data for {account_id}")
+                    missing_cols = [col for col in required_cols if col not in df.columns]
+                    if missing_cols:
+                        issues.append(f"Missing columns in {account_id} {file_type}: {missing_cols}")
 
-                # Check required columns
-                required_totals_cols = [
-                    "Date",
-                    "Net",
-                    "Gross",
-                    "Orders",
-                    "Fills",
-                    "Qty",
-                ]
-                missing_cols = [
-                    col for col in required_totals_cols if col not in totals_df.columns
-                ]
-                if missing_cols:
-                    issues.append(
-                        f"Missing columns in {account_id} totals: {missing_cols}"
-                    )
+                    # Check data types
+                    if 'Date' in df.columns:
+                        try:
+                            pd.to_datetime(df['Date'])
+                        except:
+                            issues.append(f"Invalid date format in {account_id} {file_type}")
 
-                logger.info(
-                    f"{account_id}: {len(totals_df)} trading days, {len(fills_df)} fills"
-                )
+                    logger.info(f"{account_id} {file_type}: {len(df)} records")
 
-            except Exception as e:
-                issues.append(f"Error reading data for {account_id}: {str(e)}")
+                except Exception as e:
+                    issues.append(f"Error reading {file_type} for {account_id}: {str(e)}")
 
         if issues:
             logger.warning("Data quality issues found:")
             for issue in issues:
                 logger.warning(f"  - {issue}")
+            return False
         else:
             logger.info("Data quality verification passed!")
-
-        return len(issues) == 0
+            return True
 
 
 def main():
-    """Main function for standalone execution"""
-    # Configuration
-    TOKEN = "0b8f3c5ee57fc7dd376af28ae83e4c2c:2523"  # Your API token
-
-    # Initialize downloader
-    downloader = PropreportsDownloader(TOKEN)
-
-    if not downloader.traders:
-        logger.error(
-            "No traders configured. Please set up config/trader_accounts.yaml first."
-        )
-        return
-
-    # Download full history (you can modify dates as needed)
-    start_date = date(2023, 4, 1)
-    end_date = date(2025, 4, 30)
+    """Main execution function"""
+    # Configuration - move to environment variables in production
+    TOKEN = "e36ede9281f67cf867456a95230ca0c7:2523"
 
     try:
-        downloader.download_full_history(start_date, end_date)
+        # Initialize downloader
+        downloader = PropreportsDownloader(TOKEN)
 
-        # Verify data quality
-        downloader.verify_data_quality()
+        if not downloader.traders:
+            logger.error("No traders configured. Please set up config/trader_accounts.yaml")
+            return
 
-        logger.info("Data download completed successfully!")
-        logger.info("You can now proceed with: python main.py --train")
+        # Download full history
+        start_date = date(2023, 4, 1)
+        end_date = date(2025, 4, 30)
+
+        success = downloader.download_full_history(start_date, end_date)
+
+        if success:
+            logger.info("Download completed successfully!")
+            logger.info("You can now proceed with: python main.py --train")
+        else:
+            logger.error("Download completed with issues. Check logs above.")
 
     except Exception as e:
-        logger.error(f"Download failed: {str(e)}")
+        logger.error(f"Main execution failed: {str(e)}")
+
+
+def download_for_risk_tool() -> bool:
+    """Function for integration with risk management system"""
+    TOKEN = "e36ede9281f67cf867456a95230ca0c7:2523"  # Move to config/env
+
+    try:
+        downloader = PropreportsDownloader(TOKEN)
+
+        # Download recent data
+        success = downloader.download_recent_data(days_back=30)
+
+        if success:
+            logger.info("Risk tool data update completed successfully")
+
+        return success
+
+    except Exception as e:
+        logger.error(f"Risk tool data update failed: {str(e)}")
+        return False
 
 
 if __name__ == "__main__":
     main()
-
-
-# ================================
-# Integration script for daily updates
-# ================================
-
-
-def download_for_risk_tool():
-    """Function to be called by the risk management system"""
-    TOKEN = "0b8f3c5ee57fc7dd376af28ae83e4c2c:2523"  # Move this to config or env
-
-    downloader = PropreportsDownloader(TOKEN)
-
-    # Download latest 30 days of data
-    downloader.download_latest_data(days_back=30)
-
-    # Verify data quality
-    data_quality_ok = downloader.verify_data_quality()
-
-    if not data_quality_ok:
-        logger.error("Data quality issues detected!")
-        return False
-
-    logger.info("Data download and verification completed successfully")
-    return True
