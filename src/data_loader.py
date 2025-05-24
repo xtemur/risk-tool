@@ -37,12 +37,19 @@ class DataLoader:
             # Load fills data
             fills_path = self.data_path / "raw" / f"{account_id}_fills.csv"
             fills_df = pd.read_csv(fills_path)
-            fills_df["Date"] = pd.to_datetime(fills_df["Date"])
+            fills_df["Date"] = pd.to_datetime(fills_df["Date/Time"])
+            fills_df["Symbol"] = fills_df["Symbol"].astype(str)
 
             # Load totals data
             totals_path = self.data_path / "raw" / f"{account_id}_totals.csv"
             totals_df = pd.read_csv(totals_path)
             totals_df["Date"] = pd.to_datetime(totals_df["Date"])
+            totals_df["Symbol"] = totals_df["Symbol"].astype(str)
+
+
+            # Sort data by date
+            fills_df = fills_df.sort_values("Date").reset_index(drop=True)
+            totals_df = totals_df.sort_values("Date").reset_index(drop=True)
 
             # Filter by date range if provided
             if start_date:

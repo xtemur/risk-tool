@@ -10,6 +10,7 @@ class FeatureEngineer:
         self.config = config
         self.feature_windows = config["data"]["feature_windows"]
         self.logger = logging.getLogger(__name__)
+        self.last_engineered_df = pd.DataFrame()
 
     def create_target_variable(self, df: pd.DataFrame) -> pd.DataFrame:
         """Create target variable: 1 if next day Net PnL is negative"""
@@ -123,7 +124,6 @@ class FeatureEngineer:
         df["historical_avg_net"] = df.groupby("account_id")["Net"].transform(
             lambda x: x.expanding().mean()
         )
-
         return df
 
     def engineer_features(self, df: pd.DataFrame) -> pd.DataFrame:
@@ -144,6 +144,7 @@ class FeatureEngineer:
         df[numeric_columns] = df[numeric_columns].fillna(0)
 
         self.logger.info(f"Feature engineering completed. Dataset shape: {df.shape}")
+        self.last_engineered_df = df.copy()
 
         return df
 
@@ -151,6 +152,7 @@ class FeatureEngineer:
         """Get list of feature columns (excluding target and metadata)"""
         exclude_cols = [
             "Date",
+            "Symbol",
             "account_id",
             "trader_name",
             "target",

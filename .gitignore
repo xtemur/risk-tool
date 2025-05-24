@@ -65,3 +65,7 @@ config/api_keys.yaml
 # Any other sensitive config files
 *.key
 *.pem
+
+
+# Ignore log files
+*.log

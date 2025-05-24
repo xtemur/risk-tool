@@ -65,6 +65,10 @@ class ModelTrainer:
         model = lgb.LGBMClassifier(**self.global_params)
 
         # Train with early stopping
+        print(X_train.head())
+        print(y_train.head())
+        print(X_train.dtypes)
+        print(y_train.dtypes)
         model.fit(
             X_train,
             y_train,
