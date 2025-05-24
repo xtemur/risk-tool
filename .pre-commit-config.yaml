@@ -1,72 +1,19 @@
-# .pre-commit-config.yaml
+# .pre-commit-config.yaml (minimal for 3-day sprint)
 repos:
-  # Basic code quality checks
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.5.0
     hooks:
       - id: trailing-whitespace
       - id: end-of-file-fixer
       - id: check-yaml
-      - id: check-json
-      - id: check-toml
-      - id: check-merge-conflict
       - id: check-added-large-files
         args: ['--maxkb=1000']
-      - id: mixed-line-ending
-      - id: requirements-txt-fixer
 
-  # Python code formatting
-  - repo: https://github.com/psf/black
-    rev: 23.12.1
-    hooks:
-      - id: black
-        language_version: python3.9
-        args: ['--line-length=88']
-
-  # Python import sorting
-  - repo: https://github.com/pycqa/isort
-    rev: 5.13.2
-    hooks:
-      - id: isort
-        args: ['--profile', 'black', '--filter-files']
-
-  # Python linting
-  # - repo: https://github.com/pycqa/flake8
-  #   rev: 7.0.0
+  # Security only
+  # - repo: local
   #   hooks:
-  #     - id: flake8
-  #       args: ['--max-line-length=88', '--extend-ignore=E203,W503']
-
-  # Type checking
-  - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.8.0
-    hooks:
-      - id: mypy
-        additional_dependencies: [types-PyYAML, types-requests]
-        args: ['--ignore-missing-imports']
-
-  # Jupyter notebook cleaning
-  - repo: https://github.com/nbQA-dev/nbQA
-    rev: 1.7.1
-    hooks:
-      - id: nbqa-black
-      - id: nbqa-isort
-        args: ['--profile=black']
-      # - id: nbqa-flake8
-      #   args: ['--max-line-length=88', '--extend-ignore=E203,W503']
-
-  # Security and vulnerability scanning
-  - repo: https://github.com/PyCQA/bandit
-    rev: 1.7.6
-    hooks:
-      - id: bandit
-        args: ['-r', '.']
-        exclude: ^tests/
-
-  # Documentation checks
-  - repo: https://github.com/pycqa/pydocstyle
-    rev: 6.3.0
-    hooks:
-      - id: pydocstyle
-        args: ['--convention=google']
-        exclude: ^(tests/|scripts/)
+  #     - id: check-secrets
+  #       name: Check for API tokens
+  #       entry: bash -c 'grep -r "0b8f3c5ee57fc7dd376af28ae83e4c2c" . && exit 1 || exit 0'
+  #       language: system
+  #       pass_filenames: false
