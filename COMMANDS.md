@@ -22,7 +22,7 @@ python download_totals.py
 python -c "from src.data_loader import DataLoader; dl = DataLoader(); data = dl.load_all_traders_data(); print(f'Loaded {len(data)} traders')"
 
 # Test feature engineering
-python -c "from src.data_loader import DataLoader; from src.feature_engineering import FeatureEngineer; import yaml; config = yaml.safe_load(open('config/config.yaml')); dl = DataLoader(); fe = FeatureEngineer(config); data = dl.load_all_traders_data(); master_df = dl.create_master_dataset(data); features_df = fe.engineer_features(master_df); print(f'Features: {features_df.shape}')"
+python -c "from src.data_loader import DataLoader; from src.feature_engineering import FeatureEngineer; import yaml; config = yaml.safe_load(open('config/config.yaml')); dl = DataLoader(); fe = FeatureEngineer(config); data = dl.load_all_traders_data(); master_totals_df, master_fills_df = dl.create_master_dataset(data); features_df = fe.engineer_features(master_totals_df, master_fills_df); print(f'Features: {features_df.shape}')"
 ```
 
 ## Model Training & Testing
