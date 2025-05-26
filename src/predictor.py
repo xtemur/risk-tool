@@ -28,6 +28,12 @@ class RiskPredictor:
                 account_id = model_file.stem.replace("personal_", "")
                 self.personal_models[account_id] = joblib.load(model_file)
 
+            # Load ARIMA models
+            self.arima_models = {}
+            for model_file in self.models_path.glob("arima_*.pkl"):
+                account_id = model_file.stem.replace("arima_", "")
+                self.arima_models[account_id] = joblib.load(model_file)
+
             # Load metadata
             with open(self.models_path / "model_metadata.yaml", "r") as f:
                 self.metadata = yaml.safe_load(f)
@@ -38,11 +44,11 @@ class RiskPredictor:
             with open("config/config.yaml", "r") as f:
                 config = yaml.safe_load(f)
 
-            self.global_weight = config["model"]["ensemble"]["global_weight"]
-            self.personal_weight = config["model"]["ensemble"]["personal_weight"]
+            self.global_weight = 0.6  # Default weights for ensemble
+            self.personal_weight = 0.4
 
             self.logger.info(
-                f"Loaded global model and {len(self.personal_models)} personal models"
+                f"Loaded global model, {len(self.personal_models)} personal models, and {len(self.arima_models)} ARIMA models"
             )
 
         except Exception as e:
@@ -50,57 +56,64 @@ class RiskPredictor:
             raise
 
     def predict_single_trader(self, trader_data: pd.DataFrame, account_id: str) -> Dict:
-        """Predict risk for a single trader"""
+        """Predict next day's total_delta for a single trader"""
         try:
             # Get latest features
             latest_data = trader_data.iloc[-1:][self.feature_cols]
 
             # Global model prediction
-            global_prob = self.global_model.predict_proba(latest_data)[0, 1]
+            global_pred = self.global_model.predict(latest_data)[0]
 
             # Personal model prediction (if available)
             if account_id in self.personal_models:
-                personal_prob = self.personal_models[account_id].predict_proba(
-                    latest_data
-                )[0, 1]
+                personal_pred = self.personal_models[account_id].predict(latest_data)[0]
 
                 # Ensemble prediction
-                ensemble_prob = (
-                    self.global_weight * global_prob
-                    + self.personal_weight * personal_prob
+                ensemble_pred = (
+                    self.global_weight * global_pred
+                    + self.personal_weight * personal_pred
                 )
 
                 confidence = "High"  # Has personal model
             else:
                 # Use only global model
-                ensemble_prob = global_prob
-                personal_prob = None
+                ensemble_pred = global_pred
+                personal_pred = None
                 confidence = "Medium"  # No personal model
 
-            # Risk categorization
-            if ensemble_prob >= 0.7:
+            # ARIMA prediction (if available)
+            arima_pred = None
+            if account_id in self.arima_models:
+                try:
+                    arima_pred = self.arima_models[account_id].predict(n_periods=1)[0]
+                except:
+                    pass
+
+            # Risk categorization based on predicted P&L
+            if ensemble_pred < -1000:
                 risk_level = "High"
-            elif ensemble_prob >= 0.5:
+            elif ensemble_pred < 0:
                 risk_level = "Medium"
             else:
                 risk_level = "Low"
 
             return {
                 "account_id": account_id,
-                "risk_probability": ensemble_prob,
+                "predicted_pnl": ensemble_pred,
                 "risk_level": risk_level,
                 "confidence": confidence,
-                "global_prediction": global_prob,
-                "personal_prediction": personal_prob,
-                "recent_pnl": trader_data["Net"].tail(5).sum(),
-                "recent_performance": trader_data["Net"].tail(3).sum(),
+                "global_prediction": global_pred,
+                "personal_prediction": personal_pred,
+                "arima_prediction": arima_pred,
+                "recent_pnl": trader_data["net_pnl"].tail(5).sum(),
+                "recent_performance": trader_data["total_delta"].tail(3).sum(),
             }
 
         except Exception as e:
             self.logger.error(f"Error predicting for {account_id}: {str(e)}")
             return {
                 "account_id": account_id,
-                "risk_probability": 0.5,
+                "predicted_pnl": 0,
                 "risk_level": "Unknown",
                 "confidence": "Low",
                 "error": str(e),
@@ -115,8 +128,8 @@ class RiskPredictor:
             trader_prediction["trader_name"] = data.get("name", account_id)
             predictions.append(trader_prediction)
 
-        # Sort by risk probability (highest first)
-        predictions.sort(key=lambda x: x["risk_probability"], reverse=True)
+        # Sort by predicted P&L (lowest first - highest risk)
+        predictions.sort(key=lambda x: x["predicted_pnl"])
 
         self.logger.info(f"Generated predictions for {len(predictions)} traders")
         return predictions

@@ -29,7 +29,7 @@ class DownloadConfig:
     headers: Dict[str, str] = None
     max_retries: int = 3
     backoff_factor: float = 0.3
-    timeout: int = 30
+    timeout: int = 1000
     rate_limit_delay: float = 0.1  # Delay between requests
 
     def __post_init__(self):
@@ -514,7 +514,7 @@ class PropreportsDownloader:
 def main():
     """Main execution function"""
     # Configuration - move to environment variables in production
-    TOKEN = "c4739f336752e7687b616cecb28bc262:2523"
+    TOKEN = "17aec7e8a56871bfa6d8dbdb1a09d8d9:2523"
 
     try:
         # Initialize downloader
@@ -542,7 +542,7 @@ def main():
 
 def download_for_risk_tool() -> bool:
     """Function for integration with risk management system"""
-    TOKEN = "e36ede9281f67cf867456a95230ca0c7:2523"  # Move to config/env
+    TOKEN = "17aec7e8a56871bfa6d8dbdb1a09d8d9:2523"  # Move to config/env
 
     try:
         downloader = PropreportsDownloader(TOKEN)

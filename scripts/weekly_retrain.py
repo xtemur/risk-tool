@@ -49,11 +49,11 @@ def main():
         all_data = data_loader.load_all_traders_data()
 
         # Create master dataset
-        master_df = data_loader.create_master_dataset(all_data)
+        master_totals_df, master_fills_df = data_loader.create_master_dataset(all_data)
 
         # Engineer features
         logger.info("Engineering features...")
-        features_df = feature_engineer.engineer_features(master_df)
+        features_df = feature_engineer.engineer_features(master_totals_df, master_fills_df)
         feature_cols = feature_engineer.get_feature_columns()
 
         # Create time-based splits

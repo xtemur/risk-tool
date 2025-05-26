@@ -26,7 +26,7 @@ class FeatureEngineer:
         df = df.dropna(subset=["target"])
 
         # Optional: Create additional binary target for risk classification
-        df["target_negative"] = (df["target"] < 0).astype(int)
+        # df["target_negative"] = (df["target"] < 0).astype(int)
 
         return df
 
