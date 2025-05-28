@@ -38,18 +38,35 @@ class ModelTrainer:
         }
 
         self.personal_params = {
-            "objective": "regression",
+            "objective": "regression",        # L1 loss handles fat-tailed P&L
+            "metric": "rmse",                     # aligns with objective
             "boosting_type": "gbdt",
-            "metric": "rmse",
-            "num_leaves": 15,
-            "learning_rate": 0.1,
+            "num_leaves": 7,                     # ≈ 2ⁿ where n ≈ log₂(rows_train) – 1
+            "max_depth": -1,
+            "min_data_in_leaf": 20,
+            "learning_rate": 0.05,
             "feature_fraction": 0.8,
-            "bagging_fraction": 0.7,
-            "bagging_freq": 5,
-            "verbose": -1,
-            "n_estimators": 500,
-            "random_state": 42
+            "bagging_fraction": 0.8,
+            "bagging_freq": 1,
+            "lambda_l1": 1.0,
+            "lambda_l2": 1.0,
+            "n_estimators": 2000,                # let early-stopping decide
+            "random_state": 42,
         }
+
+        # self.personal_params = {
+        #     "objective": "regression",
+        #     "boosting_type": "gbdt",
+        #     "metric": "rmse",
+        #     "num_leaves": 15,
+        #     "learning_rate": 0.1,
+        #     "feature_fraction": 0.8,
+        #     "bagging_fraction": 0.7,
+        #     "bagging_freq": 5,
+        #     "verbose": -1,
+        #     "n_estimators": 500,
+        #     "random_state": 42
+        # }
 
     def create_time_splits(
         self, df: pd.DataFrame
@@ -128,14 +145,13 @@ class ModelTrainer:
         y_val = val_df["target"]
 
         # Initialize regression model
-        model = lgb.LGBMRegressor(**self.global_params)
-
-        # Train with early stopping
+        model = lgb.LGBMRegressor(**self.personal_params)
         model.fit(
-            X_train,
-            y_train,
+            X_train, y_train,
             eval_set=[(X_val, y_val)],
-            callbacks=[lgb.early_stopping(50), lgb.log_evaluation(0)],
+            eval_metric="mae",
+            callbacks=[lgb.early_stopping(50, first_metric_only=True),
+                    lgb.log_evaluation(period=0)],
         )
 
         # Evaluate
