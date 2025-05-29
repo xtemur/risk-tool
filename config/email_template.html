@@ -26,7 +26,6 @@
         <p><strong>High Risk:</strong> {{ summary.high_risk_count }} |
            <strong>Medium Risk:</strong> {{ summary.medium_risk_count }} |
            <strong>Low Risk:</strong> {{ summary.low_risk_count }}</p>
-        <p><strong>Average Risk Score:</strong> {{ "%.1f%%" | format(summary.average_risk * 100) }}</p>
         <p><strong>Total Recent P&L (5d):</strong> ${{ "{:,.2f}".format(summary.total_recent_pnl) }}</p>
     </div>
 
@@ -35,17 +34,17 @@
     <table>
         <tr>
             <th>Trader</th>
-            <th>Risk Score</th>
+            <th>Risk Level</th>
+            <th>Predicted P&L</th>
             <th>Recent P&L (5d)</th>
-            <th>Recent Performance (3d)</th>
             <th>Confidence</th>
         </tr>
         {% for trader in high_risk_traders %}
         <tr>
             <td>{{ trader.trader_name }}</td>
-            <td><span class="risk-cell risk-high">{{ "%.1f%%" | format(trader.risk_probability * 100) }}</span></td>
+            <td><span class="risk-cell risk-high">{{ trader.risk_level }}</span></td>
+            <td>${{ "{:,.2f}".format(trader.predicted_pnl) }}</td>
             <td>${{ "{:,.2f}".format(trader.recent_pnl) }}</td>
-            <td>${{ "{:,.2f}".format(trader.recent_performance) }}</td>
             <td>{{ trader.confidence }}</td>
         </tr>
         {% endfor %}
@@ -57,7 +56,7 @@
         <tr>
             <th>Trader</th>
             <th>Risk Level</th>
-            <th>Risk Score</th>
+            <th>Predicted P&L</th>
             <th>Recent P&L (5d)</th>
             <th>Recent Performance (3d)</th>
             <th>Confidence</th>
@@ -70,7 +69,7 @@
                     {{ trader.risk_level }}
                 </span>
             </td>
-            <td>{{ "%.1f%%" | format(trader.risk_probability * 100) }}</td>
+            <td>${{ "{:,.2f}".format(trader.predicted_pnl) }}</td>
             <td>${{ "{:,.2f}".format(trader.recent_pnl) }}</td>
             <td>${{ "{:,.2f}".format(trader.recent_performance) }}</td>
             <td>{{ trader.confidence }}</td>
@@ -79,7 +78,7 @@
     </table>
 
     <div style="margin-top: 30px; font-size: 12px; color: #7f8c8d;">
-        <p><strong>Risk Score:</strong> Probability that trader will have negative P&L tomorrow</p>
+        <p><strong>Risk Level:</strong> Based on predicted P&L for tomorrow</p>
         <p><strong>Confidence:</strong> High = Personal model available, Medium = Global model only</p>
         <p><strong>Generated:</strong> {{ summary.date }} by Risk Management System</p>
     </div>

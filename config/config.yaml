@@ -27,9 +27,9 @@ data:
 email:
   smtp_server: "smtp.gmail.com"
   smtp_port: 587
-  from_email: ""  # Set in .env
-  password: ""    # Set in .env
-  to_emails: ["admin@company.com"]
+  from_email: ""  # Will use .env value
+  password: ""    # Will use .env value
+  to_emails: ["temurbekkhujaev1@gmail.com"]
 
 risk:
   high_risk_threshold: 0.7
