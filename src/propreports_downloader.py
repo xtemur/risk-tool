@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
+from dotenv import load_dotenv
 
 import pandas as pd
 import requests
@@ -13,6 +14,9 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import re
 from io import StringIO
+
+# Load environment variables
+load_dotenv()
 
 # Setup logging
 logging.basicConfig(
@@ -142,10 +146,15 @@ class DataProcessor:
 
 
 class PropreportsDownloader:
-    """Main downloader class with improved efficiency"""
+    """Main downloader class with improved efficiency and .env token support"""
 
-    def __init__(self, token: str, config_path: str = "config/config.yaml"):
-        self.token = token
+    def __init__(self, token: str = None, config_path: str = "config/config.yaml"):
+        # Get token from environment if not provided
+        self.token = token or os.getenv('API_TOKEN')
+
+        if not self.token:
+            raise ValueError("API_TOKEN must be provided either as parameter or in .env file")
+
         self.config = DownloadConfig()
         self.api_client = APIClient(self.config)
         self.data_processor = DataProcessor()
@@ -172,8 +181,8 @@ class PropreportsDownloader:
             traders = []
             for trader_data in config_data.get("traders", []):
                 traders.append(TraderAccount(
-                    account_id=trader_data["account_id"],
-                    name=trader_data.get("name", trader_data["account_id"]),
+                    account_id=str(trader_data["account_id"]),  # Ensure string
+                    name=trader_data.get("name", str(trader_data["account_id"])),
                     active=trader_data.get("active", True)
                 ))
 
@@ -192,6 +201,8 @@ class PropreportsDownloader:
         directories = [
             "data/raw",
             "data/processed",
+            "data/models",
+            "data/predictions",
             "logs"
         ]
 
@@ -245,13 +256,12 @@ class PropreportsDownloader:
             return pd.DataFrame()
 
     def _fetch_all_tbd_pages(self, base_data: Dict[str, str]) -> pd.DataFrame:
-        """Fetch all pages for a request and return combined DataFrame"""
+        """Fetch all pages for totals by date and return combined DataFrame"""
         page_num = 0
-        header = None
-        all_data_lines = []
-
-        logger.debug(f"Fetching data for account {base_data.get('accountId')}")
         result = pd.DataFrame()
+
+        logger.debug(f"Fetching TBD data for account {base_data.get('accountId')}")
+
         while True:
             page_num += 1
             request_data = base_data.copy()
@@ -269,6 +279,7 @@ class PropreportsDownloader:
 
             text_str = "\n".join(text)
 
+            # Split by date blocks
             day_blocks = re.split(r"(?=^\d{1,2}/\d{1,2}/\d{2,4})", text_str, flags=re.MULTILINE)
 
             for block in day_blocks:
@@ -281,11 +292,14 @@ class PropreportsDownloader:
                 body_text = "\n".join(block_lines[1:])
                 body = re.split(r"(?=^(?:Fee|Daily|Cash))", body_text, flags=re.MULTILINE)[0]
 
-
-                df = pd.read_csv(StringIO(body))
-                if df is not None and not df.empty:
-                    df['Date'] = pd.to_datetime(date_str)  # Add date column
-                    result = pd.concat([result, df], ignore_index=True)
+                try:
+                    df = pd.read_csv(StringIO(body))
+                    if df is not None and not df.empty:
+                        df['Date'] = pd.to_datetime(date_str)  # Add date column
+                        result = pd.concat([result, df], ignore_index=True)
+                except Exception as e:
+                    logger.debug(f"Error parsing block for date {date_str}: {e}")
+                    continue
 
             logger.debug(f"Fetched page {current_page}/{total_pages}")
 
@@ -293,11 +307,12 @@ class PropreportsDownloader:
             if current_page >= total_pages:
                 break
 
-        # Convert to DataFrame
+        # Return combined DataFrame
         if result is not None and not result.empty:
+            logger.info(f"Downloaded {len(result)} TBD records")
             return result
         else:
-            logger.warning("No data retrieved")
+            logger.warning("No TBD data retrieved")
             return pd.DataFrame()
 
     def download_totals_by_date(self, start_date: date, end_date: date,
@@ -327,6 +342,9 @@ class PropreportsDownloader:
             df = self._fetch_all_tbd_pages(request_data)
 
             if not df.empty:
+                # Add account_id column
+                df['account_id'] = account_id
+
                 # Save to file
                 output_file = f"data/raw/{account_id}_totals.csv"
                 df.to_csv(output_file, index=False)
@@ -364,6 +382,9 @@ class PropreportsDownloader:
             df = self._fetch_all_pages(request_data)
 
             if not df.empty:
+                # Add account_id column
+                df['account_id'] = account_id
+
                 # Save to file
                 output_file = f"data/raw/{account_id}_fills.csv"
                 df.to_csv(output_file, index=False)
@@ -474,16 +495,11 @@ class PropreportsDownloader:
                         issues.append(f"Empty {file_type} data for {account_id}")
                         continue
 
-                    # Check required columns
+                    # Check required columns based on your data description
                     if file_type == "totals":
-                        required_cols = ["Symbol", "Orders", "Fills", "Qty", "Gross", "Comm", "Ecn Fee", "SEC", "ORF", "CAT", "TAF",
-                                         "FTT", "NSCC", "Acc", "Clr", "Misc", "Net", "Unrealized δ", "Total δ", "Unrealized", "Date"]
-                        # Add other required columns as needed
+                        required_cols = ["Symbol", "Orders", "Fills", "Qty", "Gross", "Net", "Date"]
                     else:  # fills
-                        required_cols = ["Date/Time", "Account", "B/S", "Qty", "Symbol", "Price", "Route", "Liq", "Comm", "Ecn Fee",
-                                         "SEC", "ORF", "CAT", "TAF", "FTT", "NSCC", "Acc", "Clr", "Misc", "Order Id", "Fill Id", "Currency",
-                                         "ISIN", "CUSIP", "Status", "PropReports Id"]
-
+                        required_cols = ["Date/Time", "Symbol", "Qty", "Price", "Order Id"]
 
                     missing_cols = [col for col in required_cols if col not in df.columns]
                     if missing_cols:
@@ -511,41 +527,11 @@ class PropreportsDownloader:
             return True
 
 
-def main():
-    """Main execution function"""
-    # Configuration - move to environment variables in production
-    TOKEN = "17aec7e8a56871bfa6d8dbdb1a09d8d9:2523"
-
-    try:
-        # Initialize downloader
-        downloader = PropreportsDownloader(TOKEN)
-
-        if not downloader.traders:
-            logger.error("No traders configured. Please set up config/trader_accounts.yaml")
-            return
-
-        # Download full history
-        start_date = date(2023, 4, 1)
-        end_date = date(2025, 4, 30)
-
-        success = downloader.download_full_history(start_date, end_date)
-
-        if success:
-            logger.info("Download completed successfully!")
-            logger.info("You can now proceed with: python main.py --train")
-        else:
-            logger.error("Download completed with issues. Check logs above.")
-
-    except Exception as e:
-        logger.error(f"Main execution failed: {str(e)}")
-
-
 def download_for_risk_tool() -> bool:
     """Function for integration with risk management system"""
-    TOKEN = "17aec7e8a56871bfa6d8dbdb1a09d8d9:2523"  # Move to config/env
-
     try:
-        downloader = PropreportsDownloader(TOKEN)
+        # Initialize with token from environment
+        downloader = PropreportsDownloader()
 
         # Download recent data
         success = downloader.download_recent_data(days_back=30)
@@ -558,6 +544,32 @@ def download_for_risk_tool() -> bool:
     except Exception as e:
         logger.error(f"Risk tool data update failed: {str(e)}")
         return False
+
+
+def main():
+    """Main execution function"""
+    try:
+        # Initialize downloader (token from .env)
+        downloader = PropreportsDownloader()
+
+        if not downloader.traders:
+            logger.error("No traders configured. Please set up config/trader_accounts.yaml")
+            return
+
+        # Download full history
+        start_date = date(2023, 4, 1)
+        end_date = date.today()
+
+        success = downloader.download_full_history(start_date, end_date)
+
+        if success:
+            logger.info("Download completed successfully!")
+            logger.info("You can now proceed with: python main.py --train")
+        else:
+            logger.error("Download completed with issues. Check logs above.")
+
+    except Exception as e:
+        logger.error(f"Main execution failed: {str(e)}")
 
 
 if __name__ == "__main__":
