@@ -13,8 +13,6 @@ repos:
     rev: 0.8.1
     hooks:
       - id: nbstripout
-        name: Strip output from Jupyter notebooks
-        entry: nbstripout --install --force
 
   # Security only
   # - repo: local
