@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DownloadConfig:
     """Configuration for data download"""
-    api_url: str = "https://neo.propreports.com/api.php"
+    api_url: str = "https://neo2.propreports.com/api.php"
     headers: Dict[str, str] = None
     max_retries: int = 3
     backoff_factor: float = 0.3
@@ -130,7 +130,7 @@ class DataProcessor:
         try:
             # Read into DataFrame
             from io import StringIO
-            df = pd.read_csv(StringIO(csv_content))
+            df = pd.read_csv(StringIO(csv_content), low_memory=False)
 
             # Convert Date column if it exists
             if 'Date' in df.columns:
@@ -293,7 +293,7 @@ class PropreportsDownloader:
                 body = re.split(r"(?=^(?:Fee|Daily|Cash))", body_text, flags=re.MULTILINE)[0]
 
                 try:
-                    df = pd.read_csv(StringIO(body))
+                    df = pd.read_csv(StringIO(body), low_memory=False)
                     if df is not None and not df.empty:
                         df['Date'] = pd.to_datetime(date_str)  # Add date column
                         result = pd.concat([result, df], ignore_index=True)
