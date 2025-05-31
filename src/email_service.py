@@ -22,7 +22,7 @@ class EmailService:
     def __init__(self):
         self.from_email = os.getenv('EMAIL_FROM')
         self.password = os.getenv('EMAIL_PASSWORD')
-        self.to_emails = os.getenv('EMAIL_TO', 'admin@company.com').split(',')
+        self.to_emails = os.getenv('EMAIL_TO').split(',')
 
         if not self.from_email or not self.password:
             logger.warning("Email credentials not configured")
@@ -199,23 +199,23 @@ class EmailService:
         """Create plain text report as fallback"""
 
         text = f"""
-DAILY RISK REPORT - {pd.Timestamp.now().strftime('%Y-%m-%d')}
-{'='*60}
+                DAILY RISK REPORT - {pd.Timestamp.now().strftime('%Y-%m-%d')}
+                {'='*60}
 
-SUMMARY
--------
-Total Traders: {summary['total_traders']}
-High Risk: {summary['high_risk_count']}
-Medium Risk: {summary['medium_risk_count']}
-Low Risk: {summary['low_risk_count']}
-Models Available: {summary['models_available']}
+                SUMMARY
+                -------
+                Total Traders: {summary['total_traders']}
+                High Risk: {summary['high_risk_count']}
+                Medium Risk: {summary['medium_risk_count']}
+                Low Risk: {summary['low_risk_count']}
+                Models Available: {summary['models_available']}
 
-Total Predicted P&L: ${summary['total_predicted_pnl']:,.2f}
-Total Recent P&L (5d): ${summary['total_recent_pnl']:,.2f}
+                Total Predicted P&L: ${summary['total_predicted_pnl']:,.2f}
+                Total Recent P&L (5d): ${summary['total_recent_pnl']:,.2f}
 
-HIGH RISK TRADERS
------------------
-"""
+                HIGH RISK TRADERS
+                -----------------
+                """
 
         for pred in predictions:
             if pred['risk_level'] == 'High':
@@ -332,3 +332,265 @@ HIGH RISK TRADERS
             logger.error("Test email failed. Check your credentials.")
 
         return success
+    """
+    Add this method to your existing src/email_service.py
+    Just append this method to the EmailService class
+    """
+
+    def send_enhanced_daily_report(self, predictions: List[Dict], summary: Dict, training_results: Dict) -> bool:
+        """Send enhanced daily risk report with training status"""
+
+        if not self.from_email or not self.password:
+            logger.error("Email credentials not configured")
+            return False
+
+        try:
+            # Create message
+            msg = MIMEMultipart('alternative')
+            msg['From'] = self.from_email
+            msg['To'] = ', '.join(self.to_emails)
+
+            # Enhanced subject with training status
+            successful_models = sum(1 for r in training_results.values() if r.get('success', False))
+            total_models = len(training_results)
+            retrain_rate = (successful_models / total_models * 100) if total_models > 0 else 0
+
+            subject = f"Daily Risk Report - {pd.Timestamp.now().strftime('%Y-%m-%d')} "
+            subject += f"({successful_models}/{total_models} models retrained)"
+
+            high_risk_count = summary.get('high_risk_count', 0)
+            if high_risk_count > 0:
+                subject = f"🚨 ALERT: {high_risk_count} High Risk - " + subject
+
+            msg['Subject'] = subject
+
+            # Create enhanced HTML content
+            html_content = self.create_enhanced_html_report(predictions, summary, training_results)
+            text_content = self.create_enhanced_text_report(predictions, summary, training_results)
+
+            # Attach parts
+            text_part = MIMEText(text_content, 'plain')
+            html_part = MIMEText(html_content, 'html')
+
+            msg.attach(text_part)
+            msg.attach(html_part)
+
+            # Send email
+            with smtplib.SMTP('smtp.gmail.com', 587) as server:
+                server.starttls()
+                server.login(self.from_email, self.password)
+                server.send_message(msg)
+
+            logger.info(f"Enhanced risk report sent to {', '.join(self.to_emails)}")
+            return True
+
+        except Exception as e:
+            logger.error(f"Failed to send enhanced email: {str(e)}")
+            return False
+
+    def create_enhanced_html_report(self, predictions: List[Dict], summary: Dict, training_results: Dict) -> str:
+        """Create enhanced HTML email report with training status"""
+
+        # Convert to DataFrame for easier formatting
+        df = pd.DataFrame(predictions)
+
+        successful_models = sum(1 for r in training_results.values() if r.get('success', False))
+        total_models = len(training_results)
+        retrain_rate = (successful_models / total_models * 100) if total_models > 0 else 0
+
+        html = f"""
+        <html>
+        <head>
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 20px; }}
+                h1 {{ color: #2c3e50; }}
+                h2 {{ color: #34495e; }}
+                table {{ border-collapse: collapse; width: 100%; margin: 20px 0; }}
+                th, td {{ padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }}
+                th {{ background-color: #34495e; color: white; }}
+                .high-risk {{ background-color: #e74c3c; color: white; padding: 5px 10px; border-radius: 3px; }}
+                .medium-risk {{ background-color: #f39c12; color: white; padding: 5px 10px; border-radius: 3px; }}
+                .low-risk {{ background-color: #27ae60; color: white; padding: 5px 10px; border-radius: 3px; }}
+                .fresh-model {{ background-color: #2ecc71; color: white; padding: 3px 8px; border-radius: 3px; font-size: 0.8em; }}
+                .stale-model {{ background-color: #e67e22; color: white; padding: 3px 8px; border-radius: 3px; font-size: 0.8em; }}
+                .summary {{ background-color: #ecf0f1; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+                .training-summary {{ background-color: #e8f6f3; padding: 15px; border-radius: 5px; margin: 20px 0; border-left: 5px solid #27ae60; }}
+                .alert {{ background-color: #ffe6e6; border-left: 5px solid #e74c3c; padding: 10px; margin: 10px 0; }}
+            </style>
+        </head>
+        <body>
+            <h1>Daily Risk Report - {pd.Timestamp.now().strftime('%Y-%m-%d')}</h1>
+
+            <div class="training-summary">
+                <h2>🔄 Model Training Status</h2>
+                <p><strong>Models Retrained:</strong> {successful_models}/{total_models} ({retrain_rate:.1f}%)</p>
+                <p><strong>Training Date:</strong> Data through {summary.get('pipeline_date', 'N/A')}</p>
+                <p><strong>Pipeline Status:</strong> {'✅ All systems operational' if retrain_rate > 80 else '⚠️ Some models failed to retrain'}</p>
+            </div>
+
+            <div class="summary">
+                <h2>📊 Risk Summary</h2>
+                <p><strong>Total Traders:</strong> {summary['total_traders']}</p>
+                <p><strong>Risk Distribution:</strong>
+                High: {summary['high_risk_count']} |
+                Medium: {summary['medium_risk_count']} |
+                Low: {summary['low_risk_count']} |
+                Unknown: {summary.get('unknown_risk_count', 0)}</p>
+                <p><strong>Total Predicted P&L:</strong> ${summary['total_predicted_pnl']:,.2f}</p>
+                <p><strong>Total Recent P&L (5d):</strong> ${summary['total_recent_pnl']:,.2f}</p>
+            </div>
+        """
+
+        # High risk section (if any)
+        high_risk = df[df['risk_level'] == 'High'] if not df.empty else pd.DataFrame()
+        if not high_risk.empty:
+            html += """
+            <h2 style="color: #e74c3c;">⚠️ High Risk Traders - Immediate Attention Required</h2>
+            <div class="alert">
+                <strong>Action Required:</strong> The following traders are predicted to have significant losses.
+            </div>
+            <table>
+                <tr>
+                    <th>Trader</th>
+                    <th>Risk Level</th>
+                    <th>Predicted P&L</th>
+                    <th>Recent P&L (5d)</th>
+                    <th>Model Status</th>
+                    <th>Recommendation</th>
+                </tr>
+            """
+
+            for _, trader in high_risk.iterrows():
+                model_status = trader.get('model_freshness', 'Unknown')
+                model_class = 'fresh-model' if model_status == 'Fresh' else 'stale-model'
+
+                html += f"""
+                <tr>
+                    <td><strong>{trader['trader_name']}</strong></td>
+                    <td><span class="high-risk">HIGH</span></td>
+                    <td style="color: #e74c3c; font-weight: bold;">${trader['predicted_pnl']:,.2f}</td>
+                    <td>${trader['recent_pnl_5d']:,.2f}</td>
+                    <td><span class="{model_class}">{model_status}</span></td>
+                    <td>{trader['recommendation']}</td>
+                </tr>
+                """
+
+            html += "</table>"
+
+        # All traders table
+        html += """
+        <h2>Complete Risk Assessment - All Traders</h2>
+        <table>
+            <tr>
+                <th>Trader</th>
+                <th>Risk Level</th>
+                <th>Predicted P&L</th>
+                <th>Recent P&L (5d)</th>
+                <th>Model Status</th>
+                <th>Training RMSE</th>
+            </tr>
+        """
+
+        if not df.empty:
+            for _, trader in df.iterrows():
+                risk_class = trader['risk_level'].lower() + '-risk'
+                model_status = trader.get('model_freshness', 'Unknown')
+                model_class = 'fresh-model' if model_status == 'Fresh' else 'stale-model'
+                training_rmse = trader.get('training_rmse', 'N/A')
+
+                # Color code predicted P&L
+                pnl_color = '#e74c3c' if trader['predicted_pnl'] < -1000 else '#f39c12' if trader['predicted_pnl'] < 0 else '#27ae60'
+
+                html += f"""
+                <tr>
+                    <td>{trader['trader_name']}</td>
+                    <td><span class="{risk_class}">{trader['risk_level'].upper()}</span></td>
+                    <td style="color: {pnl_color}; font-weight: bold;">${trader['predicted_pnl']:,.2f}</td>
+                    <td>${trader['recent_pnl_5d']:,.2f}</td>
+                    <td><span class="{model_class}">{model_status}</span></td>
+                    <td>{training_rmse if training_rmse != 'N/A' else 'N/A'}</td>
+                </tr>
+                """
+
+        html += f"""
+        </table>
+
+        <div style="margin-top: 40px; padding: 20px; background-color: #f8f9fa; border-radius: 5px;">
+            <h3>Model Status Legend</h3>
+            <ul>
+                <li><span class="fresh-model">Fresh</span> - Model retrained today with latest data</li>
+                <li><span class="stale-model">Stale</span> - Using previous model (retraining failed)</li>
+            </ul>
+
+            <h3>System Performance</h3>
+            <ul>
+                <li><strong>Retraining Success Rate:</strong> {retrain_rate:.1f}%</li>
+                <li><strong>Total Models Available:</strong> {summary.get('models_available', 0)}</li>
+                <li><strong>Predictions Generated:</strong> {len(predictions)}</li>
+            </ul>
+        </div>
+
+        <p style="margin-top: 30px; font-size: 12px; color: #7f8c8d; text-align: center;">
+        Generated by Enhanced Risk Management System on {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}<br>
+        Pipeline includes daily model retraining and fresh predictions.
+        </p>
+
+        </body>
+        </html>
+        """
+
+        return html
+
+    def create_enhanced_text_report(self, predictions: List[Dict], summary: Dict, training_results: Dict) -> str:
+        """Create enhanced plain text report with training status"""
+
+        successful_models = sum(1 for r in training_results.values() if r.get('success', False))
+        total_models = len(training_results)
+        retrain_rate = (successful_models / total_models * 100) if total_models > 0 else 0
+
+        text = f"""
+    ENHANCED DAILY RISK REPORT - {pd.Timestamp.now().strftime('%Y-%m-%d')}
+    {'='*70}
+
+    MODEL TRAINING STATUS
+    ---------------------
+    Models Retrained: {successful_models}/{total_models} ({retrain_rate:.1f}%)
+    Training Data: Through {summary.get('pipeline_date', 'N/A')}
+    Pipeline Status: {'✅ Operational' if retrain_rate > 80 else '⚠️ Partial'}
+
+    RISK SUMMARY
+    ------------
+    Total Traders: {summary['total_traders']}
+    High Risk: {summary['high_risk_count']}
+    Medium Risk: {summary['medium_risk_count']}
+    Low Risk: {summary['low_risk_count']}
+
+    Total Predicted P&L: ${summary['total_predicted_pnl']:,.2f}
+    Total Recent P&L (5d): ${summary['total_recent_pnl']:,.2f}
+
+    HIGH RISK TRADERS
+    -----------------
+    """
+
+        for pred in predictions:
+            if pred['risk_level'] == 'High':
+                model_status = pred.get('model_freshness', 'Unknown')
+                text += f"{pred['trader_name']}: ${pred['predicted_pnl']:,.2f} "
+                text += f"(Recent: ${pred['recent_pnl_5d']:,.2f}) [{model_status}]\n"
+                text += f"  Recommendation: {pred['recommendation']}\n\n"
+
+        text += f"\nFULL ASSESSMENT\n"
+        text += "-" * 70 + "\n"
+        text += f"{'Trader':<20} {'Risk':<8} {'Predicted P&L':>15} {'Model':>8}\n"
+        text += "-" * 70 + "\n"
+
+        for pred in predictions:
+            model_status = pred.get('model_freshness', 'Unk')[:5]
+            text += f"{pred['trader_name']:<20} {pred['risk_level']:<8} "
+            text += f"${pred['predicted_pnl']:>14,.2f} {model_status:>8}\n"
+
+        text += f"\nSYSTEM PERFORMANCE\n"
+        text += f"Retraining Success: {retrain_rate:.1f}%\n"
+        text += f"Fresh Models: {sum(1 for p in predictions if p.get('model_freshness') == 'Fresh')}\n"
+
+        return text

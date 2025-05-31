@@ -250,13 +250,71 @@ class Database:
                 GROUP BY t.account_id
             """, conn)
 
+
+
     def save_predictions(self, predictions: List[Dict]):
-        """Save model predictions"""
+        """Save model predictions with proper schema"""
+        if not predictions:
+            return
+
+        # Convert to DataFrame and prepare for database
         df = pd.DataFrame(predictions)
         df['date'] = pd.Timestamp.now().date()
 
+        # Select only columns that exist in database schema
+        db_columns = ['date', 'account_id', 'predicted_pnl', 'risk_score', 'confidence']
+
+        # Create database-compatible DataFrame
+        db_df = pd.DataFrame()
+        db_df['date'] = df['date']
+        db_df['account_id'] = df['account_id']
+        db_df['predicted_pnl'] = df['predicted_pnl']
+        db_df['risk_score'] = df['risk_score']
+
+        # Convert confidence to numeric (High=1.0, Medium=0.5, Low=0.2, None=0.0)
+        confidence_map = {'High': 1.0, 'Medium': 0.5, 'Low': 0.2, 'None': 0.0}
+        db_df['confidence'] = df['confidence'].map(confidence_map).fillna(0.0)
+
         with self.get_connection() as conn:
-            df.to_sql('predictions', conn, if_exists='append', index=False)
+            # Clear today's predictions first
+            today = pd.Timestamp.now().date()
+            conn.execute("DELETE FROM predictions WHERE date = ?", (today,))
+
+            # Insert new predictions
+            try:
+                db_df.to_sql('predictions', conn, if_exists='append', index=False)
+                conn.commit()
+                logger.info(f"Saved {len(db_df)} predictions to database")
+            except Exception as e:
+                logger.error(f"Error saving predictions to database: {str(e)}")
+                logger.info("Continuing without database save...")
+
+    def update_predictions_schema(self):
+        """Update predictions table schema to include trader_name if needed"""
+        with self.get_connection() as conn:
+            # Check if trader_name column exists
+            cursor = conn.execute("PRAGMA table_info(predictions)")
+            columns = [row[1] for row in cursor.fetchall()]
+
+            if 'trader_name' not in columns:
+                logger.info("Adding trader_name column to predictions table")
+                try:
+                    conn.execute("ALTER TABLE predictions ADD COLUMN trader_name TEXT")
+                    conn.commit()
+                except Exception as e:
+                    logger.warning(f"Could not add trader_name column: {str(e)}")
+
+    # Also add this method to get predictions with trader names
+    def get_latest_predictions_with_names(self) -> pd.DataFrame:
+        """Get latest predictions with trader names"""
+        with self.get_connection() as conn:
+            return pd.read_sql_query("""
+                SELECT p.*, t.trader_name
+                FROM predictions p
+                JOIN traders t ON p.account_id = t.account_id
+                WHERE p.date = (SELECT MAX(date) FROM predictions)
+                ORDER BY p.risk_score DESC
+            """, conn)
 
     def get_latest_predictions(self) -> pd.DataFrame:
         """Get latest predictions"""
