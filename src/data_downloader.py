@@ -60,19 +60,24 @@ class DataDownloader:
             logger.error(f"Request failed: {str(e)}")
             return None
 
+    # Add this method to src/data_downloader.py to replace the existing _parse_totals_by_date method
+
     def _parse_totals_by_date(self, csv_text: str) -> pd.DataFrame:
-        """Parse totals by date format with multiple days per page"""
+        """Enhanced parser for totals by date format with better P&L extraction"""
         if not csv_text:
             return pd.DataFrame()
 
         all_data = []
-
-        # Split by date blocks (dates like 9/1/2024)
         date_pattern = r'^\d{1,2}/\d{1,2}/\d{4}$'
         lines = csv_text.strip().split('\n')
 
         current_date = None
         i = 0
+
+        # Debug: Print first few lines to understand format
+        logger.debug(f"CSV preview (first 10 lines):")
+        for idx, line in enumerate(lines[:10]):
+            logger.debug(f"  {idx}: {line}")
 
         while i < len(lines):
             line = lines[i].strip()
@@ -80,45 +85,89 @@ class DataDownloader:
             # Check if this line is a date
             if re.match(date_pattern, line):
                 current_date = pd.to_datetime(line).date()
+                logger.debug(f"Found date: {current_date}")
                 i += 1
 
-                # Skip to symbol data
-                if i < len(lines) and lines[i].startswith('Symbol,'):
+                # Skip to symbol data (look for header)
+                while i < len(lines) and not lines[i].startswith('Symbol,'):
                     i += 1
 
-                    # Read symbol data until we hit summary sections
+                if i < len(lines):
+                    header_line = lines[i]
+                    logger.debug(f"Header: {header_line}")
+                    i += 1
+
+                    # Parse data lines until we hit summary
                     while i < len(lines):
                         line = lines[i].strip()
 
-                        # Stop at summary sections
-                        if any(line.startswith(x) for x in ['Fee:', 'Daily Total', 'Equities,', 'Fees,', 'Cash:', 'Page']):
+                        # Stop at summary sections or next date
+                        if (any(line.startswith(x) for x in ['Fee:', 'Daily Total', 'Equities,', 'Fees,', 'Cash:', 'Page'])
+                            or re.match(date_pattern, line)
+                            or not line):
                             break
-
-                        # Skip empty lines
-                        if not line:
-                            i += 1
-                            continue
 
                         # Parse CSV line
                         try:
                             parts = line.split(',')
                             if len(parts) >= 16 and parts[0] not in ['Symbol', '']:
-                                # Extract relevant columns
-                                symbol = parts[0]
-                                orders = int(parts[1]) if parts[1] else 0
-                                fills = int(parts[2]) if parts[2] else 0
-                                qty = float(parts[3]) if parts[3] else 0
-                                gross = float(parts[4]) if parts[4] else 0
-                                net = float(parts[15]) if parts[15] else 0
-                                unrealized_delta = float(parts[16]) if len(parts) > 16 and parts[16] else 0
-                                total_delta = float(parts[17]) if len(parts) > 17 and parts[17] else 0
 
-                                # Calculate total fees
-                                fees = gross - net if gross and net else 0
+                                # Debug: Print the parsed parts
+                                logger.debug(f"Parsing line: {line}")
+                                logger.debug(f"Parts count: {len(parts)}")
+
+                                symbol = parts[0]
+                                orders = int(parts[1]) if parts[1] and parts[1] != '' else 0
+                                fills = int(parts[2]) if parts[2] and parts[2] != '' else 0
+                                qty = float(parts[3]) if parts[3] and parts[3] != '' else 0
+
+                                # Try different column indices for P&L values
+                                # The format might be different than expected
+                                gross = 0
+                                net = 0
+
+                                # Common patterns for P&L columns in PropreReports
+                                for idx in range(4, min(len(parts), 20)):
+                                    try:
+                                        val = float(parts[idx]) if parts[idx] and parts[idx] != '' else 0
+                                        # Look for significant non-zero values that could be P&L
+                                        if abs(val) > 0.01:  # More than 1 cent
+                                            if gross == 0:
+                                                gross = val
+                                                logger.debug(f"Found potential gross P&L at index {idx}: {val}")
+                                            elif net == 0 and abs(val - gross) > 0.01:
+                                                net = val
+                                                logger.debug(f"Found potential net P&L at index {idx}: {val}")
+                                                break
+                                    except ValueError:
+                                        continue
+
+                                # If we couldn't find distinct gross/net, try standard positions
+                                if gross == 0 and net == 0:
+                                    try:
+                                        # Standard positions based on typical PropreReports format
+                                        gross = float(parts[4]) if len(parts) > 4 and parts[4] else 0
+                                        net = float(parts[15]) if len(parts) > 15 and parts[15] else 0
+                                    except (ValueError, IndexError):
+                                        pass
+
+                                # Calculate fees
+                                fees = gross - net if gross != 0 and net != 0 else 0
+
+                                # Unrealized and total delta
+                                unrealized_delta = 0
+                                total_delta = 0
+                                try:
+                                    if len(parts) > 16:
+                                        unrealized_delta = float(parts[16]) if parts[16] else 0
+                                    if len(parts) > 17:
+                                        total_delta = float(parts[17]) if parts[17] else 0
+                                except (ValueError, IndexError):
+                                    pass
 
                                 # Only add if there was activity
-                                if orders > 0 or fills > 0 or gross != 0:
-                                    all_data.append({
+                                if orders > 0 or fills > 0 or abs(gross) > 0.01 or abs(net) > 0.01:
+                                    data_row = {
                                         'date': current_date,
                                         'symbol': symbol,
                                         'orders_count': orders,
@@ -129,7 +178,11 @@ class DataDownloader:
                                         'total_fees': fees,
                                         'unrealized_delta': unrealized_delta,
                                         'total_delta': total_delta
-                                    })
+                                    }
+
+                                    logger.debug(f"Adding data row: {data_row}")
+                                    all_data.append(data_row)
+
                         except Exception as e:
                             logger.debug(f"Error parsing line: {line} - {e}")
 
@@ -140,6 +193,11 @@ class DataDownloader:
         # Convert to DataFrame and aggregate by date
         if all_data:
             df = pd.DataFrame(all_data)
+
+            # Log some stats before aggregation
+            logger.info(f"Before aggregation: {len(df)} rows")
+            logger.info(f"Gross P&L range: {df['gross_pnl'].min():.2f} to {df['gross_pnl'].max():.2f}")
+            logger.info(f"Net P&L range: {df['net_pnl'].min():.2f} to {df['net_pnl'].max():.2f}")
 
             # Group by date and sum all metrics
             daily_df = df.groupby('date').agg({
@@ -153,8 +211,12 @@ class DataDownloader:
                 'total_delta': 'sum'
             }).reset_index()
 
+            logger.info(f"After aggregation: {len(daily_df)} rows")
+            logger.info(f"Daily Net P&L range: {daily_df['net_pnl'].min():.2f} to {daily_df['net_pnl'].max():.2f}")
+
             return daily_df
 
+        logger.warning("No data extracted from CSV")
         return pd.DataFrame()
 
     def _parse_fills(self, csv_text: str) -> pd.DataFrame:
@@ -230,9 +292,21 @@ class DataDownloader:
             logger.debug(f"CSV preview: {csv_text[:500]}")
             return pd.DataFrame()
 
-    def download_totals(self, account_id: str, start_date: date, end_date: date) -> bool:
-        """Download totals data for an account"""
-        logger.info(f"Downloading totals for {account_id} from {start_date} to {end_date}")
+    def download_totals(self, account_id: str, start_date, end_date) -> bool:
+        """Download totals data for an account - Fixed date handling"""
+
+        # Convert dates to proper format if they're strings
+        if isinstance(start_date, str):
+            start_date_str = start_date
+        else:
+            start_date_str = start_date.strftime('%Y-%m-%d')
+
+        if isinstance(end_date, str):
+            end_date_str = end_date
+        else:
+            end_date_str = end_date.strftime('%Y-%m-%d')
+
+        logger.info(f"Downloading totals for {account_id} from {start_date_str} to {end_date_str}")
 
         all_data = pd.DataFrame()
         page = 1
@@ -243,8 +317,8 @@ class DataDownloader:
                 'type': 'totalsByDate',
                 'token': self.token,
                 'accountId': account_id,
-                'startDate': start_date.strftime('%Y-%m-%d'),
-                'endDate': end_date.strftime('%Y-%m-%d'),
+                'startDate': start_date_str,
+                'endDate': end_date_str,
                 'page': str(page)
             }
 
@@ -273,9 +347,21 @@ class DataDownloader:
 
         return False
 
-    def download_fills(self, account_id: str, start_date: date, end_date: date) -> bool:
-        """Download fills data for an account"""
-        logger.info(f"Downloading fills for {account_id} from {start_date} to {end_date}")
+    def download_fills(self, account_id: str, start_date, end_date) -> bool:
+        """Download fills data for an account - Fixed date handling"""
+
+        # Convert dates to proper format if they're strings
+        if isinstance(start_date, str):
+            start_date_str = start_date
+        else:
+            start_date_str = start_date.strftime('%Y-%m-%d')
+
+        if isinstance(end_date, str):
+            end_date_str = end_date
+        else:
+            end_date_str = end_date.strftime('%Y-%m-%d')
+
+        logger.info(f"Downloading fills for {account_id} from {start_date_str} to {end_date_str}")
 
         all_data = pd.DataFrame()
         page = 1
@@ -285,8 +371,8 @@ class DataDownloader:
                 'action': 'fills',
                 'token': self.token,
                 'accountId': account_id,
-                'startDate': start_date.strftime('%Y-%m-%d'),
-                'endDate': end_date.strftime('%Y-%m-%d'),
+                'startDate': start_date_str,
+                'endDate': end_date_str,
                 'page': str(page)
             }
 
