@@ -1,334 +1,186 @@
-import logging
-from pathlib import Path
-from typing import Dict, List, Tuple
+"""
+Simplified Model Trainer for Risk Management MVP
+Personal LightGBM models only - no global model, no ARIMA
+"""
 
+import logging
 import joblib
-import lightgbm as lgb
 import numpy as np
 import pandas as pd
-import yaml
-from sklearn.metrics import mean_squared_error, mean_absolute_error, r2_score
-from statsmodels.tsa.arima.model import ARIMA
-from pmdarima import auto_arima
+import lightgbm as lgb
+from pathlib import Path
+from sklearn.model_selection import TimeSeriesSplit
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+from typing import Dict, Tuple, Optional
+
+logger = logging.getLogger(__name__)
 
 
 class ModelTrainer:
-    def __init__(self, config_path: str = "config/config.yaml"):
-        with open(config_path, "r") as f:
-            self.config = yaml.safe_load(f)
+    """Train personal LightGBM models for each trader"""
 
-        self.models_path = Path("data/models")
+    def __init__(self, models_path: str = "data/models"):
+        self.models_path = Path(models_path)
         self.models_path.mkdir(exist_ok=True)
 
-        self.logger = logging.getLogger(__name__)
-
-        # Model parameters for regression
-        self.global_params = {
-            "objective": "regression",
-            "boosting_type": "gbdt",
-            "metric": "rmse",
-            "num_leaves": 31,
-            "learning_rate": 0.05,
-            "feature_fraction": 0.9,
-            "bagging_fraction": 0.8,
-            "bagging_freq": 5,
-            "verbose": -1,
-            "n_estimators": 1000,
-            "random_state": 42
+        # LightGBM parameters optimized for trading P&L prediction
+        self.base_params = {
+            'objective': 'regression',
+            'metric': 'rmse',
+            'boosting_type': 'gbdt',
+            'num_leaves': 15,
+            'learning_rate': 0.05,
+            'feature_fraction': 0.8,
+            'bagging_fraction': 0.8,
+            'bagging_freq': 1,
+            'min_data_in_leaf': 20,
+            'lambda_l1': 1.0,
+            'lambda_l2': 1.0,
+            'random_state': 42,
+            'verbose': -1
         }
 
-        self.personal_params = {
-            "objective": "regression",        # L1 loss handles fat-tailed P&L
-            "metric": "rmse",                     # aligns with objective
-            "boosting_type": "gbdt",
-            "num_leaves": 7,                     # ≈ 2ⁿ where n ≈ log₂(rows_train) – 1
-            "max_depth": -1,
-            "min_data_in_leaf": 20,
-            "learning_rate": 0.05,
-            "feature_fraction": 0.8,
-            "bagging_fraction": 0.8,
-            "bagging_freq": 1,
-            "lambda_l1": 1.0,
-            "lambda_l2": 1.0,
-            "n_estimators": 2000,                # let early-stopping decide
-            "random_state": 42,
-        }
+        self.min_training_days = 30  # Minimum days required to train a model
 
-        # self.personal_params = {
-        #     "objective": "regression",
-        #     "boosting_type": "gbdt",
-        #     "metric": "rmse",
-        #     "num_leaves": 15,
-        #     "learning_rate": 0.1,
-        #     "feature_fraction": 0.8,
-        #     "bagging_fraction": 0.7,
-        #     "bagging_freq": 5,
-        #     "verbose": -1,
-        #     "n_estimators": 500,
-        #     "random_state": 42
-        # }
+    def train_personal_model(self, features_df: pd.DataFrame,
+                           account_id: str,
+                           feature_columns: list) -> Optional[Dict]:
+        """Train a personal model for a specific trader"""
 
-    def create_time_splits(
-        self, df: pd.DataFrame
-    ) -> Tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-        """Create time-based train/validation/test splits"""
-        df = df.sort_values("date")
+        if len(features_df) < self.min_training_days:
+            logger.warning(f"Insufficient data for {account_id}: {len(features_df)} days")
+            return None
 
-        total_days = len(df["date"].unique())
-        holdout_days = int(total_days * 0.15)  # 15% for holdout
-        val_days = int(total_days * 0.15)  # 15% for validation
+        logger.info(f"Training model for {account_id} with {len(features_df)} days of data")
 
-        unique_dates = sorted(df["date"].unique())
+        # Prepare data
+        X = features_df[feature_columns].values
+        y = features_df['target'].values
 
-        train_end_date = unique_dates[-(holdout_days + val_days)]
-        val_end_date = unique_dates[-holdout_days]
+        # Time-based train/validation split (80/20)
+        split_idx = int(len(features_df) * 0.8)
+        X_train, X_val = X[:split_idx], X[split_idx:]
+        y_train, y_val = y[:split_idx], y[split_idx:]
 
-        train_df = df[df["date"] <= train_end_date]
-        val_df = df[(df["date"] > train_end_date) & (df["date"] <= val_end_date)]
-        test_df = df[df["date"] > val_end_date]
+        # Train model with early stopping
+        train_data = lgb.Dataset(X_train, label=y_train)
+        val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
 
-        self.logger.info(
-            f"Train: {len(train_df)} samples, Val: {len(val_df)} samples, Test: {len(test_df)} samples"
+        # Dynamic parameters based on data size
+        params = self.base_params.copy()
+        params['n_estimators'] = min(1000, max(100, len(X_train) // 10))
+
+        model = lgb.train(
+            params,
+            train_data,
+            valid_sets=[val_data],
+            callbacks=[
+                lgb.early_stopping(50),
+                lgb.log_evaluation(0)
+            ]
         )
 
-        return train_df, val_df, test_df
+        # Evaluate on validation set
+        val_pred = model.predict(X_val, num_iteration=model.best_iteration)
+        val_rmse = np.sqrt(mean_squared_error(y_val, val_pred))
+        val_mae = mean_absolute_error(y_val, val_pred)
 
-    def train_arima_baseline(self, train_df: pd.DataFrame, val_df: pd.DataFrame) -> Dict:
-        """Train ARIMA models as baseline for each trader"""
-        self.logger.info("Training ARIMA baseline models...")
-        arima_models = {}
+        # Calculate feature importance
+        feature_importance = pd.DataFrame({
+            'feature': feature_columns,
+            'importance': model.feature_importance(importance_type='gain')
+        }).sort_values('importance', ascending=False)
 
-        for account_id in train_df["account_id"].unique():
-            trader_train = train_df[train_df["account_id"] == account_id].sort_values("date")
-
-            if len(trader_train) < 30:
-                self.logger.warning(f"Insufficient data for ARIMA {account_id}")
-                continue
-
-            try:
-                # Use total_delta as time series
-                ts = trader_train.set_index("date")["total_delta"].asfreq('D').fillna(0)
-
-                # Auto ARIMA for best parameters
-                auto_model = auto_arima(
-                    ts,
-                    start_p=0, start_q=0,
-                    max_p=5, max_q=5,
-                    seasonal=False,
-                    stepwise=True,
-                    suppress_warnings=True,
-                    error_action='ignore',
-                    n_fits=20
-                )
-
-                arima_models[account_id] = auto_model
-
-                # Save model
-                joblib.dump(auto_model, self.models_path / f"arima_{account_id}.pkl")
-
-                self.logger.info(f"Trained ARIMA{auto_model.order} for {account_id}")
-
-            except Exception as e:
-                self.logger.error(f"Error training ARIMA for {account_id}: {str(e)}")
-
-        return arima_models
-
-    def train_global_model(
-        self, train_df: pd.DataFrame, val_df: pd.DataFrame, feature_cols: List[str]
-    ) -> lgb.LGBMRegressor:
-        """Train global regression model on all traders"""
-        self.logger.info("Training global regression model...")
-
-        X_train = train_df[feature_cols]
-        y_train = train_df["target"]  # This is already next day's total_delta
-        X_val = val_df[feature_cols]
-        y_val = val_df["target"]
-
-        # Initialize regression model
-        model = lgb.LGBMRegressor(**self.personal_params)
-        model.fit(
-            X_train, y_train,
-            eval_set=[(X_val, y_val)],
-            eval_metric="mae",
-            callbacks=[lgb.early_stopping(50, first_metric_only=True),
-                    lgb.log_evaluation(period=0)],
-        )
-
-        # Evaluate
-        val_pred = model.predict(X_val)
-        rmse = np.sqrt(mean_squared_error(y_val, val_pred))
-        mae = mean_absolute_error(y_val, val_pred)
-        r2 = r2_score(y_val, val_pred)
-
-        self.logger.info(f"Global model - RMSE: {rmse:.4f}, MAE: {mae:.4f}, R2: {r2:.4f}")
+        # Calculate risk threshold (for binary classification of risk)
+        # Use validation predictions to find optimal threshold
+        risk_scores = model.predict(X_val, num_iteration=model.best_iteration)
+        threshold = self._find_optimal_threshold(y_val, risk_scores)
 
         # Save model
-        joblib.dump(model, self.models_path / "global_model.pkl")
+        model_path = self.models_path / f"model_{account_id}.pkl"
+        joblib.dump({
+            'model': model,
+            'feature_columns': feature_columns,
+            'threshold': threshold,
+            'validation_metrics': {
+                'rmse': val_rmse,
+                'mae': val_mae,
+                'n_train': len(X_train),
+                'n_val': len(X_val)
+            },
+            'feature_importance': feature_importance,
+            'training_date': pd.Timestamp.now()
+        }, model_path)
 
-        return model
+        logger.info(f"Model saved for {account_id}: RMSE={val_rmse:.2f}, MAE={val_mae:.2f}")
 
-    def train_personal_models(
-        self, train_df: pd.DataFrame, val_df: pd.DataFrame, feature_cols: List[str]
-    ) -> Dict[str, lgb.LGBMRegressor]:
-        """Train individual regression models for each trader"""
-        personal_models = {}
-        min_days = 30
+        return {
+            'account_id': account_id,
+            'rmse': val_rmse,
+            'mae': val_mae,
+            'threshold': threshold,
+            'n_samples': len(features_df),
+            'top_features': feature_importance.head(5)['feature'].tolist()
+        }
 
-        for account_id in train_df["account_id"].unique():
-            trader_train = train_df[train_df["account_id"] == account_id]
-            trader_val = val_df[val_df["account_id"] == account_id]
+    def _find_optimal_threshold(self, y_true: np.ndarray, predictions: np.ndarray) -> float:
+        """Find optimal threshold for risk classification"""
+        # Simple approach: find threshold that maximizes profit
+        thresholds = np.percentile(predictions, np.arange(10, 90, 10))
+        best_threshold = 0
+        best_profit = -np.inf
 
-            # Skip if insufficient data
-            if len(trader_train) < min_days:
-                self.logger.warning(
-                    f"Insufficient data for {account_id}: {len(trader_train)} days"
-                )
-                continue
+        for threshold in thresholds:
+            # Trade only when prediction is above threshold
+            trade_signals = predictions > threshold
+            profit = np.sum(y_true[trade_signals])
 
-            try:
-                X_train = trader_train[feature_cols]
-                y_train = trader_train["target"]
+            if profit > best_profit:
+                best_profit = profit
+                best_threshold = threshold
 
-                model = lgb.LGBMRegressor(**self.personal_params)
+        return best_threshold
 
-                if len(trader_val) > 0:
-                    X_val = trader_val[feature_cols]
-                    y_val = trader_val["target"]
-                    model.fit(
-                        X_train,
-                        y_train,
-                        eval_set=[(X_val, y_val)],
-                        callbacks=[lgb.early_stopping(20), lgb.log_evaluation(0)],
-                    )
-                else:
-                    model.fit(X_train, y_train)
-
-                personal_models[account_id] = model
-
-                # Save individual model
-                joblib.dump(model, self.models_path / f"personal_{account_id}.pkl")
-
-                self.logger.info(f"Trained personal model for {account_id}")
-
-            except Exception as e:
-                self.logger.error(f"Error training model for {account_id}: {str(e)}")
-
-        self.logger.info(f"Trained {len(personal_models)} personal models")
-        return personal_models
-
-    def evaluate_models(
-        self,
-        test_df: pd.DataFrame,
-        global_model: lgb.LGBMRegressor,
-        personal_models: Dict,
-        arima_models: Dict,
-        feature_cols: List[str],
-    ) -> Dict:
-        """Evaluate all models' performance"""
+    def train_all_models(self, all_features: Dict[str, pd.DataFrame],
+                        feature_columns: list) -> Dict[str, Dict]:
+        """Train models for all traders"""
         results = {}
 
-        # Global model evaluation
-        X_test = test_df[feature_cols]
-        y_test = test_df["target"]
+        for account_id, features_df in all_features.items():
+            result = self.train_personal_model(features_df, account_id, feature_columns)
+            if result:
+                results[account_id] = result
 
-        global_pred = global_model.predict(X_test)
-        global_rmse = np.sqrt(mean_squared_error(y_test, global_pred))
-        global_mae = mean_absolute_error(y_test, global_pred)
-        global_r2 = r2_score(y_test, global_pred)
+        logger.info(f"Trained {len(results)} models successfully")
 
-        results["global"] = {
-            "rmse": global_rmse,
-            "mae": global_mae,
-            "r2": global_r2
-        }
-
-        # Personal models evaluation
-        personal_metrics = {"rmse": [], "mae": [], "r2": []}
-
-        for account_id in test_df["account_id"].unique():
-            trader_test = test_df[test_df["account_id"] == account_id]
-
-            if account_id in personal_models and len(trader_test) > 0:
-                X_trader = trader_test[feature_cols]
-                y_trader = trader_test["target"]
-
-                pred = personal_models[account_id].predict(X_trader)
-                personal_metrics["rmse"].append(np.sqrt(mean_squared_error(y_trader, pred)))
-                personal_metrics["mae"].append(mean_absolute_error(y_trader, pred))
-                personal_metrics["r2"].append(r2_score(y_trader, pred))
-
-        results["personal"] = {
-            "rmse_mean": np.mean(personal_metrics["rmse"]) if personal_metrics["rmse"] else 0,
-            "mae_mean": np.mean(personal_metrics["mae"]) if personal_metrics["mae"] else 0,
-            "r2_mean": np.mean(personal_metrics["r2"]) if personal_metrics["r2"] else 0,
-        }
-
-        # ARIMA baseline evaluation
-        arima_metrics = {"rmse": [], "mae": [], "r2": []}
-
-        for account_id in test_df["account_id"].unique():
-            if account_id in arima_models:
-                trader_test = test_df[test_df["account_id"] == account_id].sort_values("date")
-
-                try:
-                    # Forecast for test period
-                    forecast = arima_models[account_id].predict(n_periods=len(trader_test))
-                    y_true = trader_test["target"].values
-
-                    arima_metrics["rmse"].append(np.sqrt(mean_squared_error(y_true, forecast)))
-                    arima_metrics["mae"].append(mean_absolute_error(y_true, forecast))
-                    arima_metrics["r2"].append(r2_score(y_true, forecast))
-                except:
-                    pass
-
-        results["arima"] = {
-            "rmse_mean": np.mean(arima_metrics["rmse"]) if arima_metrics["rmse"] else 0,
-            "mae_mean": np.mean(arima_metrics["mae"]) if arima_metrics["mae"] else 0,
-            "r2_mean": np.mean(arima_metrics["r2"]) if arima_metrics["r2"] else 0,
-        }
-
-        self.logger.info(f"Global Model - RMSE: {global_rmse:.4f}, MAE: {global_mae:.4f}, R2: {global_r2:.4f}")
-        self.logger.info(f"Personal Models - RMSE: {results['personal']['rmse_mean']:.4f}, MAE: {results['personal']['mae_mean']:.4f}, R2: {results['personal']['r2_mean']:.4f}")
-        self.logger.info(f"ARIMA Baseline - RMSE: {results['arima']['rmse_mean']:.4f}, MAE: {results['arima']['mae_mean']:.4f}, R2: {results['arima']['r2_mean']:.4f}")
-
-        # Save results
-        with open(self.models_path / "evaluation_results.yaml", "w") as f:
-            yaml.dump(results, f)
+        # Save training summary
+        summary_df = pd.DataFrame(results).T
+        summary_df.to_csv(self.models_path / 'training_summary.csv')
 
         return results
 
-    # ────────────────────────── helpers ──────────────────────────
-    @staticmethod
-    def _to_builtin(obj):
-        """Recursively convert NumPy / pandas scalars & arrays to pure-Python types."""
-        import numpy as np
+    def load_model(self, account_id: str) -> Optional[Dict]:
+        """Load a trained model"""
+        model_path = self.models_path / f"model_{account_id}.pkl"
 
-        if isinstance(obj, np.generic):
-            return obj.item()
-        if isinstance(obj, np.ndarray):
-            return obj.tolist()
-        if isinstance(obj, dict):
-            return {k: ModelTrainer._to_builtin(v) for k, v in obj.items()}
-        if isinstance(obj, (list, tuple)):
-            return [ModelTrainer._to_builtin(v) for v in obj]
-        return obj
+        if not model_path.exists():
+            logger.warning(f"No model found for {account_id}")
+            return None
 
-    # ────────────────────────── metadata ──────────────────────────
-    def save_model_metadata(self, feature_cols: List[str], results: Dict):
-        """Persist training metadata in YAML; output contains only built-in types."""
-        metadata = {
-            "feature_columns": feature_cols,
-            "model_params": {
-                "global": self.global_params,
-                "personal": self.personal_params,
-            },
-            "evaluation_results": results,
-            "training_date": pd.Timestamp.now().isoformat(),
-        }
+        try:
+            return joblib.load(model_path)
+        except Exception as e:
+            logger.error(f"Error loading model for {account_id}: {str(e)}")
+            return None
 
-        clean = ModelTrainer._to_builtin(metadata)
+    def get_all_models(self) -> Dict[str, Dict]:
+        """Load all available models"""
+        models = {}
 
-        self.models_path.mkdir(parents=True, exist_ok=True)
-        meta_file = self.models_path / "model_metadata.yaml"
-        with meta_file.open("w") as f:
-            yaml.safe_dump(clean, f, sort_keys=False)
+        for model_file in self.models_path.glob("model_*.pkl"):
+            account_id = model_file.stem.replace("model_", "")
+            model_data = self.load_model(account_id)
+            if model_data:
+                models[account_id] = model_data
+
+        return models

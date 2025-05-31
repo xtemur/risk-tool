@@ -2,21 +2,9 @@ traders:
   - account_id: 3989
     name: "NEC001_OLD"
     strategy: "Day Trading"
-  # - account_id: 3990
-  #   name: "NEC002_OLD"
-  #   strategy: "Day Trading"
   - account_id: 3991
     name: "NEC003_OLD"
     strategy: "Day Trading"
-  # - account_id: 3964
-  #   name: "NECS001_OLD"
-  #   strategy: "Day Trading"
-  # - account_id: 3965
-  #   name: "NECS002_OLD"
-  #   strategy: "Day Trading"
-  # - account_id: 3966
-  #   name: "NECS003_OLD"
-  #   strategy: "Day Trading"
   - account_id: 4795
     name: "NECS004OP_OLD"
     strategy: "Day Trading"
@@ -29,9 +17,6 @@ traders:
   - account_id: 4001
     name: "NEL002_OLD"
     strategy: "Day Trading"
-  # - account_id: 4002
-  #   name: "NEL003_OLD"
-  #   strategy: "Day Trading"
   - account_id: 4003
     name: "NEL004_OLD"
     strategy: "Day Trading"
@@ -44,15 +29,12 @@ traders:
   - account_id: 3973
     name: "NEO001OP_OLD"
     strategy: "Day Trading"
-  # - account_id: 3983
-  #   name: "NEO001TE_OLD"
-  #   strategy: "Day Trading"
   - account_id: 3959
     name: "NEO001_OLD"
     strategy: "Day Trading"
-  # - account_id: 3974
-  #   name: "NEO002OP_OLD"
-  #   strategy: "Day Trading"
+  - account_id: 3974
+    name: "NEO002OP_OLD"
+    strategy: "Day Trading"
   - account_id: 3984
     name: "NEO002TE_OLD"
     strategy: "Day Trading"
@@ -206,9 +188,6 @@ traders:
   - account_id: 3972
     name: "NETS006_OLD"
     strategy: "Day Trading"
-  # - account_id: 4647
-  #   name: "NETS007OP_OLD"
-  #   strategy: "Day Trading"
   - account_id: 4397
     name: "NETS007_OLD"
     strategy: "Day Trading"
@@ -221,15 +200,9 @@ traders:
   - account_id: 4404
     name: "NETS009_OLD"
     strategy: "Day Trading"
-  # - account_id: 4744
-  #   name: "NETS010_OLD"
-  #   strategy: "Day Trading"
   - account_id: 4796
     name: "NETS011OP_OLD"
     strategy: "Day Trading"
-  # - account_id: 4765
-  #   name: "NETS011_OLD"
-  #   strategy: "Day Trading"
   - account_id: 4797
     name: "NETS012OP_OLD"
     strategy: "Day Trading"
@@ -242,3 +215,31 @@ traders:
   - account_id: 4788
     name: "NETS013_OLD"
     strategy: "Day Trading"
+
+  # - account_id: 4765
+  #   name: "NETS011_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 4744
+  #   name: "NETS010_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 4647
+  #   name: "NETS007OP_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 4002
+  #   name: "NEL003_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3983
+  #   name: "NEO001TE_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3964
+  #   name: "NECS001_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3965
+  #   name: "NECS002_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3966
+  #   name: "NECS003_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3990
+  #   name: "NEC002_OLD"
+  #   strategy: "Day Trading"

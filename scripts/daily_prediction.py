@@ -1,125 +1,90 @@
+#!/usr/bin/env python
+"""
+Daily Prediction Script - Generate risk predictions and send email report
+Run this daily before market open
+"""
+
 import sys
-
-sys.path.append("src")
-
 import logging
 from pathlib import Path
 
-import yaml
+# Add parent directory to path
+sys.path.append(str(Path(__file__).parent.parent))
 
-from data_loader import DataLoader
-from email_service import EmailService
-from feature_engineering import FeatureEngineer
-from predictor import RiskPredictor
-
-# Import the download function
-try:
-    from download_totals import download_for_risk_tool
-except ImportError:
-    logger.warning("download_totals.py not found. Skipping data download.")
-    download_for_risk_tool = None
+from src.database import Database
+from src.data_downloader import DataDownloader
+from src.predictor import RiskPredictor
+from src.email_service import EmailService
 
 
 def setup_logging():
-    """Setup logging configuration"""
-    log_dir = Path("logs")
-    log_dir.mkdir(exist_ok=True)
-
+    """Configure logging"""
     logging.basicConfig(
         level=logging.INFO,
-        format="%(asctime)s - %(levelname)s - %(message)s",
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
-            logging.FileHandler("logs/daily_prediction.log"),
             logging.StreamHandler(),
-        ],
+            logging.FileHandler('logs/daily_prediction.log')
+        ]
     )
 
 
 def main():
-    """Main daily prediction pipeline with data download"""
+    """Main prediction function"""
     setup_logging()
     logger = logging.getLogger(__name__)
 
-    try:
-        logger.info("Starting daily risk prediction pipeline...")
+    logger.info("Starting Daily Risk Prediction")
 
-        # Step 1: Download latest data
-        if download_for_risk_tool:
-            logger.info("Downloading latest data from PropreReports...")
-            download_success = download_for_risk_tool()
+    # Step 1: Download recent data (last 7 days)
+    logger.info("Downloading recent data...")
+    downloader = DataDownloader()
+    results = downloader.download_recent(days_back=7)
 
-            if not download_success:
-                logger.error("Data download failed. Proceeding with existing data.")
-            else:
-                logger.info("Data download completed successfully")
-        else:
-            logger.info("Skipping data download - function not available")
+    if not any(results.values()):
+        logger.error("Failed to download recent data")
+        return
 
-        # Step 2: Load configuration
-        with open("config/config.yaml", "r") as f:
-            config = yaml.safe_load(f)
+    # Step 2: Generate predictions
+    logger.info("Generating predictions...")
+    predictor = RiskPredictor()
+    predictions = predictor.predict_all_traders()
 
-        # Step 3: Initialize components
-        data_loader = DataLoader()
-        feature_engineer = FeatureEngineer(config)
-        predictor = RiskPredictor()
-        email_service = EmailService(config)
+    # Step 3: Get summary
+    summary = predictor.get_risk_summary(predictions)
 
-        # Step 4: Load trader data
-        logger.info("Loading trader data...")
-        all_data = data_loader.load_all_traders_data()
+    # Log summary
+    logger.info(f"\nRisk Summary:")
+    logger.info(f"Total Traders: {summary['total_traders']}")
+    logger.info(f"High Risk: {summary['high_risk_count']}")
+    logger.info(f"Medium Risk: {summary['medium_risk_count']}")
+    logger.info(f"Low Risk: {summary['low_risk_count']}")
+    logger.info(f"Models Available: {summary['models_available']}")
 
-        if not all_data:
-            logger.error("No trader data loaded. Check data files and configuration.")
-            return
+    # Step 4: Send email report
+    logger.info("\nSending email report...")
+    email_service = EmailService()
+    email_sent = email_service.send_daily_report(predictions, summary)
 
-        # Step 5: Engineer features for each trader
-        logger.info("Engineering features...")
-        for account_id in all_data.keys():
-            if not all_data[account_id]["totals"].empty:
-                features_df = feature_engineer.engineer_features(
-                    all_data[account_id]["totals"]
-                )
-                all_data[account_id]["features"] = features_df
+    if email_sent:
+        logger.info("Email report sent successfully")
+    else:
+        logger.error("Failed to send email report")
 
-        # Step 6: Generate predictions
-        logger.info("Generating risk predictions...")
-        predictions = predictor.predict_all_traders(all_data)
+    # Save predictions to file as backup
+    import pandas as pd
+    predictions_df = pd.DataFrame(predictions)
+    predictions_df.to_csv(f"data/predictions_{pd.Timestamp.now().date()}.csv", index=False)
 
-        # Step 7: Send email report
-        logger.info("Sending email report...")
-        email_sent = email_service.send_email(predictions)
+    logger.info("\nDaily prediction complete!")
 
-        if email_sent:
-            logger.info("Daily risk prediction completed successfully")
-        else:
-            logger.error("Failed to send email report")
-
-        # Step 8: Save predictions for record keeping
-        import pandas as pd
-
-        pred_df = pd.DataFrame(predictions)
-        pred_df["prediction_date"] = pd.Timestamp.now().date()
-
-        pred_dir = Path("data/predictions")
-        pred_dir.mkdir(exist_ok=True)
-        pred_df.to_csv(
-            pred_dir / f"predictions_{pd.Timestamp.now().date()}.csv", index=False
-        )
-
-        logger.info(f"Predictions saved to data/predictions/")
-
-        # Step 9: Log summary
-        high_risk_count = len([p for p in predictions if p["risk_level"] == "High"])
-        medium_risk_count = len([p for p in predictions if p["risk_level"] == "Medium"])
-
-        logger.info(
-            f"Risk Summary: {high_risk_count} High Risk, {medium_risk_count} Medium Risk traders"
-        )
-
-    except Exception as e:
-        logger.error(f"Daily prediction pipeline failed: {str(e)}")
-        raise
+    # Show top risk traders
+    if summary['top_risk_traders']:
+        logger.info("\nTop Risk Traders:")
+        for i, trader in enumerate(summary['top_risk_traders'], 1):
+            logger.info(f"{i}. {trader['trader_name']}: {trader['risk_level']} "
+                       f"(Predicted P&L: ${trader['predicted_pnl']:.2f})")
+            logger.info(f"   Recommendation: {trader['recommendation']}")
 
 
 if __name__ == "__main__":

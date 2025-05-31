@@ -1,135 +1,171 @@
-import logging
-from pathlib import Path
-from typing import Dict, List, Tuple
+"""
+Simplified Risk Predictor for Risk Management MVP
+Uses only personal models for predictions
+"""
 
-import joblib
+import logging
 import numpy as np
 import pandas as pd
-import yaml
+from typing import Dict, List, Optional
+from pathlib import Path
+
+from src.database import Database
+from src.feature_engineer import FeatureEngineer
+from src.model_trainer import ModelTrainer
+
+logger = logging.getLogger(__name__)
 
 
 class RiskPredictor:
+    """Generate risk predictions using personal models"""
+
     def __init__(self):
-        self.models_path = Path("data/models")
-        self.logger = logging.getLogger(__name__)
+        self.db = Database()
+        self.feature_engineer = FeatureEngineer()
+        self.model_trainer = ModelTrainer()
+        self.models = self.model_trainer.get_all_models()
 
-        # Load models and metadata
-        self.load_models()
+        logger.info(f"Loaded {len(self.models)} personal models")
 
-    def load_models(self):
-        """Load trained models and metadata"""
-        try:
-            # Load global model
-            self.global_model = joblib.load(self.models_path / "global_model.pkl")
+    def predict_trader(self, account_id: str, lookback_days: int = 60) -> Optional[Dict]:
+        """Generate prediction for a single trader"""
 
-            # Load personal models
-            self.personal_models = {}
-            for model_file in self.models_path.glob("personal_*.pkl"):
-                account_id = model_file.stem.replace("personal_", "")
-                self.personal_models[account_id] = joblib.load(model_file)
+        # Check if model exists
+        if account_id not in self.models:
+            logger.warning(f"No model available for {account_id}")
+            return None
 
-            # Load ARIMA models
-            self.arima_models = {}
-            for model_file in self.models_path.glob("arima_*.pkl"):
-                account_id = model_file.stem.replace("arima_", "")
-                self.arima_models[account_id] = joblib.load(model_file)
+        model_data = self.models[account_id]
+        model = model_data['model']
+        feature_columns = model_data['feature_columns']
+        threshold = model_data['threshold']
 
-            # Load metadata
-            with open(self.models_path / "model_metadata.yaml", "r") as f:
-                self.metadata = yaml.safe_load(f)
+        # Get recent data
+        end_date = pd.Timestamp.now().date()
+        start_date = end_date - pd.Timedelta(days=lookback_days)
 
-            self.feature_cols = self.metadata["feature_columns"]
+        totals_df, fills_df = self.db.get_trader_data(
+            account_id,
+            start_date.strftime('%Y-%m-%d'),
+            end_date.strftime('%Y-%m-%d')
+        )
 
-            # Load config for ensemble weights
-            with open("config/config.yaml", "r") as f:
-                config = yaml.safe_load(f)
+        if totals_df.empty:
+            logger.warning(f"No recent data for {account_id}")
+            return None
 
-            self.global_weight = 0.6  # Default weights for ensemble
-            self.personal_weight = 0.4
+        # Create features
+        features_df = self.feature_engineer.create_features(totals_df, fills_df)
 
-            self.logger.info(
-                f"Loaded global model, {len(self.personal_models)} personal models, and {len(self.arima_models)} ARIMA models"
-            )
+        if features_df.empty or len(features_df) < 5:
+            logger.warning(f"Insufficient feature data for {account_id}")
+            return None
 
-        except Exception as e:
-            self.logger.error(f"Error loading models: {str(e)}")
-            raise
+        # Get latest features
+        latest_features = features_df[feature_columns].iloc[-1:].values
 
-    def predict_single_trader(self, trader_data: pd.DataFrame, account_id: str) -> Dict:
-        """Predict next day's total_delta for a single trader"""
-        try:
-            # Get latest features
-            latest_data = trader_data.iloc[-1:][self.feature_cols]
+        # Make prediction
+        predicted_pnl = model.predict(latest_features, num_iteration=model.best_iteration)[0]
 
-            # Global model prediction
-            global_pred = self.global_model.predict(latest_data)[0]
+        # Calculate risk metrics
+        recent_pnl = totals_df['net_pnl'].tail(5).sum()
+        recent_volatility = totals_df['net_pnl'].tail(20).std()
 
-            # Personal model prediction (if available)
-            if account_id in self.personal_models:
-                personal_pred = self.personal_models[account_id].predict(latest_data)[0]
+        # Determine risk level
+        if predicted_pnl < -1000:
+            risk_level = "High"
+            risk_score = 0.9
+        elif predicted_pnl < 0:
+            risk_level = "Medium"
+            risk_score = 0.6
+        else:
+            risk_level = "Low"
+            risk_score = 0.3
 
-                # Ensemble prediction
-                ensemble_pred = (
-                    self.global_weight * global_pred
-                    + self.personal_weight * personal_pred
-                )
+        # Adjust risk score based on recent performance
+        if recent_pnl < -2000:
+            risk_score = min(1.0, risk_score + 0.2)
+        elif recent_pnl > 2000:
+            risk_score = max(0.1, risk_score - 0.1)
 
-                confidence = "High"  # Has personal model
-            else:
-                # Use only global model
-                ensemble_pred = global_pred
-                personal_pred = None
-                confidence = "Medium"  # No personal model
+        # Trading recommendation
+        if predicted_pnl < threshold:
+            recommendation = "Reduce position sizes or skip trading"
+        else:
+            recommendation = "Normal trading"
 
-            # ARIMA prediction (if available)
-            arima_pred = None
-            if account_id in self.arima_models:
-                try:
-                    arima_pred = self.arima_models[account_id].predict(n_periods=1)[0]
-                except:
-                    pass
+        return {
+            'account_id': account_id,
+            'predicted_pnl': predicted_pnl,
+            'risk_level': risk_level,
+            'risk_score': risk_score,
+            'confidence': 'High',  # Personal model available
+            'recent_pnl_5d': recent_pnl,
+            'recent_volatility': recent_volatility,
+            'recommendation': recommendation,
+            'threshold': threshold,
+            'last_update': pd.Timestamp.now()
+        }
 
-            # Risk categorization based on predicted P&L
-            if ensemble_pred < -1000:
-                risk_level = "High"
-            elif ensemble_pred < 0:
-                risk_level = "Medium"
-            else:
-                risk_level = "Low"
-
-            return {
-                "account_id": account_id,
-                "predicted_pnl": ensemble_pred,
-                "risk_level": risk_level,
-                "confidence": confidence,
-                "global_prediction": global_pred,
-                "personal_prediction": personal_pred,
-                "arima_prediction": arima_pred,
-                "recent_pnl": trader_data["net_pnl"].tail(5).sum(),
-                "recent_performance": trader_data["total_delta"].tail(3).sum(),
-            }
-
-        except Exception as e:
-            self.logger.error(f"Error predicting for {account_id}: {str(e)}")
-            return {
-                "account_id": account_id,
-                "predicted_pnl": 0,
-                "risk_level": "Unknown",
-                "confidence": "Low",
-                "error": str(e),
-            }
-
-    def predict_all_traders(self, all_data: Dict) -> List[Dict]:
-        """Generate predictions for all traders"""
+    def predict_all_traders(self) -> List[Dict]:
+        """Generate predictions for all traders with models"""
         predictions = []
 
-        for account_id, data in all_data.items():
-            trader_prediction = self.predict_single_trader(data["features"], account_id)
-            trader_prediction["trader_name"] = data.get("name", account_id)
-            predictions.append(trader_prediction)
+        # Get all traders
+        traders_df = self.db.get_all_traders()
 
-        # Sort by predicted P&L (lowest first - highest risk)
-        predictions.sort(key=lambda x: x["predicted_pnl"])
+        for _, trader in traders_df.iterrows():
+            account_id = trader['account_id']
 
-        self.logger.info(f"Generated predictions for {len(predictions)} traders")
+            prediction = self.predict_trader(account_id)
+
+            if prediction:
+                prediction['trader_name'] = trader['trader_name']
+                predictions.append(prediction)
+            else:
+                # Add placeholder for traders without predictions
+                predictions.append({
+                    'account_id': account_id,
+                    'trader_name': trader['trader_name'],
+                    'predicted_pnl': 0,
+                    'risk_level': 'Unknown',
+                    'risk_score': 0.5,
+                    'confidence': 'Low',
+                    'recent_pnl_5d': 0,
+                    'recommendation': 'No model available',
+                    'last_update': pd.Timestamp.now()
+                })
+
+        # Sort by risk score (highest risk first)
+        predictions.sort(key=lambda x: x['risk_score'], reverse=True)
+
+        # Save predictions to database
+        self.db.save_predictions(predictions)
+
+        logger.info(f"Generated predictions for {len(predictions)} traders")
+
         return predictions
+
+    def get_risk_summary(self, predictions: List[Dict]) -> Dict:
+        """Generate summary statistics from predictions"""
+
+        df = pd.DataFrame(predictions)
+
+        summary = {
+            'total_traders': len(predictions),
+            'high_risk_count': len(df[df['risk_level'] == 'High']),
+            'medium_risk_count': len(df[df['risk_level'] == 'Medium']),
+            'low_risk_count': len(df[df['risk_level'] == 'Low']),
+            'unknown_risk_count': len(df[df['risk_level'] == 'Unknown']),
+            'total_predicted_pnl': df['predicted_pnl'].sum(),
+            'total_recent_pnl': df['recent_pnl_5d'].sum(),
+            'models_available': len(df[df['confidence'] == 'High']),
+            'timestamp': pd.Timestamp.now()
+        }
+
+        # Identify top risk traders
+        summary['top_risk_traders'] = df.nlargest(5, 'risk_score')[
+            ['trader_name', 'risk_level', 'predicted_pnl', 'recommendation']
+        ].to_dict('records')
+
+        return summary
