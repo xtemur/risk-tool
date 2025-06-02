@@ -15,7 +15,7 @@ import matplotlib.dates as mdates
 from io import BytesIO
 import base64
 
-from src.database import Database
+from database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -270,6 +270,20 @@ class TraderAnalytics:
         behavior = self.calculate_behavior_metrics(totals_df, fills_df)
         efficiency = self.calculate_efficiency_metrics(totals_df)
 
+        advanced = self.calculate_advanced_trading_metrics(totals_df)
+
+        # Integrate key metrics for backward compatibility
+        if advanced:
+            performance.update({
+                'sortino_ratio': advanced.get('sortino_ratio', 0),
+                'calmar_ratio': advanced.get('calmar_ratio', 0),
+                'kelly_criterion': advanced.get('kelly_criterion', 0)
+            })
+
+            risk.update({
+                'ulcer_index': self._calculate_ulcer_index(totals_df)
+            })
+
         return {
             'account_id': account_id,
             'period_days': lookback_days,
@@ -433,91 +447,147 @@ class TraderAnalytics:
 
         return image_base64
 
-    def calculate_advanced_trading_metrics(self, totals_df):
-        """Calculate state-of-the-art trading metrics for professional day traders"""
+    def calculate_advanced_trading_metrics(self, totals_df: pd.DataFrame) -> Dict:
+        """Calculate advanced trading metrics - handles edge cases properly"""
 
-        if totals_df.empty or len(totals_df) < 5:  # Need minimum 5 days
-            print(f"Insufficient data for advanced metrics: {len(totals_df)} days")
-            return {}
+        if totals_df.empty or len(totals_df) < 3:
+            return self._empty_advanced_metrics()
 
         daily_returns = totals_df['net_pnl']
+        logger.debug(f"Calculating advanced metrics for {len(daily_returns)} days")
+        logger.debug(f"P&L range: ${daily_returns.min():.2f} to ${daily_returns.max():.2f}")
 
-        # Check if we have any non-zero returns
-        non_zero_returns = daily_returns[daily_returns != 0]
-        if len(non_zero_returns) < 3:
-            print("Insufficient non-zero returns for advanced metrics")
-            return {}
-
-        print(f"Calculating advanced metrics for {len(daily_returns)} days, {len(non_zero_returns)} non-zero")
-
-        # Simple Omega Ratio (gains vs losses)
+        # Basic stats
         gains = daily_returns[daily_returns > 0]
         losses = daily_returns[daily_returns < 0]
+        mean_return = daily_returns.mean()
 
+        logger.debug(f"{len(gains)} winning days, {len(losses)} losing days")
+
+        # 1. Omega Ratio (handles no-loss scenario)
         if len(losses) > 0 and losses.sum() < 0:
             omega_ratio = gains.sum() / abs(losses.sum())
         elif len(gains) > 0:
-            omega_ratio = 5.0  # High value when no losses
+            omega_ratio = 10.0  # Excellent - no losses
         else:
             omega_ratio = 1.0
+        omega_ratio = min(omega_ratio, 10.0)
 
-        omega_ratio = min(omega_ratio, 10.0)  # Cap at reasonable value
+        # 2. Sortino Ratio (downside deviation)
+        if len(losses) > 0:
+            downside_deviation = losses.std()
+            sortino_ratio = mean_return / downside_deviation if downside_deviation > 0 else 0
+        else:
+            # All gains - use overall volatility but give high score
+            volatility = daily_returns.std()
+            sortino_ratio = mean_return / (volatility * 0.5) if volatility > 0 else 5.0
 
-        # Simple Hurst Exponent (autocorrelation proxy)
-        hurst_exp = 0.5  # Default to random walk
-        if len(daily_returns) >= 7:
+        # 3. Calmar Ratio (handles no drawdown case)
+        cumulative = daily_returns.cumsum()
+        rolling_max = cumulative.expanding().max()
+        drawdown = cumulative - rolling_max
+        max_drawdown = drawdown.min()
+
+        annualized_return = mean_return * 252
+        if max_drawdown < -1:  # Meaningful drawdown
+            calmar_ratio = annualized_return / abs(max_drawdown)
+        elif annualized_return > 0:
+            calmar_ratio = 20.0  # High value for no drawdown
+        else:
+            calmar_ratio = 0
+
+        # 4. Kelly Criterion (optimal position sizing)
+        kelly_criterion = 0
+        if len(gains) > 0:
+            win_rate = len(gains) / len(daily_returns)
+            avg_win = gains.mean()
+
+            if len(losses) > 0:
+                avg_loss = abs(losses.mean())
+                kelly_criterion = win_rate - ((1 - win_rate) * avg_win / avg_loss)
+            else:
+                # All wins case - use conservative estimate
+                estimated_loss = avg_win * 0.2  # Assume 20% loss potential
+                kelly_criterion = win_rate - ((1 - win_rate) * avg_win / estimated_loss)
+
+            kelly_criterion = max(0, min(kelly_criterion, 0.5))  # Conservative cap
+
+        # 5. Hurst Exponent (trend vs mean reversion)
+        hurst_exp = 0.5  # Default random walk
+        if len(daily_returns) >= 5:
             try:
                 autocorr = daily_returns.autocorr(lag=1)
                 if not pd.isna(autocorr):
-                    hurst_exp = 0.5 + autocorr * 0.3  # Scale to reasonable range
-                    hurst_exp = max(0.1, min(0.9, hurst_exp))  # Clamp
+                    hurst_exp = 0.5 + autocorr * 0.3
+                    hurst_exp = max(0.1, min(0.9, hurst_exp))
             except:
-                hurst_exp = 0.5
+                pass
 
-        # Information Coefficient (simple momentum correlation)
+        # 6. Information Coefficient (market timing)
         information_coefficient = 0
         if len(daily_returns) > 3:
             try:
-                momentum_signal = daily_returns.rolling(2, min_periods=1).mean().shift(1)
-                actual_direction = (daily_returns > 0).astype(int)
-                predicted_direction = (momentum_signal > 0).astype(int)
+                momentum = daily_returns.rolling(2, min_periods=1).mean().shift(1)
+                actual_up = (daily_returns > daily_returns.median()).astype(int)
+                predicted_up = (momentum > momentum.median()).astype(int)
 
-                valid_mask = ~(pd.isna(momentum_signal) | pd.isna(daily_returns))
+                valid_mask = ~pd.isna(momentum)
                 if valid_mask.sum() > 2:
-                    correlation = np.corrcoef(predicted_direction[valid_mask], actual_direction[valid_mask])[0, 1]
+                    correlation = np.corrcoef(predicted_up[valid_mask], actual_up[valid_mask])[0, 1]
                     information_coefficient = correlation if not np.isnan(correlation) else 0
             except:
-                information_coefficient = 0
+                pass
 
-        # Tail Expectation (worst 20% of days)
-        tail_threshold = np.percentile(daily_returns, 20)
+        # 7. Sterling Ratio
+        avg_drawdown = abs(drawdown.mean()) if len(drawdown) > 0 else 1
+        if avg_drawdown == 0:
+            avg_drawdown = 1
+        sterling_ratio = annualized_return / avg_drawdown
+
+        # 8. Tail Expectation (worst 20% of days)
+        tail_percentile = max(10, 100 // max(len(daily_returns), 1))
+        tail_threshold = np.percentile(daily_returns, tail_percentile)
         tail_returns = daily_returns[daily_returns <= tail_threshold]
         tail_expectation = tail_returns.mean() if len(tail_returns) > 0 else daily_returns.min()
 
-        # Sterling Ratio (return per average drawdown)
-        cumulative_pnl = daily_returns.cumsum()
-        rolling_max = cumulative_pnl.expanding().max()
-        drawdowns = cumulative_pnl - rolling_max
-
-        avg_drawdown = abs(drawdowns.mean()) if len(drawdowns) > 0 else 1
-        if avg_drawdown == 0:
-            avg_drawdown = 1
-
-        annualized_return = daily_returns.mean() * 252
-        sterling_ratio = annualized_return / avg_drawdown
-
-        print(f"Advanced metrics calculated - Omega: {omega_ratio:.2f}, Hurst: {hurst_exp:.3f}, IC: {information_coefficient:.3f}")
-
-        return {
-            'omega_ratio': omega_ratio,
-            'hurst_exponent': hurst_exp,
-            'information_coefficient': information_coefficient,
-            'tail_expectation': tail_expectation,
-            'sterling_ratio': sterling_ratio,
+        result = {
+            'omega_ratio': round(omega_ratio, 3),
+            'sortino_ratio': round(sortino_ratio, 3),
+            'calmar_ratio': round(calmar_ratio, 3),
+            'kelly_criterion': round(kelly_criterion, 3),
+            'hurst_exponent': round(hurst_exp, 3),
+            'information_coefficient': round(information_coefficient, 3),
+            'sterling_ratio': round(sterling_ratio, 3),
+            'tail_expectation': round(tail_expectation, 2),
+            # Placeholder for future advanced metrics
             'current_rolling_sharpe': 0,
             'avg_rolling_sharpe': 0,
             'sharpe_stability': 0,
-            'kappa3': 0,
+            'returns_skewness': 0,
+            'returns_kurtosis': 0,
+            'upside_capture': 1.0,
+            'downside_capture': 1.0,
+            'burke_ratio': 0,
+            'martin_ratio': 0
+        }
+
+        logger.debug(f"Returning {len(result)} advanced metrics")
+        return result
+
+    def _empty_advanced_metrics(self) -> Dict:
+        """Return empty advanced metrics"""
+        return {
+            'omega_ratio': 0,
+            'sortino_ratio': 0,
+            'calmar_ratio': 0,
+            'kelly_criterion': 0,
+            'hurst_exponent': 0.5,
+            'information_coefficient': 0,
+            'sterling_ratio': 0,
+            'tail_expectation': 0,
+            'current_rolling_sharpe': 0,
+            'avg_rolling_sharpe': 0,
+            'sharpe_stability': 0,
             'returns_skewness': 0,
             'returns_kurtosis': 0,
             'upside_capture': 1.0,
@@ -690,3 +760,17 @@ class TraderAnalytics:
             'burke_ratio': 0,
             'martin_ratio': 0
         }
+
+    def _calculate_ulcer_index(self, totals_df: pd.DataFrame) -> float:
+        """Calculate Ulcer Index - measures downside risk"""
+        if totals_df.empty:
+            return 0
+
+        daily_returns = totals_df['net_pnl']
+        cumulative = daily_returns.cumsum()
+        rolling_max = cumulative.expanding().max()
+        drawdown_pct = ((cumulative - rolling_max) / rolling_max.abs()).fillna(0)
+
+        # Ulcer Index is RMS of drawdown percentages
+        ulcer_index = np.sqrt((drawdown_pct ** 2).mean()) * 100
+        return ulcer_index if not np.isnan(ulcer_index) else 0
