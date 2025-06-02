@@ -1,131 +1,3 @@
-perf = data.get('performance', {})
-            risk = data.get('risk', {})
-            behavior = data.get('behavior', {})
-            efficiency = data.get('efficiency', {})
-            advanced = data.get('advanced', {})
-
-            # Risk alerts
-            alerts = []
-            if perf.get('is_in_drawdown', False):
-                alerts.append("Currently in drawdown")
-            if risk.get('max_losing_streak', 0) > 5:
-                alerts.append(f"Long losing streak: {risk.get('max_losing_streak')} days")
-            if efficiency.get('fee_efficiency', 0) > 5:
-                alerts.append("High fee ratio detected")
-            if behavior.get('overtrading_pnl', 0) < -100:
-                alerts.append("Potential overtrading")
-            if risk.get('risk_of_ruin', 0) > 0.1:
-                alerts.append("Elevated risk of ruin")
-            if advanced.get('hurst_exponent', 0.5) > 0.6:
-                alerts.append("Trending behavior detected")
-            elif advanced.get('hurst_exponent', 0.5) < 0.4:
-                alerts.append("Mean-reverting behavior")
-
-            html += f"""
-                <div class="trader-section">
-                    <h3 class="trader-title">{trader_name} ({account_id})</h3>
-
-                    <table class="metrics-table">
-                        <tr>
-                            <td class="label">Performance Metrics</td>
-                            <td class="value"></td>
-                        </tr>
-                        <tr>
-                            <td>Total P&L:</td>
-                            <td class="value {'positive' if perf.get('total_pnl', 0) > 0 else 'negative'}">${perf.get('total_pnl', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Win Rate:</td>
-                            <td class="value">{perf.get('win_rate', 0):.1f}%</td>
-                        </tr>
-                        <tr>
-                            <td>Profit Factor:</td>
-                            <td class="value">{perf.get('profit_factor', 0):.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Sharpe Ratio:</td>
-                            <td class="value">{perf.get('sharpe_ratio', 0):.3f}</td>
-                        </tr>
-                        <tr>
-                            <td>Sortino Ratio:</td>
-                            <td class="value">{perf.get('sortino_ratio', 0):.3f}</td>
-                        </tr>
-                        <tr>
-                            <td>Calmar Ratio:</td>
-                            <td class="value">{perf.get('calmar_ratio', 0):.3f}</td>
-                        </tr>
-
-                        <tr><td class="label" style="padding-top: 15px;">Risk Metrics</td><td></td></tr>
-                        <tr>
-                            <td>Max Drawdown:</td>
-                            <td class="value negative">${perf.get('max_drawdown', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>VaR (5%):</td>
-                            <td class="value">${risk.get('var_5_percent', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>CVaR (5%):</td>
-                            <td class="value">${risk.get('cvar_5_percent', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Ulcer Index:</td>
-                            <td class="value">{risk.get('ulcer_index', 0):.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Max Losing Streak:</td>
-                            <td class="value">{risk.get('max_losing_streak', 0)} days</td>
-                        </tr>
-                        <tr>
-                            <td>Risk of Ruin:</td>
-                            <td class="value {'negative' if risk.get('risk_of_ruin', 0) > 0.1 else 'neutral'}">{risk.get('risk_of_ruin', 0)*100:.1f}%</td>
-                        </tr>
-
-                        <tr><td class="label" style="padding-top: 15px;">Advanced Analytics</td><td></td></tr>
-                        <tr>
-                            <td>Omega Ratio:</td>
-                            <td class="value">{advanced.get('omega_ratio', 0):.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Hurst Exponent:</td>
-                            <td class="value">{advanced.get('hurst_exponent', 0.5):.3f}</td>
-                        </tr>
-                        <tr>
-                            <td>Information Coeff:</td>
-                            <td class="value">{advanced.get('information_coefficient', 0):.3f}</td>
-                        </tr>
-                        <tr>
-                            <td>Tail Expectation:</td>
-                            <td class="value">${advanced.get('tail_expectation', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Sterling Ratio:</td>
-                            <td class="value">{advanced.get('sterling_ratio', 0):.3f}</td>
-                        </tr>
-
-                        <tr><td class="label" style="padding-top: 15px;">Trading Behavior</td><td></td></tr>
-                        <tr>
-                            <td>Avg Daily Orders:</td>
-                            <td class="value">{behavior.get('avg_daily_orders', 0):.1f}</td>
-                        </tr>
-                        <tr>
-                            <td>P&L per Order:</td>
-                            <td class="value">${behavior.get('pnl_per_order', 0):.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Symbols Traded:</td>
-                            <td class="value">{behavior.get('symbols_traded', 0)}</td>
-                        </tr>
-                        <tr>
-                            <td>Diversification Score:</td>
-                            <td class="value">{behavior.get('diversification_score', 0):.3f}</td>
-                        </tr>
-                        <tr>
-                            <td>Fee Efficiency:</td>
-                            """
-Analytics Email Service for Trader Performance Reports
-"""
-
 import os
 import logging
 import smtplib
@@ -135,6 +7,7 @@ from email.mime.image import MIMEImage
 from typing import Dict, List
 import pandas as pd
 from dotenv import load_dotenv
+import numpy as np
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -338,6 +211,7 @@ class AnalyticsEmailService:
             risk = data.get('risk', {})
             behavior = data.get('behavior', {})
             efficiency = data.get('efficiency', {})
+            advanced = data.get('advanced', {})
 
             # Risk alerts
             alerts = []
@@ -351,6 +225,10 @@ class AnalyticsEmailService:
                 alerts.append("Potential overtrading")
             if risk.get('risk_of_ruin', 0) > 0.1:
                 alerts.append("Elevated risk of ruin")
+            if advanced.get('hurst_exponent', 0.5) > 0.6:
+                alerts.append("Trending behavior detected")
+            elif advanced.get('hurst_exponent', 0.5) < 0.4:
+                alerts.append("Mean-reverting behavior")
 
             html += f"""
                 <div class="trader-section">
@@ -410,6 +288,28 @@ class AnalyticsEmailService:
                         <tr>
                             <td>Risk of Ruin:</td>
                             <td class="value {'negative' if risk.get('risk_of_ruin', 0) > 0.1 else 'neutral'}">{risk.get('risk_of_ruin', 0)*100:.1f}%</td>
+                        </tr>
+
+                        <tr><td class="label" style="padding-top: 15px;">Advanced Analytics</td><td></td></tr>
+                        <tr>
+                            <td>Omega Ratio:</td>
+                            <td class="value">{advanced.get('omega_ratio', 0):.2f}</td>
+                        </tr>
+                        <tr>
+                            <td>Hurst Exponent:</td>
+                            <td class="value">{advanced.get('hurst_exponent', 0.5):.3f}</td>
+                        </tr>
+                        <tr>
+                            <td>Information Coeff:</td>
+                            <td class="value">{advanced.get('information_coefficient', 0):.3f}</td>
+                        </tr>
+                        <tr>
+                            <td>Tail Expectation:</td>
+                            <td class="value">${advanced.get('tail_expectation', 0):,.2f}</td>
+                        </tr>
+                        <tr>
+                            <td>Sterling Ratio:</td>
+                            <td class="value">{advanced.get('sterling_ratio', 0):.3f}</td>
                         </tr>
 
                         <tr><td class="label" style="padding-top: 15px;">Trading Behavior</td><td></td></tr>
@@ -602,7 +502,8 @@ class AnalyticsEmailService:
                 'total_pnl': 2500.50,
                 'win_rate': 65.5,
                 'sharpe_ratio': 1.25,
-                'profit_factor': 1.45
+                'profit_factor': 1.45,
+                'max_drawdown': -850.25
             }],
             'top_performers': {
                 'by_pnl': [{'trader_name': 'Test Trader', 'total_pnl': 2500.50}],
