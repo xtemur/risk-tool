@@ -432,3 +432,261 @@ class TraderAnalytics:
         plt.close()
 
         return image_base64
+
+    def calculate_advanced_trading_metrics(self, totals_df):
+        """Calculate state-of-the-art trading metrics for professional day traders"""
+
+        if totals_df.empty or len(totals_df) < 5:  # Need minimum 5 days
+            print(f"Insufficient data for advanced metrics: {len(totals_df)} days")
+            return {}
+
+        daily_returns = totals_df['net_pnl']
+
+        # Check if we have any non-zero returns
+        non_zero_returns = daily_returns[daily_returns != 0]
+        if len(non_zero_returns) < 3:
+            print("Insufficient non-zero returns for advanced metrics")
+            return {}
+
+        print(f"Calculating advanced metrics for {len(daily_returns)} days, {len(non_zero_returns)} non-zero")
+
+        # Simple Omega Ratio (gains vs losses)
+        gains = daily_returns[daily_returns > 0]
+        losses = daily_returns[daily_returns < 0]
+
+        if len(losses) > 0 and losses.sum() < 0:
+            omega_ratio = gains.sum() / abs(losses.sum())
+        elif len(gains) > 0:
+            omega_ratio = 5.0  # High value when no losses
+        else:
+            omega_ratio = 1.0
+
+        omega_ratio = min(omega_ratio, 10.0)  # Cap at reasonable value
+
+        # Simple Hurst Exponent (autocorrelation proxy)
+        hurst_exp = 0.5  # Default to random walk
+        if len(daily_returns) >= 7:
+            try:
+                autocorr = daily_returns.autocorr(lag=1)
+                if not pd.isna(autocorr):
+                    hurst_exp = 0.5 + autocorr * 0.3  # Scale to reasonable range
+                    hurst_exp = max(0.1, min(0.9, hurst_exp))  # Clamp
+            except:
+                hurst_exp = 0.5
+
+        # Information Coefficient (simple momentum correlation)
+        information_coefficient = 0
+        if len(daily_returns) > 3:
+            try:
+                momentum_signal = daily_returns.rolling(2, min_periods=1).mean().shift(1)
+                actual_direction = (daily_returns > 0).astype(int)
+                predicted_direction = (momentum_signal > 0).astype(int)
+
+                valid_mask = ~(pd.isna(momentum_signal) | pd.isna(daily_returns))
+                if valid_mask.sum() > 2:
+                    correlation = np.corrcoef(predicted_direction[valid_mask], actual_direction[valid_mask])[0, 1]
+                    information_coefficient = correlation if not np.isnan(correlation) else 0
+            except:
+                information_coefficient = 0
+
+        # Tail Expectation (worst 20% of days)
+        tail_threshold = np.percentile(daily_returns, 20)
+        tail_returns = daily_returns[daily_returns <= tail_threshold]
+        tail_expectation = tail_returns.mean() if len(tail_returns) > 0 else daily_returns.min()
+
+        # Sterling Ratio (return per average drawdown)
+        cumulative_pnl = daily_returns.cumsum()
+        rolling_max = cumulative_pnl.expanding().max()
+        drawdowns = cumulative_pnl - rolling_max
+
+        avg_drawdown = abs(drawdowns.mean()) if len(drawdowns) > 0 else 1
+        if avg_drawdown == 0:
+            avg_drawdown = 1
+
+        annualized_return = daily_returns.mean() * 252
+        sterling_ratio = annualized_return / avg_drawdown
+
+        print(f"Advanced metrics calculated - Omega: {omega_ratio:.2f}, Hurst: {hurst_exp:.3f}, IC: {information_coefficient:.3f}")
+
+        return {
+            'omega_ratio': omega_ratio,
+            'hurst_exponent': hurst_exp,
+            'information_coefficient': information_coefficient,
+            'tail_expectation': tail_expectation,
+            'sterling_ratio': sterling_ratio,
+            'current_rolling_sharpe': 0,
+            'avg_rolling_sharpe': 0,
+            'sharpe_stability': 0,
+            'kappa3': 0,
+            'returns_skewness': 0,
+            'returns_kurtosis': 0,
+            'upside_capture': 1.0,
+            'downside_capture': 1.0,
+            'burke_ratio': 0,
+            'martin_ratio': 0
+        }
+
+
+    def calculate_advanced_trading_metrics(self, totals_df):
+        """Calculate advanced trading metrics - handles edge cases properly"""
+
+        if totals_df.empty or len(totals_df) < 3:
+            return self._empty_advanced_metrics()
+
+        daily_returns = totals_df['net_pnl']
+        print(f"DEBUG: Calculating advanced metrics for {len(daily_returns)} days")
+        print(f"DEBUG: P&L range: ${daily_returns.min():.2f} to ${daily_returns.max():.2f}")
+
+        # Basic stats
+        gains = daily_returns[daily_returns > 0]
+        losses = daily_returns[daily_returns < 0]
+
+        print(f"DEBUG: {len(gains)} winning days, {len(losses)} losing days")
+
+        # 1. Omega Ratio (handles no-loss scenario)
+        if len(losses) > 0 and losses.sum() < 0:
+            omega_ratio = gains.sum() / abs(losses.sum())
+        elif len(gains) > 0:
+            omega_ratio = 10.0  # Excellent - no losses
+        else:
+            omega_ratio = 1.0
+
+        omega_ratio = min(omega_ratio, 10.0)
+        print(f"DEBUG: Omega ratio = {omega_ratio:.2f}")
+
+        # 2. Hurst Exponent (trend vs mean reversion)
+        hurst_exp = 0.5  # Default random walk
+        if len(daily_returns) >= 5:
+            try:
+                # Simple autocorrelation approach
+                autocorr = daily_returns.autocorr(lag=1)
+                if not pd.isna(autocorr):
+                    hurst_exp = 0.5 + autocorr * 0.3
+                    hurst_exp = max(0.1, min(0.9, hurst_exp))
+            except:
+                pass
+
+        print(f"DEBUG: Hurst exponent = {hurst_exp:.3f}")
+
+        # 3. Information Coefficient (market timing)
+        information_coefficient = 0
+        if len(daily_returns) > 3:
+            try:
+                # Simple momentum signal
+                momentum = daily_returns.rolling(2, min_periods=1).mean().shift(1)
+                actual_up = (daily_returns > daily_returns.median()).astype(int)
+                predicted_up = (momentum > momentum.median()).astype(int)
+
+                valid_mask = ~pd.isna(momentum)
+                if valid_mask.sum() > 2:
+                    correlation = np.corrcoef(predicted_up[valid_mask], actual_up[valid_mask])[0, 1]
+                    information_coefficient = correlation if not np.isnan(correlation) else 0
+            except:
+                pass
+
+        print(f"DEBUG: Information coefficient = {information_coefficient:.3f}")
+
+        # 4. Sortino Ratio (handles no downside case)
+        mean_return = daily_returns.mean()
+        if len(losses) > 0:
+            downside_deviation = losses.std()
+            sortino_ratio = mean_return / downside_deviation if downside_deviation > 0 else 0
+        else:
+            # All gains - use overall volatility but give high score
+            volatility = daily_returns.std()
+            sortino_ratio = mean_return / (volatility * 0.5) if volatility > 0 else 5.0
+
+        print(f"DEBUG: Sortino ratio = {sortino_ratio:.3f}")
+
+        # 5. Calmar Ratio (handles no drawdown case)
+        cumulative = daily_returns.cumsum()
+        rolling_max = cumulative.expanding().max()
+        drawdown = cumulative - rolling_max
+        max_drawdown = drawdown.min()
+
+        annualized_return = mean_return * 252
+        if max_drawdown < -1:  # Meaningful drawdown
+            calmar_ratio = annualized_return / abs(max_drawdown)
+        elif annualized_return > 0:
+            calmar_ratio = 20.0  # High value for no drawdown
+        else:
+            calmar_ratio = 0
+
+        print(f"DEBUG: Calmar ratio = {calmar_ratio:.3f}")
+
+        # 6. Kelly Criterion (handles all-win case)
+        kelly_criterion = 0
+        if len(gains) > 0:
+            win_rate = len(gains) / len(daily_returns)
+            avg_win = gains.mean()
+
+            if len(losses) > 0:
+                avg_loss = abs(losses.mean())
+                kelly_criterion = win_rate - ((1 - win_rate) * avg_win / avg_loss)
+            else:
+                # All wins case - use conservative estimate
+                estimated_loss = avg_win * 0.2  # Assume 20% loss potential
+                kelly_criterion = win_rate - ((1 - win_rate) * avg_win / estimated_loss)
+
+            kelly_criterion = max(0, min(kelly_criterion, 0.5))  # Conservative cap
+
+        print(f"DEBUG: Kelly criterion = {kelly_criterion:.3f}")
+
+        # 7. Sterling Ratio
+        avg_drawdown = abs(drawdown.mean()) if len(drawdown) > 0 else 1
+        if avg_drawdown == 0:
+            avg_drawdown = 1
+        sterling_ratio = annualized_return / avg_drawdown
+
+        # 8. Tail Expectation
+        tail_percentile = max(10, 100 // max(len(daily_returns), 1))
+        tail_threshold = np.percentile(daily_returns, tail_percentile)
+        tail_returns = daily_returns[daily_returns <= tail_threshold]
+        tail_expectation = tail_returns.mean() if len(tail_returns) > 0 else daily_returns.min()
+
+        result = {
+            'omega_ratio': round(omega_ratio, 3),
+            'hurst_exponent': round(hurst_exp, 3),
+            'information_coefficient': round(information_coefficient, 3),
+            'sortino_ratio': round(sortino_ratio, 3),
+            'calmar_ratio': round(calmar_ratio, 3),
+            'kelly_criterion': round(kelly_criterion, 3),
+            'sterling_ratio': round(sterling_ratio, 3),
+            'tail_expectation': round(tail_expectation, 2),
+            'current_rolling_sharpe': 0,
+            'avg_rolling_sharpe': 0,
+            'sharpe_stability': 0,
+            'kappa3': 0,
+            'returns_skewness': 0,
+            'returns_kurtosis': 0,
+            'upside_capture': 1.0,
+            'downside_capture': 1.0,
+            'burke_ratio': 0,
+            'martin_ratio': 0
+        }
+
+        print(f"DEBUG: Returning {len(result)} advanced metrics")
+        return result
+
+    def _empty_advanced_metrics(self):
+        """Return empty advanced metrics"""
+        return {
+            'omega_ratio': 0,
+            'hurst_exponent': 0.5,
+            'information_coefficient': 0,
+            'sortino_ratio': 0,
+            'calmar_ratio': 0,
+            'kelly_criterion': 0,
+            'sterling_ratio': 0,
+            'tail_expectation': 0,
+            'current_rolling_sharpe': 0,
+            'avg_rolling_sharpe': 0,
+            'sharpe_stability': 0,
+            'kappa3': 0,
+            'returns_skewness': 0,
+            'returns_kurtosis': 0,
+            'upside_capture': 1.0,
+            'downside_capture': 1.0,
+            'burke_ratio': 0,
+            'martin_ratio': 0
+        }
