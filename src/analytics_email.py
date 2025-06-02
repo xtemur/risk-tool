@@ -24,8 +24,7 @@ class AnalyticsEmailService:
         if not self.from_email or not self.password:
             logger.warning("Email credentials not configured")
 
-    def create_analytics_html_report(self, analytics_data: Dict, comparison_data: Dict,
-                                   performance_charts: Dict, comparison_chart: str = "") -> str:
+    def create_analytics_html_report(self, analytics_data: Dict, comparison_data: Dict, performance_charts: Dict, comparison_chart: str = "") -> str:
         """Create professional HTML analytics report optimized for email clients"""
 
         # Get summary statistics
@@ -102,6 +101,91 @@ class AnalyticsEmailService:
                 </div>
         """
 
+        # ADD FLAGS SECTION
+        trader_flags = comparison_data.get('trader_flags', {})
+        portfolio_flags = comparison_data.get('portfolio_flags', {})
+
+        if trader_flags or portfolio_flags:
+            # Count flags
+            red_flags = {k: v for k, v in trader_flags.items() if v['flags']['red_flags']}
+            yellow_flags = {k: v for k, v in trader_flags.items() if v['flags']['yellow_flags']}
+            green_lights = {k: v for k, v in trader_flags.items() if v['flags']['green_lights']}
+
+            # Portfolio alerts
+            if portfolio_flags.get('portfolio_flags'):
+                html += """
+                    <div style="padding: 15px; background-color: #fff3cd; border-left: 5px solid #ffc107; margin: 0;">
+                        <h3 style="margin: 0 0 10px 0; color: #856404;">📊 Portfolio Alerts</h3>
+                """
+                for flag in portfolio_flags['portfolio_flags']:
+                    html += f"<div style='margin: 5px 0;'>• {flag}</div>"
+                html += "</div>"
+
+            # Red flags
+            if red_flags:
+                html += f"""
+                    <div style="padding: 15px; background-color: #f8d7da; border-left: 5px solid #dc3545; margin: 0;">
+                        <h3 style="margin: 0 0 10px 0; color: #721c24;">🚨 IMMEDIATE ACTION REQUIRED ({len(red_flags)} traders)</h3>
+                """
+                for account_id, flag_data in red_flags.items():
+                    html += f"<div style='margin: 8px 0; font-weight: bold;'>{flag_data['trader_name']} ({account_id})</div>"
+                    for flag in flag_data['flags']['red_flags']:
+                        html += f"<div style='margin: 3px 0 3px 15px; font-size: 12px;'>• {flag}</div>"
+                html += "</div>"
+
+            # Yellow flags
+            if yellow_flags:
+                html += f"""
+                    <div style="padding: 15px; background-color: #fff3cd; border-left: 5px solid #ffc107; margin: 0;">
+                        <h3 style="margin: 0 0 10px 0; color: #856404;">⚠️ MONITOR THIS WEEK ({len(yellow_flags)} traders)</h3>
+                """
+                for account_id, flag_data in yellow_flags.items():
+                    html += f"<div style='margin: 8px 0; font-weight: bold;'>{flag_data['trader_name']} ({account_id})</div>"
+                    for flag in flag_data['flags']['yellow_flags']:
+                        html += f"<div style='margin: 3px 0 3px 15px; font-size: 12px;'>• {flag}</div>"
+                html += "</div>"
+
+            # Green lights
+            if green_lights:
+                html += f"""
+                    <div style="padding: 15px; background-color: #d1e7dd; border-left: 5px solid #198754; margin: 0;">
+                        <h3 style="margin: 0 0 10px 0; color: #0f5132;">💡 OPPORTUNITIES ({len(green_lights)} traders)</h3>
+                """
+                for account_id, flag_data in green_lights.items():
+                    html += f"<div style='margin: 8px 0; font-weight: bold;'>{flag_data['trader_name']} ({account_id})</div>"
+                    for flag in flag_data['flags']['green_lights']:
+                        html += f"<div style='margin: 3px 0 3px 15px; font-size: 12px;'>• {flag}</div>"
+                html += "</div>"
+
+            # No flags message
+            if not red_flags and not yellow_flags and not green_lights:
+                html += """
+                    <div style="padding: 15px; background-color: #d1e7dd; border-left: 5px solid #198754; margin: 0;">
+                        <h3 style="margin: 0; color: #0f5132;">✅ All Clear - No Action Items</h3>
+                        <p style="margin: 5px 0 0 0;">All traders are performing within normal parameters.</p>
+                    </div>
+                """
+
+            # Quick Action Summary
+            html += f"""
+                <div style="padding: 15px; background-color: #f8f9fa; border-bottom: 1px solid #dee2e6; margin: 0;">
+                    <h3 style="margin: 0 0 10px 0; color: #495057;">📋 Quick Action Summary</h3>
+                    <table style="width: 100%; border-collapse: collapse;">
+                        <tr>
+                            <td style="padding: 8px; text-align: center; background-color: #dc3545; color: white; font-weight: bold;">
+                                Immediate Action<br>{len(red_flags)} traders
+                            </td>
+                            <td style="padding: 8px; text-align: center; background-color: #ffc107; color: white; font-weight: bold;">
+                                Monitor Closely<br>{len(yellow_flags)} traders
+                            </td>
+                            <td style="padding: 8px; text-align: center; background-color: #198754; color: white; font-weight: bold;">
+                                Opportunities<br>{len(green_lights)} traders
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+            """
+
         # Portfolio Summary
         if comparison_data and 'comparison_data' in comparison_data:
             df = pd.DataFrame(comparison_data['comparison_data'])
@@ -149,9 +233,7 @@ class AnalyticsEmailService:
                 </div>
             """
 
-        # Top and Bottom Performers
-        if comparison_data and 'comparison_data' in comparison_data:
-            df = pd.DataFrame(comparison_data['comparison_data'])
+            # Top and Bottom Performers
             top_3 = df.nlargest(3, 'total_pnl')
             bottom_3 = df.nsmallest(3, 'total_pnl')
 
@@ -194,7 +276,7 @@ class AnalyticsEmailService:
 
             html += "</table></div>"
 
-        # Individual Trader Details (Detailed)
+        # Individual Trader Details
         html += """
             <div class="section">
                 <h2 class="section-title">Individual Trader Analysis</h2>
@@ -205,7 +287,7 @@ class AnalyticsEmailService:
                 continue
 
             trader_name = next((trader['trader_name'] for trader in comparison_data.get('comparison_data', [])
-                              if trader['account_id'] == account_id), account_id)
+                            if trader['account_id'] == account_id), account_id)
 
             perf = data.get('performance', {})
             risk = data.get('risk', {})
@@ -223,12 +305,6 @@ class AnalyticsEmailService:
                 alerts.append("High fee ratio detected")
             if behavior.get('overtrading_pnl', 0) < -100:
                 alerts.append("Potential overtrading")
-            if risk.get('risk_of_ruin', 0) > 0.1:
-                alerts.append("Elevated risk of ruin")
-            if advanced.get('hurst_exponent', 0.5) > 0.6:
-                alerts.append("Trending behavior detected")
-            elif advanced.get('hurst_exponent', 0.5) < 0.4:
-                alerts.append("Mean-reverting behavior")
 
             html += f"""
                 <div class="trader-section">
@@ -278,16 +354,8 @@ class AnalyticsEmailService:
                             <td class="value">${risk.get('cvar_5_percent', 0):,.2f}</td>
                         </tr>
                         <tr>
-                            <td>Ulcer Index:</td>
-                            <td class="value">{risk.get('ulcer_index', 0):.2f}</td>
-                        </tr>
-                        <tr>
                             <td>Max Losing Streak:</td>
                             <td class="value">{risk.get('max_losing_streak', 0)} days</td>
-                        </tr>
-                        <tr>
-                            <td>Risk of Ruin:</td>
-                            <td class="value {'negative' if risk.get('risk_of_ruin', 0) > 0.1 else 'neutral'}">{risk.get('risk_of_ruin', 0)*100:.1f}%</td>
                         </tr>
 
                         <tr><td class="label" style="padding-top: 15px;">Advanced Analytics</td><td></td></tr>
@@ -296,20 +364,12 @@ class AnalyticsEmailService:
                             <td class="value">{advanced.get('omega_ratio', 0):.2f}</td>
                         </tr>
                         <tr>
-                            <td>Hurst Exponent:</td>
-                            <td class="value">{advanced.get('hurst_exponent', 0.5):.3f}</td>
-                        </tr>
-                        <tr>
-                            <td>Information Coeff:</td>
-                            <td class="value">{advanced.get('information_coefficient', 0):.3f}</td>
+                            <td>Kelly Criterion:</td>
+                            <td class="value">{perf.get('kelly_criterion', 0):.3f}</td>
                         </tr>
                         <tr>
                             <td>Tail Expectation:</td>
                             <td class="value">${advanced.get('tail_expectation', 0):,.2f}</td>
-                        </tr>
-                        <tr>
-                            <td>Sterling Ratio:</td>
-                            <td class="value">{advanced.get('sterling_ratio', 0):.3f}</td>
                         </tr>
 
                         <tr><td class="label" style="padding-top: 15px;">Trading Behavior</td><td></td></tr>
@@ -318,24 +378,12 @@ class AnalyticsEmailService:
                             <td class="value">{behavior.get('avg_daily_orders', 0):.1f}</td>
                         </tr>
                         <tr>
-                            <td>P&L per Order:</td>
-                            <td class="value">${behavior.get('pnl_per_order', 0):.2f}</td>
-                        </tr>
-                        <tr>
                             <td>Symbols Traded:</td>
                             <td class="value">{behavior.get('symbols_traded', 0)}</td>
                         </tr>
                         <tr>
-                            <td>Diversification Score:</td>
-                            <td class="value">{behavior.get('diversification_score', 0):.3f}</td>
-                        </tr>
-                        <tr>
                             <td>Fee Efficiency:</td>
                             <td class="value {'negative' if efficiency.get('fee_efficiency', 0) > 3 else 'neutral'}">{efficiency.get('fee_efficiency', 0):.2f}%</td>
-                        </tr>
-                        <tr>
-                            <td>Kelly Criterion:</td>
-                            <td class="value">{perf.get('kelly_criterion', 0):.3f}</td>
                         </tr>
                     </table>
             """
@@ -351,56 +399,12 @@ class AnalyticsEmailService:
 
             html += "</div>"
 
-        # Advanced Analytics Summary
-        if analytics_data:
-            html += f"""
-                <div class="section">
-                    <h2 class="section-title">Advanced Analytics Summary</h2>
-                    <table class="data-table">
-                        <tr>
-                            <th>Metric</th>
-                            <th>Description</th>
-                            <th>Portfolio Avg</th>
-                            <th>Best</th>
-                            <th>Worst</th>
-                        </tr>
-            """
-
-            # Calculate portfolio averages for key metrics
-            all_sortino = [d.get('performance', {}).get('sortino_ratio', 0) for d in analytics_data.values() if 'error' not in d]
-            all_calmar = [d.get('performance', {}).get('calmar_ratio', 0) for d in analytics_data.values() if 'error' not in d]
-            all_ulcer = [d.get('risk', {}).get('ulcer_index', 0) for d in analytics_data.values() if 'error' not in d]
-            all_kelly = [d.get('performance', {}).get('kelly_criterion', 0) for d in analytics_data.values() if 'error' not in d]
-
-            metrics_summary = [
-                ('Sortino Ratio', 'Risk-adjusted return using downside deviation', all_sortino),
-                ('Calmar Ratio', 'Annual return / Max Drawdown', all_calmar),
-                ('Ulcer Index', 'Drawdown pain measure', all_ulcer),
-                ('Kelly Criterion', 'Optimal position sizing', all_kelly)
-            ]
-
-            for name, desc, values in metrics_summary:
-                if values:
-                    avg_val = np.mean(values)
-                    max_val = max(values)
-                    min_val = min(values)
-
-                    html += f"""
-                        <tr>
-                            <td>{name}</td>
-                            <td style="font-size: 11px;">{desc}</td>
-                            <td>{avg_val:.3f}</td>
-                            <td class="positive">{max_val:.3f}</td>
-                            <td class="negative">{min_val:.3f}</td>
-                        </tr>
-                    """
-
-            html += "</table></div>"
-
         html += f"""
+                </div>
+
                 <div class="footer">
-                    <p>Generated by Advanced Analytics System • {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
-                    <p>This report provides quantitative performance analysis for trading optimization.</p>
+                    <p>Generated by Analytics System with Flag Detection • {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p>🚨 Red = Act Today | ⚠️ Yellow = Monitor This Week | 💡 Green = Optimization Opportunity</p>
                 </div>
             </div>
         </body>
@@ -427,18 +431,37 @@ class AnalyticsEmailService:
             total_traders = len([a for a in analytics_data.values() if 'error' not in a])
             period = list(analytics_data.values())[0].get('period_days', 30) if analytics_data else 30
 
-            if comparison_data and 'comparison_data' in comparison_data:
-                df = pd.DataFrame(comparison_data['comparison_data'])
-                total_pnl = df['total_pnl'].sum()
-                profitable_traders = len(df[df['total_pnl'] > 0])
-                profit_rate = (profitable_traders / len(df) * 100) if len(df) > 0 else 0
+            # Enhanced subject with flag summary
+            flag_summary = comparison_data.get('flag_summary', {})
+            report_type = flag_summary.get('report_type', 'Analytics')
 
-                # Create status indicator
-                status = "POSITIVE" if total_pnl > 0 else "NEGATIVE"
+            if flag_summary:
+                red_count = flag_summary.get('red_count', 0)
+                yellow_count = flag_summary.get('yellow_count', 0)
+                green_count = flag_summary.get('green_count', 0)
 
-                subject = f"Trading Analytics Report - {period}D | {status} ${total_pnl:,.0f} | {profitable_traders}/{total_traders} Profitable ({profit_rate:.0f}%)"
+                # Create flag indicator
+                flag_indicator = ""
+                if red_count > 0:
+                    flag_indicator = f"🚨 {red_count} URGENT"
+                elif yellow_count > 0:
+                    flag_indicator = f"⚠️ {yellow_count} MONITOR"
+                elif green_count > 0:
+                    flag_indicator = f"✅ {green_count} OPPORTUNITIES"
+                else:
+                    flag_indicator = "✅ ALL CLEAR"
+
+                # Get portfolio P&L for context
+                if comparison_data and 'comparison_data' in comparison_data:
+                    df = pd.DataFrame(comparison_data['comparison_data'])
+                    total_pnl = df['total_pnl'].sum()
+                    status = "POSITIVE" if total_pnl > 0 else "NEGATIVE"
+                    subject = f"{report_type} Report | {flag_indicator} | {status} ${total_pnl:,.0f}"
+                else:
+                    subject = f"{report_type} Report | {flag_indicator}"
             else:
-                subject = f"Trading Analytics Report - {period}D | {total_traders} Traders Analyzed"
+                # Fallback to original subject
+                subject = f"Trading Analytics Report - {pd.Timestamp.now().strftime('%Y-%m-%d')}"
 
             msg['Subject'] = subject
 
@@ -521,3 +544,286 @@ class AnalyticsEmailService:
             logger.error("Test analytics email failed.")
 
         return success
+
+    # Add this method to the AnalyticsEmailService class in src/analytics_email.py
+
+def send_analytics_report_with_flags(self, analytics_data: Dict, comparison_data: Dict,
+                                   trader_flags: Dict, portfolio_flags: Dict,
+                                   performance_charts: Dict, comparison_chart: str = "",
+                                   report_type: str = "Weekly") -> bool:
+    """Send analytics report with integrated flag system"""
+
+    if not self.from_email or not self.password:
+        logger.error("Email credentials not configured")
+        return False
+
+    try:
+        # Create message
+        msg = MIMEMultipart('alternative')
+        msg['From'] = self.from_email
+        msg['To'] = ', '.join(self.to_emails)
+
+        # Enhanced subject with flag summary
+        total_traders = len([a for a in analytics_data.values() if 'error' not in a])
+        period = list(analytics_data.values())[0].get('period_days', 30) if analytics_data else 30
+
+        # Count flags
+        red_count = sum(1 for flags in trader_flags.values() if flags['flags']['red_flags'])
+        yellow_count = sum(1 for flags in trader_flags.values() if flags['flags']['yellow_flags'])
+        green_count = sum(1 for flags in trader_flags.values() if flags['flags']['green_lights'])
+
+        # Portfolio P&L
+        if comparison_data and 'comparison_data' in comparison_data:
+            df = pd.DataFrame(comparison_data['comparison_data'])
+            total_pnl = df['total_pnl'].sum()
+            status = "POSITIVE" if total_pnl > 0 else "NEGATIVE"
+        else:
+            total_pnl = 0
+            status = "NEUTRAL"
+
+        # Create comprehensive subject
+        flag_summary = ""
+        if red_count > 0:
+            flag_summary = f"🚨 {red_count} URGENT"
+        elif yellow_count > 0:
+            flag_summary = f"⚠️ {yellow_count} MONITOR"
+        elif green_count > 0:
+            flag_summary = f"✅ {green_count} OPPORTUNITIES"
+
+        subject = f"{report_type} Analytics | {flag_summary} | {status} ${total_pnl:,.0f} | {total_traders} Traders"
+
+        msg['Subject'] = subject
+
+        # Create HTML content with flags
+        html_content = self.create_analytics_html_with_flags(
+            analytics_data, comparison_data, trader_flags, portfolio_flags,
+            performance_charts, comparison_chart, report_type
+        )
+
+        # Attach HTML
+        html_part = MIMEText(html_content, 'html')
+        msg.attach(html_part)
+
+        # Send email
+        with smtplib.SMTP('smtp.gmail.com', 587) as server:
+            server.starttls()
+            server.login(self.from_email, self.password)
+            server.send_message(msg)
+
+        logger.info(f"Analytics report with flags sent to {', '.join(self.to_emails)}")
+        return True
+
+    except Exception as e:
+        logger.error(f"Failed to send analytics email with flags: {str(e)}")
+        return False
+
+    def create_analytics_html_with_flags(self, analytics_data: Dict, comparison_data: Dict,
+                                    trader_flags: Dict, portfolio_flags: Dict,
+                                    performance_charts: Dict, comparison_chart: str = "",
+                                    report_type: str = "Weekly") -> str:
+        """Create HTML report with prominent flag display"""
+
+        # Get summary statistics
+        total_traders = len([a for a in analytics_data.values() if 'error' not in a])
+        period = list(analytics_data.values())[0].get('period_days', 30) if analytics_data else 30
+
+        # Count flags
+        red_flags = {k: v for k, v in trader_flags.items() if v['flags']['red_flags']}
+        yellow_flags = {k: v for k, v in trader_flags.items() if v['flags']['yellow_flags']}
+        green_lights = {k: v for k, v in trader_flags.items() if v['flags']['green_lights']}
+
+        html = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <style>
+                body {{ font-family: Arial, sans-serif; margin: 0; padding: 10px; background-color: #f5f5f5; }}
+                .container {{ max-width: 800px; margin: 0 auto; background-color: #ffffff; }}
+                .header {{ background-color: #2c3e50; color: white; padding: 20px; text-align: center; }}
+                .header h1 {{ margin: 0; font-size: 24px; }}
+                .header p {{ margin: 5px 0 0 0; font-size: 14px; }}
+
+                .flag-alert {{ margin: 0; padding: 15px; border-left: 5px solid; }}
+                .red-alert {{ background-color: #fee; border-color: #e74c3c; }}
+                .yellow-alert {{ background-color: #ffc; border-color: #f39c12; }}
+                .green-alert {{ background-color: #efe; border-color: #27ae60; }}
+                .portfolio-alert {{ background-color: #ffeaa7; border-color: #fdcb6e; }}
+
+                .flag-section {{ padding: 15px; margin: 0; }}
+                .flag-title {{ color: #2c3e50; font-size: 18px; margin: 0 0 10px 0; font-weight: bold; }}
+                .trader-flag {{ margin: 8px 0; padding: 8px; background-color: #f8f9fa; border-radius: 4px; }}
+                .trader-name {{ font-weight: bold; color: #2c3e50; }}
+                .flag-list {{ margin: 5px 0 0 15px; font-size: 12px; }}
+                .flag-item {{ margin: 3px 0; }}
+
+                .summary-table {{ width: 100%; border-collapse: collapse; margin: 10px 0; }}
+                .summary-table td {{ padding: 8px; text-align: center; font-weight: bold; border: 1px solid #ddd; }}
+
+                .section {{ margin: 0; padding: 15px; border-bottom: 1px solid #e1e8ed; }}
+                .section-title {{ color: #2c3e50; font-size: 16px; margin: 0 0 10px 0; }}
+
+                .positive {{ color: #27ae60; font-weight: bold; }}
+                .negative {{ color: #e74c3c; font-weight: bold; }}
+                .neutral {{ color: #7f8c8d; }}
+
+                .footer {{ padding: 15px; text-align: center; color: #7f8c8d; font-size: 11px; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>{report_type} Analytics Report with Action Items</h1>
+                    <p>{pd.Timestamp.now().strftime('%B %d, %Y')} • {period}-Day Analysis • {total_traders} Traders</p>
+                </div>
+        """
+
+        # Portfolio-level alerts
+        if portfolio_flags.get('portfolio_flags'):
+            html += """
+                <div class="flag-alert portfolio-alert">
+                    <h3 style="margin: 0 0 10px 0; color: #d35400;">📊 Portfolio-Level Alerts</h3>
+            """
+            for flag in portfolio_flags['portfolio_flags']:
+                html += f"<div style='margin: 5px 0;'>• {flag}</div>"
+            html += "</div>"
+
+        # RED FLAGS - Immediate Action
+        if red_flags:
+            html += f"""
+                <div class="flag-alert red-alert">
+                    <h3 style="margin: 0 0 10px 0; color: #c0392b;">🚨 IMMEDIATE ACTION REQUIRED ({len(red_flags)} traders)</h3>
+            """
+            for account_id, flag_data in red_flags.items():
+                html += f"""
+                    <div class="trader-flag">
+                        <div class="trader-name">{flag_data['trader_name']} ({account_id})</div>
+                        <div class="flag-list">
+                """
+                for flag in flag_data['flags']['red_flags']:
+                    html += f"<div class='flag-item'>• {flag}</div>"
+                html += "</div></div>"
+            html += "</div>"
+
+        # YELLOW FLAGS - Monitor
+        if yellow_flags:
+            html += f"""
+                <div class="flag-alert yellow-alert">
+                    <h3 style="margin: 0 0 10px 0; color: #d68910;">⚠️ MONITOR THIS WEEK ({len(yellow_flags)} traders)</h3>
+            """
+            for account_id, flag_data in yellow_flags.items():
+                html += f"""
+                    <div class="trader-flag">
+                        <div class="trader-name">{flag_data['trader_name']} ({account_id})</div>
+                        <div class="flag-list">
+                """
+                for flag in flag_data['flags']['yellow_flags']:
+                    html += f"<div class='flag-item'>• {flag}</div>"
+                html += "</div></div>"
+            html += "</div>"
+
+        # GREEN LIGHTS - Opportunities
+        if green_lights:
+            html += f"""
+                <div class="flag-alert green-alert">
+                    <h3 style="margin: 0 0 10px 0; color: #239b56;">💡 OPPORTUNITIES ({len(green_lights)} traders)</h3>
+            """
+            for account_id, flag_data in green_lights.items():
+                html += f"""
+                    <div class="trader-flag">
+                        <div class="trader-name">{flag_data['trader_name']} ({account_id})</div>
+                        <div class="flag-list">
+                """
+                for flag in flag_data['flags']['green_lights']:
+                    html += f"<div class='flag-item'>• {flag}</div>"
+                html += "</div></div>"
+            html += "</div>"
+
+        # No flags message
+        if not red_flags and not yellow_flags and not green_lights:
+            html += """
+                <div class="flag-alert green-alert">
+                    <h3 style="margin: 0; color: #239b56;">✅ All Clear - No Action Items</h3>
+                    <p style="margin: 5px 0 0 0;">All traders are performing within normal parameters.</p>
+                </div>
+            """
+
+        # Quick Action Summary
+        html += f"""
+            <div class="section">
+                <h2 class="section-title">📋 Quick Action Summary</h2>
+                <table class="summary-table">
+                    <tr>
+                        <td style="background-color: #e74c3c; color: white;">Immediate Action<br>{len(red_flags)} traders</td>
+                        <td style="background-color: #f39c12; color: white;">Monitor Closely<br>{len(yellow_flags)} traders</td>
+                        <td style="background-color: #27ae60; color: white;">Opportunities<br>{len(green_lights)} traders</td>
+                    </tr>
+                </table>
+            </div>
+        """
+
+        # Include existing analytics content (truncated for brevity)
+        # You would include the existing portfolio summary and detailed analytics here
+        # using the same format as your current create_analytics_html_report method
+
+        if comparison_data and 'comparison_data' in comparison_data:
+            df = pd.DataFrame(comparison_data['comparison_data'])
+            total_pnl = df['total_pnl'].sum()
+            profitable_traders = len(df[df['total_pnl'] > 0])
+
+            html += f"""
+                <div class="section">
+                    <h2 class="section-title">📊 Portfolio Performance</h2>
+                    <table class="summary-table">
+                        <tr>
+                            <td>Total P&L<br><span class="{'positive' if total_pnl > 0 else 'negative'}">${total_pnl:,.2f}</span></td>
+                            <td>Profitable Traders<br>{profitable_traders}/{len(df)}</td>
+                            <td>Success Rate<br>{profitable_traders/len(df)*100:.1f}%</td>
+                        </tr>
+                    </table>
+                </div>
+            """
+
+        html += f"""
+                <div class="footer">
+                    <p>Generated by Analytics System with Flag Detection • {pd.Timestamp.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+                    <p>🚨 Red = Act Today | ⚠️ Yellow = Monitor This Week | 💡 Green = Optimization Opportunity</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+
+        return html
+
+    def send_analytics_report_with_flags(self, analytics_data: Dict, comparison_data: Dict,
+                                   trader_flags: Dict, portfolio_flags: Dict,
+                                   performance_charts: Dict, comparison_chart: str = "",
+                                   report_type: str = "Weekly") -> bool:
+        """Simple wrapper that adds flags to existing email system"""
+
+        # Add flag summary to comparison data
+        if comparison_data:
+            comparison_data['trader_flags'] = trader_flags
+            comparison_data['portfolio_flags'] = portfolio_flags
+
+            # Count flags for subject line
+            red_count = sum(1 for flags in trader_flags.values() if flags['flags']['red_flags'])
+            yellow_count = sum(1 for flags in trader_flags.values() if flags['flags']['yellow_flags'])
+            green_count = sum(1 for flags in trader_flags.values() if flags['flags']['green_lights'])
+
+            comparison_data['flag_summary'] = {
+                'red_count': red_count,
+                'yellow_count': yellow_count,
+                'green_count': green_count,
+                'report_type': report_type
+            }
+
+        # Use existing email method
+        return self.send_analytics_report(
+            analytics_data,
+            comparison_data,
+            performance_charts,
+            comparison_chart
+        )

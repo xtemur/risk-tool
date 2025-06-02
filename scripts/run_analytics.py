@@ -266,8 +266,185 @@ class AnalyticsReportGenerator:
             return False
 
 
+    def generate_daily_report(self) -> bool:
+        """Generate and send daily analytics report with flags"""
+
+        self.logger.info("Generating Daily Analytics Report with Flags")
+        self.logger.info("=" * 50)
+
+        # Daily analysis (1 day, but we want patterns from last 7 days)
+        return self._generate_report_with_flags(lookback_days=7, report_type="Daily")
+
+    def _generate_report_with_flags(self, lookback_days: int, report_type: str) -> bool:
+        """Generate comprehensive analytics report with flag detection"""
+
+        try:
+            # Step 1: Get all traders
+            traders_df = self.db.get_all_traders()
+
+            if traders_df.empty:
+                self.logger.error("No traders found in database")
+                return False
+
+            self.logger.info(f"Found {len(traders_df)} traders for analysis")
+
+            # Step 2: Generate individual analytics with flags
+            self.logger.info("Generating individual trader analytics with flags...")
+            analytics_data = {}
+            trader_flags = {}
+            performance_charts = {}
+
+            for _, trader in traders_df.iterrows():
+                account_id = str(trader['account_id'])
+                trader_name = trader['trader_name']
+
+                self.logger.info(f"Analyzing {trader_name} ({account_id})...")
+
+                # Generate analytics
+                trader_analytics = self.analytics.generate_trader_analytics(account_id, lookback_days)
+
+                if 'error' not in trader_analytics:
+                    analytics_data[account_id] = trader_analytics
+
+                    # Generate flags for this trader
+                    flags = self.analytics.generate_trader_flags(trader_analytics)
+                    trader_flags[account_id] = {
+                        'trader_name': trader_name,
+                        'flags': flags
+                    }
+
+                    # Generate performance chart (for weekly/monthly reports)
+                    if report_type != "Daily":
+                        try:
+                            totals_df, _ = self.db.get_trader_data(
+                                account_id,
+                                (date.today() - timedelta(days=lookback_days)).strftime('%Y-%m-%d'),
+                                date.today().strftime('%Y-%m-%d')
+                            )
+
+                            if not totals_df.empty:
+                                chart_b64 = self.analytics.create_performance_chart(totals_df, trader_name)
+                                performance_charts[account_id] = chart_b64
+
+                        except Exception as e:
+                            self.logger.warning(f"Could not generate chart for {trader_name}: {str(e)}")
+                else:
+                    self.logger.warning(f"No data available for {trader_name}")
+
+            if not analytics_data:
+                self.logger.error("No analytics data generated")
+                return False
+
+            # Step 3: Generate portfolio-level flags
+            self.logger.info("Generating portfolio-level flags...")
+            portfolio_flags = self.analytics.generate_portfolio_flags(analytics_data)
+
+            # Step 4: Generate peer comparison
+            self.logger.info("Generating peer comparison analytics...")
+            comparison_data = self.analytics.generate_peer_comparison(lookback_days)
+
+            # Step 5: Generate comparison chart
+            comparison_chart = ""
+            if comparison_data and 'comparison_data' in comparison_data:
+                try:
+                    comparison_chart = self.analytics.create_comparison_chart(comparison_data['comparison_data'])
+                except Exception as e:
+                    self.logger.warning(f"Could not generate comparison chart: {str(e)}")
+
+            # Step 6: Log flag summary
+            self._log_flag_summary(trader_flags, portfolio_flags)
+
+            # Step 7: Send email report with flags
+            self.logger.info(f"Sending {report_type.lower()} analytics email report with flags...")
+            if comparison_data:
+                comparison_data['trader_flags'] = trader_flags
+                comparison_data['portfolio_flags'] = portfolio_flags
+                comparison_data['flag_summary'] = {
+                    'red_count': sum(1 for flags in trader_flags.values() if flags['flags']['red_flags']),
+                    'yellow_count': sum(1 for flags in trader_flags.values() if flags['flags']['yellow_flags']),
+                    'green_count': sum(1 for flags in trader_flags.values() if flags['flags']['green_lights'])
+                }
+
+            # Use existing email method
+            email_success = self.email_service.send_analytics_report(
+                analytics_data,
+                comparison_data,
+                performance_charts,
+                comparison_chart
+            )
+
+            if email_success:
+                self.logger.info("✅ Analytics report with flags sent successfully")
+            else:
+                self.logger.error("❌ Failed to send analytics report")
+
+            # Step 8: Save analytics to files
+            self._save_analytics_with_flags(analytics_data, trader_flags, portfolio_flags, lookback_days)
+
+            return email_success
+
+        except Exception as e:
+            self.logger.error(f"Analytics report generation failed: {str(e)}")
+            return False
+
+    def _log_flag_summary(self, trader_flags: dict, portfolio_flags: dict):
+        """Log summary of flags for monitoring"""
+
+        red_count = sum(1 for flags in trader_flags.values() if flags['flags']['red_flags'])
+        yellow_count = sum(1 for flags in trader_flags.values() if flags['flags']['yellow_flags'])
+        green_count = sum(1 for flags in trader_flags.values() if flags['flags']['green_lights'])
+
+        self.logger.info("🚨 FLAGS SUMMARY")
+        self.logger.info("-" * 30)
+        self.logger.info(f"Red Flags (Immediate Action): {red_count} traders")
+        self.logger.info(f"Yellow Flags (Monitor): {yellow_count} traders")
+        self.logger.info(f"Green Lights (Opportunities): {green_count} traders")
+
+        # Log specific red flags
+        if red_count > 0:
+            self.logger.info("\n🔴 TRADERS NEEDING IMMEDIATE ATTENTION:")
+            for account_id, flag_data in trader_flags.items():
+                if flag_data['flags']['red_flags']:
+                    self.logger.info(f"  • {flag_data['trader_name']}: {len(flag_data['flags']['red_flags'])} issues")
+
+        # Log portfolio flags
+        if portfolio_flags.get('portfolio_flags'):
+            self.logger.info(f"\n📊 PORTFOLIO FLAGS:")
+            for flag in portfolio_flags['portfolio_flags']:
+                self.logger.info(f"  • {flag}")
+
+    def _save_analytics_with_flags(self, analytics_data: dict, trader_flags: dict,
+                                portfolio_flags: dict, lookback_days: int):
+        """Save analytics data with flags to files"""
+
+        try:
+            results_dir = Path('data/analytics_results')
+            results_dir.mkdir(exist_ok=True)
+
+            timestamp = date.today().strftime('%Y%m%d')
+
+            # Save flag summary
+            flag_summary = {
+                'timestamp': timestamp,
+                'lookback_days': lookback_days,
+                'trader_flags': trader_flags,
+                'portfolio_flags': portfolio_flags
+            }
+
+            import json
+            flag_file = results_dir / f"flags_{lookback_days}d_{timestamp}.json"
+            with open(flag_file, 'w') as f:
+                json.dump(flag_summary, f, indent=2, default=str)
+
+            self.logger.info(f"Flag data saved to {flag_file}")
+
+            # Save existing analytics
+            self._save_analytics_to_files(analytics_data, {}, lookback_days)
+
+        except Exception as e:
+            self.logger.warning(f"Could not save analytics files with flags: {str(e)}")
 def main():
-    """Main function"""
+    """Main function with daily option"""
     setup_logging()
 
     generator = AnalyticsReportGenerator()
@@ -275,29 +452,30 @@ def main():
     # Parse command line arguments
     import argparse
     parser = argparse.ArgumentParser(description='Generate Trader Analytics Reports')
-    parser.add_argument('--type', choices=['weekly', 'monthly', 'test'],
-                       default='monthly', help='Type of report to generate')
+    parser.add_argument('--type', choices=['daily', 'weekly', 'monthly', 'test'],
+                       default='weekly', help='Type of report to generate')
     parser.add_argument('--test', action='store_true', help='Run system test')
 
     args = parser.parse_args()
 
     if args.test:
         success = generator.test_analytics_system()
+    elif args.type == 'daily':
+        success = generator.generate_daily_report()
     elif args.type == 'weekly':
         success = generator.generate_weekly_report()
     elif args.type == 'monthly':
         success = generator.generate_monthly_report()
     else:
-        # Default to monthly
-        success = generator.generate_monthly_report()
+        # Default to weekly
+        success = generator.generate_weekly_report()
 
     if success:
-        print("✅ Analytics report completed successfully")
+        print(f"✅ {args.type.title()} analytics report completed successfully")
         exit(0)
     else:
-        print("❌ Analytics report failed")
+        print(f"❌ {args.type.title()} analytics report failed")
         exit(1)
-
 
 if __name__ == "__main__":
     main()

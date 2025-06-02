@@ -15,7 +15,7 @@ import matplotlib.dates as mdates
 from io import BytesIO
 import base64
 
-from database import Database
+from src.database import Database
 
 logger = logging.getLogger(__name__)
 
@@ -774,3 +774,145 @@ class TraderAnalytics:
         # Ulcer Index is RMS of drawdown percentages
         ulcer_index = np.sqrt((drawdown_pct ** 2).mean()) * 100
         return ulcer_index if not np.isnan(ulcer_index) else 0
+
+    def generate_trader_flags(self, analytics_data: Dict) -> Dict:
+        """Generate red/yellow/green flags for a trader based on analytics"""
+
+        if 'error' in analytics_data:
+            return {'red_flags': [], 'yellow_flags': [], 'green_lights': []}
+
+        perf = analytics_data.get('performance', {})
+        risk = analytics_data.get('risk', {})
+        behavior = analytics_data.get('behavior', {})
+        efficiency = analytics_data.get('efficiency', {})
+        advanced = analytics_data.get('advanced', {})
+
+        red_flags = []
+        yellow_flags = []
+        green_lights = []
+
+        # RED FLAGS - Immediate action required
+        if perf.get('total_pnl', 0) < -1000:
+            red_flags.append(f"High loss: ${perf.get('total_pnl', 0):,.2f}")
+
+        if perf.get('current_drawdown', 0) < -500:
+            red_flags.append(f"Significant drawdown: ${perf.get('current_drawdown', 0):,.2f}")
+
+        if risk.get('max_losing_streak', 0) > 5:
+            red_flags.append(f"Long losing streak: {risk.get('max_losing_streak', 0)} days")
+
+        if perf.get('win_rate', 100) < 45:
+            red_flags.append(f"Low win rate: {perf.get('win_rate', 0):.1f}%")
+
+        if efficiency.get('fee_efficiency', 0) > 5:
+            red_flags.append(f"High fee ratio: {efficiency.get('fee_efficiency', 0):.2f}%")
+
+        if behavior.get('overtrading_pnl', 0) < -200:
+            red_flags.append(f"Overtrading detected: ${behavior.get('overtrading_pnl', 0):,.2f}")
+
+        # YELLOW FLAGS - Monitor closely
+        if 0.5 <= perf.get('sharpe_ratio', 0) < 1.0:
+            yellow_flags.append(f"Below-average Sharpe: {perf.get('sharpe_ratio', 0):.3f}")
+        elif perf.get('sharpe_ratio', 0) < 0.5:
+            red_flags.append(f"Poor Sharpe ratio: {perf.get('sharpe_ratio', 0):.3f}")
+
+        if 1.0 <= perf.get('profit_factor', 0) < 1.2:
+            yellow_flags.append(f"Marginal profit factor: {perf.get('profit_factor', 0):.2f}")
+        elif perf.get('profit_factor', 0) < 1.0:
+            red_flags.append(f"Unprofitable: Profit factor {perf.get('profit_factor', 0):.2f}")
+
+        if behavior.get('concentration_risk', 0) > 0.5:
+            yellow_flags.append(f"High concentration: {behavior.get('concentration_risk', 0):.2f}")
+
+        if 3 <= risk.get('max_losing_streak', 0) <= 5:
+            yellow_flags.append(f"Losing streak building: {risk.get('max_losing_streak', 0)} days")
+
+        # GREEN LIGHTS - Opportunities
+        if advanced.get('omega_ratio', 0) > 2.0:
+            green_lights.append(f"Excellent Omega ratio: {advanced.get('omega_ratio', 0):.2f}")
+
+        if perf.get('kelly_criterion', 0) > 0.15:
+            green_lights.append(f"Can increase positions: Kelly={perf.get('kelly_criterion', 0):.3f}")
+
+        if advanced.get('sortino_ratio', 0) > 1.5:
+            green_lights.append(f"Outstanding risk-adjusted returns: {advanced.get('sortino_ratio', 0):.3f}")
+
+        if perf.get('sharpe_ratio', 0) > 1.5:
+            green_lights.append(f"Excellent Sharpe ratio: {perf.get('sharpe_ratio', 0):.3f}")
+
+        if perf.get('profit_factor', 0) > 2.0:
+            green_lights.append(f"Strong profit factor: {perf.get('profit_factor', 0):.2f}")
+
+        # Performance trending up
+        if (perf.get('total_pnl', 0) > 1000 and
+            perf.get('win_rate', 0) > 60 and
+            perf.get('sharpe_ratio', 0) > 1.0):
+            green_lights.append("Strong overall performance - consider allocation increase")
+
+        return {
+            'red_flags': red_flags,
+            'yellow_flags': yellow_flags,
+            'green_lights': green_lights
+        }
+
+    def generate_portfolio_flags(self, all_analytics: Dict) -> Dict:
+        """Generate portfolio-level flags"""
+
+        if not all_analytics:
+            return {}
+
+        # Calculate portfolio metrics
+        total_traders = len([a for a in all_analytics.values() if 'error' not in a])
+        profitable_traders = 0
+        total_pnl = 0
+        red_flag_traders = 0
+
+        for analytics in all_analytics.values():
+            if 'error' in analytics:
+                continue
+
+            perf = analytics.get('performance', {})
+            pnl = perf.get('total_pnl', 0)
+            total_pnl += pnl
+
+            if pnl > 0:
+                profitable_traders += 1
+
+            # Check if trader has red flags
+            flags = self.generate_trader_flags(analytics)
+            if flags['red_flags']:
+                red_flag_traders += 1
+
+        profit_rate = (profitable_traders / total_traders * 100) if total_traders > 0 else 0
+
+        portfolio_flags = []
+
+        # Portfolio-level red flags
+        if profit_rate < 50:
+            portfolio_flags.append(f"Only {profitable_traders}/{total_traders} traders profitable ({profit_rate:.0f}%)")
+
+        if total_pnl < -5000:
+            portfolio_flags.append(f"Significant portfolio loss: ${total_pnl:,.2f}")
+
+        if red_flag_traders > total_traders * 0.3:  # More than 30% of traders have issues
+            portfolio_flags.append(f"Multiple traders need attention: {red_flag_traders}/{total_traders}")
+
+        # Portfolio opportunities
+        portfolio_opportunities = []
+        if profit_rate > 80:
+            portfolio_opportunities.append(f"Excellent team performance: {profitable_traders}/{total_traders} profitable")
+
+        if total_pnl > 10000:
+            portfolio_opportunities.append(f"Strong portfolio performance: ${total_pnl:,.2f}")
+
+        return {
+            'portfolio_flags': portfolio_flags,
+            'portfolio_opportunities': portfolio_opportunities,
+            'summary_stats': {
+                'total_traders': total_traders,
+                'profitable_traders': profitable_traders,
+                'profit_rate': profit_rate,
+                'total_pnl': total_pnl,
+                'red_flag_traders': red_flag_traders
+            }
+        }
