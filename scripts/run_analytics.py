@@ -18,12 +18,12 @@ from src.database import Database
 
 
 def setup_logging():
-    """Configure logging"""
+    """Configure logging with debug level for analytics"""
     log_dir = Path('logs')
     log_dir.mkdir(exist_ok=True)
 
     logging.basicConfig(
-        level=logging.INFO,
+        level=logging.DEBUG,  # Changed to DEBUG for troubleshooting
         format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         handlers=[
             logging.StreamHandler(),
