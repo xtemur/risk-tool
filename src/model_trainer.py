@@ -12,6 +12,7 @@ from pathlib import Path
 from sklearn.model_selection import ParameterGrid
 from sklearn.metrics import mean_squared_error, mean_absolute_error
 from typing import Dict, Tuple, Optional, List
+from src.visualizer import TrainingVisualizer  # Assuming this is in the same directory
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +81,7 @@ class ModelTrainer:
         best_score = float('inf')
         best_params = None
         best_model = None
+        best_eval_results = {}
 
         # Create parameter combinations (limited for MVP)
         param_combinations = list(ParameterGrid(self.param_grid))
@@ -104,6 +106,8 @@ class ModelTrainer:
                 train_data = lgb.Dataset(X_train, label=y_train)
                 val_data = lgb.Dataset(X_val, label=y_val, reference=train_data)
 
+                eval_result = {}
+
                 # Train with early stopping
                 model = lgb.train(
                     full_params,
@@ -111,7 +115,8 @@ class ModelTrainer:
                     valid_sets=[val_data],
                     callbacks=[
                         lgb.early_stopping(50),
-                        lgb.log_evaluation(0)
+                        lgb.log_evaluation(0),
+                        lgb.record_evaluation(eval_result)
                     ]
                 )
 
@@ -123,6 +128,7 @@ class ModelTrainer:
                     best_score = val_score
                     best_params = full_params
                     best_model = model
+                    best_eval_results = eval_result
 
                 logger.debug(f"Trial {i+1}/{len(param_combinations)}: RMSE={np.sqrt(val_score):.3f}")
 
@@ -139,6 +145,7 @@ class ModelTrainer:
             'model': best_model,
             'best_params': best_params,
             'best_score': best_score,
+            'eval_results': best_eval_results,
             'trials_completed': len(param_combinations)
         }
 
@@ -171,6 +178,7 @@ class ModelTrainer:
             search_result = self.hyperparameter_search(X_train, y_train, X_val, y_val)
             model = search_result['model']
             best_params = search_result['best_params']
+            eval_results = search_result.get('eval_results', {})
 
         except Exception as e:
             logger.error(f"Hyperparameter search failed for {account_id}: {str(e)}")
@@ -209,6 +217,7 @@ class ModelTrainer:
             'feature_columns': feature_columns,
             'threshold': threshold,
             'best_params': best_params,
+            'eval_results': eval_results,
             'validation_metrics': {
                 'rmse': val_rmse,
                 'mae': val_mae,

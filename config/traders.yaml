@@ -1,5 +1,4 @@
 traders:
-
   - account_id: 3946
     name: "NET005_OLD"
     strategy: "Day Trading"
@@ -24,9 +23,9 @@ traders:
   - account_id: 3957
     name: "NEO006_OLD"
     strategy: "Day Trading"
-
-# 5093,NET026_OLD,2024-03-05,2025-05-06,USD,0,0
-
+  - account_id: 5093
+    name: "NET026_OLD"
+    strategy: "Day Trading"
 
 
 

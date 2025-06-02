@@ -14,7 +14,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.database import Database
 from src.feature_engineer import FeatureEngineer
 from src.model_trainer import ModelTrainer
-
+from src.visualizer import TrainingVisualizer
 
 def setup_logging():
     """Configure logging"""
@@ -39,6 +39,7 @@ def main():
     db = Database()
     feature_engineer = FeatureEngineer()
     model_trainer = ModelTrainer()
+    visualizer = TrainingVisualizer()
 
     # Get all traders
     traders_df = db.get_all_traders()
@@ -78,6 +79,28 @@ def main():
     # Summary
     logger.info(f"\nTraining Complete!")
     logger.info(f"Successfully trained {len(results)} models")
+
+    logger.info("\nGenerating training visualizations...")
+
+    # Plot individual model training curves
+    for account_id in results.keys():
+        try:
+            model_data = model_trainer.load_model(account_id)
+            if model_data and 'eval_results' in model_data:
+                visualizer.plot_training_history(
+                    model_data['eval_results'],
+                    account_id,
+                    metric='rmse',
+                    save=True,
+                    show=False  # Don't show in automated script
+                )
+        except Exception as e:
+            logger.warning(f"Could not plot for {account_id}: {str(e)}")
+
+    # Generate comparison plot
+    visualizer.plot_all_models_comparison(model_trainer, save=True)
+
+    logger.info(f"Visualizations saved to data/plots/")
 
     # Show top models by performance
     if results:
