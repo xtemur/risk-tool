@@ -26,10 +26,14 @@ class DataDownloader:
 
     def __init__(self):
         self.token = os.getenv('API_TOKEN')
+        self.api_url = str(os.getenv('API_URL'))
+
         if not self.token:
             raise ValueError("API_TOKEN not found in environment")
 
-        self.api_url = "https://neo2.propreports.com/api.php"
+        if not self.api_url:
+            raise ValueError("API_URL not found in environment")
+
         self.db = Database()
         self.traders = self._load_traders()
 
@@ -44,7 +48,7 @@ class DataDownloader:
         try:
             time.sleep(0.1)  # Rate limiting
             response = requests.post(
-                self.api_url,
+                self.api_url,  # Type assertion to string
                 data=params,
                 headers={"Content-Type": "application/x-www-form-urlencoded"},
                 timeout=300
@@ -401,7 +405,7 @@ class DataDownloader:
 
         return False
 
-    def download_all_data(self, days_back: int = 365) -> Dict[str, bool]:
+    def download_all_data(self, days_back: int = 1000) -> Dict[str, bool]:
         """Download all data for all traders"""
         end_date = date.today()
         start_date = end_date - timedelta(days=days_back)
