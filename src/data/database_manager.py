@@ -329,27 +329,27 @@ class DatabaseManager:
                         logger.info(f"Found {len(existing_fills)} duplicate fill_ids, skipping...")
                         df = df[~df['fill_id'].isin(existing_fills)]
 
-                # Also check by datetime/symbol/quantity to catch duplicates without fill_id
-                if 'datetime' in df.columns and 'symbol' in df.columns:
-                    duplicates_to_remove = []
-                    for idx, row in df.iterrows():
-                        result = conn.execute("""
-                            SELECT 1 FROM fills
-                            WHERE account_id = ?
-                            AND datetime = ?
-                            AND symbol = ?
-                            AND quantity = ?
-                            AND price = ?
-                            AND side = ?
-                        """, (account_id, str(row['datetime']), str(row['symbol']),
-                              float(row['quantity']), float(row['price']), str(row.get('side', ''))))
+                # # Also check by datetime/symbol/quantity to catch duplicates without fill_id
+                # if 'datetime' in df.columns and 'symbol' in df.columns:
+                #     duplicates_to_remove = []
+                #     for idx, row in df.iterrows():
+                #         result = conn.execute("""
+                #             SELECT 1 FROM fills
+                #             WHERE account_id = ?
+                #             AND datetime = ?
+                #             AND symbol = ?
+                #             AND quantity = ?
+                #             AND price = ?
+                #             AND side = ?
+                #         """, (account_id, str(row['datetime']), str(row['symbol']),
+                #               float(row['quantity']), float(row['price']), str(row.get('side', ''))))
 
-                        if result.fetchone():
-                            duplicates_to_remove.append(idx)
+                #         if result.fetchone():
+                #             duplicates_to_remove.append(idx)
 
-                    if duplicates_to_remove:
-                        logger.info(f"Found {len(duplicates_to_remove)} potential duplicates by transaction details")
-                        df = df.drop(duplicates_to_remove)
+                #     if duplicates_to_remove:
+                #         logger.info(f"Found {len(duplicates_to_remove)} potential duplicates by transaction details")
+                #         df = df.drop(duplicates_to_remove)
 
             if not df.empty:
                 df.to_sql('fills', conn, if_exists='append', index=False, method='multi')
