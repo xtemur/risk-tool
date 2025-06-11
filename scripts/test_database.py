@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Test script to verify database functionality
+Test script to verify handling of both Equities and Options accounts
 """
 
 import sys
@@ -12,125 +12,173 @@ from src.data.propreports_parser import PropreReportsParser
 import pandas as pd
 from datetime import datetime, date
 
-def test_database():
-    """Test database functionality"""
-    print("Testing DatabaseManager...")
+def test_account_types():
+    """Test handling of different account types"""
+    print("Testing Account Type Handling...")
 
     # Initialize
     db = DatabaseManager()
     parser = PropreReportsParser()
 
-    # 1. Test account creation
-    print("\n1. Testing account creation...")
-    db.save_account("TEST001", "Test Trader 001")
-    accounts = db.get_accounts()
-    print(f"   Accounts in database: {len(accounts)}")
+    print("\n1. Creating test data for both account types...")
 
-    # 2. Test parsing sample data
-    print("\n2. Testing data parsing...")
-
-    # Check if sample files exist
-    totals_file = Path("tbd_3976_2025_04.csv")
-    fills_file = Path("fills_6973_2025_04.csv")
-
-    if totals_file.exists():
-        print(f"   Parsing totals file: {totals_file}")
-        totals_df, report_type = parser.parse_csv_file(totals_file)
-        print(f"   Parsed {len(totals_df)} rows, type: {report_type}")
-
-        # Validate data
-        validation = parser.validate_data(totals_df, report_type)
-        print(f"   Validation: {'PASSED' if validation['is_valid'] else 'FAILED'}")
-        if validation['errors']:
-            print(f"   Errors: {validation['errors']}")
-
-    if fills_file.exists():
-        print(f"   Parsing fills file: {fills_file}")
-        fills_df, report_type = parser.parse_csv_file(fills_file)
-        print(f"   Parsed {len(fills_df)} rows, type: {report_type}")
-
-        # Validate data
-        validation = parser.validate_data(fills_df, report_type)
-        print(f"   Validation: {'PASSED' if validation['is_valid'] else 'FAILED'}")
-        if validation['errors']:
-            print(f"   Errors: {validation['errors']}")
-
-    # 3. Test duplicate handling
-    print("\n3. Testing duplicate handling...")
-
-    # Create test data
-    test_daily = pd.DataFrame({
-        'Date': [date(2024, 1, 1), date(2024, 1, 1), date(2024, 1, 2)],
-        'Symbol': ['AAPL', 'AAPL', 'AAPL'],
-        'Net P&L': [100, 200, 150],
-        'Trades': [5, 10, 7]
+    # Create test Equities account data
+    equities_data = pd.DataFrame({
+        'Date': ['2024-01-01', '2024-01-02'],
+        'Type': ['Eq', 'Eq'],
+        'Orders': [10, 15],
+        'Fills': [8, 12],
+        'Qty': [1000, 1500],
+        'Gross': [500.00, 750.00],
+        'Comm': [10.00, 15.00],
+        'Ecn Fee': [2.00, 3.00],
+        'SEC': [0.50, 0.75],
+        'ORF': [0.25, 0.35],
+        'CAT': [0.10, 0.15],
+        'TAF': [0.05, 0.08],
+        'FTT': [0.00, 0.00],
+        'NSCC': [0.15, 0.20],
+        'Acc': [0.00, 0.00],
+        'Clr': [1.00, 1.50],
+        'Misc': [0.00, 0.00],
+        'Trade Fees': [14.05, 21.03],
+        'Net': [485.95, 728.97],
+        'Fee: Software & MD': [50.00, 50.00],  # Equities specific
+        'Fee: VAT': [10.00, 10.00],            # Equities specific
+        'Adj Fees': [74.05, 81.03],
+        'Adj Net': [425.95, 668.97],
+        'Unrealized Δ': [0.00, 0.00],
+        'Total Δ': [425.95, 668.97],
+        'Transfer: Deposit': [0.00, 0.00],
+        'Transfers': [0.00, 0.00],
+        'Cash': [10425.95, 11094.92],
+        'Unrealized': [0.00, 0.00],
+        'End Balance': [10425.95, 11094.92]
     })
 
-    # Save twice to test duplicate handling
-    records1 = db.save_daily_summary(test_daily, "TEST001", handle_duplicates='replace')
-    print(f"   First save: {records1} records")
-
-    records2 = db.save_daily_summary(test_daily, "TEST001", handle_duplicates='replace')
-    print(f"   Second save (replace): {records2} records")
-
-    # Check for duplicates
-    duplicates = db.check_duplicates()
-    print(f"   Duplicates found: {list(duplicates.keys())}")
-
-    # 4. Test time ordering
-    print("\n4. Testing time ordering...")
-
-    # Insert data out of order
-    out_of_order = pd.DataFrame({
-        'Date': [date(2024, 1, 5), date(2024, 1, 3), date(2024, 1, 4)],
-        'Symbol': ['TSLA', 'TSLA', 'TSLA'],
-        'Net P&L': [500, 300, 400],
-        'Trades': [3, 2, 4]
+    # Create test Options account data
+    options_data = pd.DataFrame({
+        'Date': ['2024-01-01', '2024-01-02'],
+        'Type': ['Op', 'Op'],
+        'Orders': [5, 8],
+        'Fills': [4, 6],
+        'Qty': [10, 15],
+        'Gross': [1500.00, 2250.00],
+        'Comm': [20.00, 30.00],
+        'Ecn Fee': [0.00, 0.00],
+        'SEC': [0.00, 0.00],
+        'ORF': [1.00, 1.50],
+        'CAT': [0.50, 0.75],
+        'TAF': [0.00, 0.00],
+        'FTT': [0.00, 0.00],
+        'NSCC': [0.00, 0.00],
+        'Acc': [0.00, 0.00],
+        'Clr': [5.00, 7.50],
+        'Misc': [0.00, 0.00],
+        'Trade Fees': [26.50, 39.75],
+        'Net': [1473.50, 2210.25],
+        'Fee: Daily Interest': [25.00, 25.00],  # Options specific
+        'Adj Fees': [51.50, 64.75],
+        'Adj Net': [1448.50, 2185.25],
+        'Unrealized Δ': [100.00, -50.00],
+        'Total Δ': [1548.50, 2135.25],
+        'Transfer: Deposit': [0.00, 0.00],
+        'Transfers': [0.00, 0.00],
+        'Cash': [51548.50, 53683.75],
+        'Unrealized': [100.00, 50.00],
+        'End Balance': [51648.50, 53733.75]
     })
 
-    db.save_daily_summary(out_of_order, "TEST001")
+    # Save test accounts
+    db.save_account("TEST_EQ_001", "Test Equities Trader")
+    db.save_account("TEST_OP_001", "Test Options Trader")
 
-    # Retrieve and check ordering
-    retrieved = db.get_daily_summary(account_id="TEST001")
-    print(f"   Retrieved {len(retrieved)} records")
-    print("   Date order check:", retrieved['date'].is_monotonic_increasing)
+    # Save data
+    print("\n2. Saving test data to database...")
+    eq_records = db.save_account_daily_summary(equities_data, "TEST_EQ_001")
+    print(f"   Saved {eq_records} equities records")
 
-    # 5. Test time series functionality
-    print("\n5. Testing time series generation...")
-    ts = db.get_trader_time_series("TEST001")
-    if not ts.empty:
-        print(f"   Time series: {len(ts)} days")
-        print(f"   Date range: {ts.index.min()} to {ts.index.max()}")
-        print(f"   Total P&L: {ts['net_pl'].sum()}")
+    op_records = db.save_account_daily_summary(options_data, "TEST_OP_001")
+    print(f"   Saved {op_records} options records")
 
-    # 6. Test validation
-    print("\n6. Testing time consistency validation...")
-    validation = db.validate_time_consistency("TEST001")
-    print(f"   Validation: {'PASSED' if validation['is_valid'] else 'FAILED'}")
-    if validation['issues']:
-        print(f"   Issues: {validation['issues']}")
+    print("\n3. Testing account type detection...")
 
-    # 7. Test database stats
-    print("\n7. Database statistics:")
+    # Get account summaries
+    eq_summary = db.get_account_summary("TEST_EQ_001")
+    op_summary = db.get_account_summary("TEST_OP_001")
+
+    print(f"\n   Equities Account Type: {eq_summary['account_type']}")
+    print(f"   Options Account Type: {op_summary['account_type']}")
+
+    # Verify data retrieval
+    print("\n4. Verifying data retrieval...")
+
+    eq_data = db.get_account_daily_summary(account_id="TEST_EQ_001")
+    op_data = db.get_account_daily_summary(account_id="TEST_OP_001")
+
+    print(f"\n   Equities account columns: {list(eq_data.columns)[:10]}...")
+    print(f"   Options account columns: {list(op_data.columns)[:10]}...")
+
+    # Check for optional columns
+    print("\n5. Checking optional columns...")
+
+    if 'fee_software_md' in eq_data.columns:
+        print(f"   ✓ Equities has fee_software_md: ${eq_data['fee_software_md'].sum():.2f}")
+    if 'fee_vat' in eq_data.columns:
+        print(f"   ✓ Equities has fee_vat: ${eq_data['fee_vat'].sum():.2f}")
+
+    if 'fee_daily_interest' in op_data.columns:
+        print(f"   ✓ Options has fee_daily_interest: ${op_data['fee_daily_interest'].sum():.2f}")
+
+    # Test parser with sample CSV content
+    print("\n6. Testing parser with sample CSV content...")
+
+    # Create sample equities CSV
+    eq_csv_content = """Date,Type,Orders,Fills,Qty,Gross,Comm,Ecn Fee,SEC,ORF,CAT,TAF,FTT,NSCC,Acc,Clr,Misc,Trade Fees,Net,Fee: Software & MD,Fee: VAT,Adj Fees,Adj Net,Unrealized Δ,Total Δ,Transfer: Deposit,Transfers,Cash,Unrealized,End Balance
+2024-01-03,Eq,20,18,2000,1000.00,20.00,4.00,1.00,0.50,0.20,0.10,0.00,0.30,0.00,2.00,0.00,28.10,971.90,50.00,10.00,88.10,911.90,0.00,911.90,0.00,0.00,12006.82,0.00,12006.82
+Equities"""
+
+    eq_temp_file = Path("temp_eq_test.csv")
+    with open(eq_temp_file, 'w') as f:
+        f.write(eq_csv_content)
+
+    eq_df, eq_type = parser.parse_csv_file(eq_temp_file)
+    print(f"   Parsed equities file: {len(eq_df)} rows, type: {eq_type}")
+    print(f"   Detected account type: {parser.detect_account_type(eq_df)}")
+
+    eq_temp_file.unlink()
+
+    # Create sample options CSV
+    op_csv_content = """Date,Type,Orders,Fills,Qty,Gross,Comm,Ecn Fee,SEC,ORF,CAT,TAF,FTT,NSCC,Acc,Clr,Misc,Trade Fees,Net,Fee: Daily Interest,Adj Fees,Adj Net,Unrealized Δ,Total Δ,Transfer: Deposit,Transfers,Cash,Unrealized,End Balance
+2024-01-03,Op,10,8,20,3000.00,40.00,0.00,0.00,2.00,1.00,0.00,0.00,0.00,0.00,10.00,0.00,53.00,2947.00,25.00,78.00,2872.00,-100.00,2772.00,0.00,0.00,56505.75,-50.00,56455.75
+Options"""
+
+    op_temp_file = Path("temp_op_test.csv")
+    with open(op_temp_file, 'w') as f:
+        f.write(op_csv_content)
+
+    op_df, op_type = parser.parse_csv_file(op_temp_file)
+    print(f"   Parsed options file: {len(op_df)} rows, type: {op_type}")
+    print(f"   Detected account type: {parser.detect_account_type(op_df)}")
+
+    op_temp_file.unlink()
+
+    # Database stats
+    print("\n7. Database statistics...")
     stats = db.get_database_stats()
     for key, value in stats.items():
         print(f"   {key}: {value}")
 
-    # 8. Create views
-    print("\n8. Creating time-ordered views...")
-    db.create_time_ordered_views()
-    print("   Views created successfully")
+    print("\n✓ Account type handling test completed successfully!")
 
-    # 9. Clean up test data
-    print("\n9. Cleaning up test data...")
+    # Cleanup test data
+    print("\n8. Cleaning up test data...")
     with db.get_connection() as conn:
-        conn.execute("DELETE FROM daily_summary WHERE account_id = 'TEST001'")
-        conn.execute("DELETE FROM accounts WHERE account_id = 'TEST001'")
+        conn.execute("DELETE FROM account_daily_summary WHERE account_id LIKE 'TEST_%'")
+        conn.execute("DELETE FROM accounts WHERE account_id LIKE 'TEST_%'")
         conn.commit()
     print("   Test data cleaned up")
 
-    print("\n✅ All tests completed!")
-
 
 if __name__ == "__main__":
-    test_database()
+    test_account_types()

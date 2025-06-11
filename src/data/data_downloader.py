@@ -1,6 +1,7 @@
 """
 Data Downloader for PropreReports
 Simplified API client that downloads and stores trading data
+Updated to use summaryByDate instead of totalsByDate
 """
 
 import os
@@ -9,7 +10,7 @@ import logging
 import requests
 import re
 from datetime import date, datetime, timedelta
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Any
 from pathlib import Path
 import yaml
 from dotenv import load_dotenv
@@ -91,13 +92,13 @@ class DataDownloader:
 
     def download_all_data(self,
                          days_back: int = 365,
-                         data_types: List[str] = ['totals', 'fills']) -> Dict[str, Dict]:
+                         data_types: List[str] = ['summary', 'fills']) -> Dict[str, Dict]:
         """
         Download all data for all traders
 
         Args:
             days_back: Number of days to download
-            data_types: List of data types to download ('totals', 'fills')
+            data_types: List of data types to download ('summary', 'fills')
 
         Returns:
             Dictionary with results for each trader
@@ -121,9 +122,9 @@ class DataDownloader:
 
             try:
                 # Download each data type
-                if 'totals' in data_types:
-                    totals_count = self._download_totals(account_id, start_date, end_date)
-                    trader_results['totals'] = totals_count
+                if 'summary' in data_types:
+                    summary_count = self._download_summary(account_id, start_date, end_date)
+                    trader_results['summary'] = summary_count
 
                 if 'fills' in data_types:
                     fills_count = self._download_fills(account_id, start_date, end_date)
@@ -145,73 +146,52 @@ class DataDownloader:
 
         return results
 
-    def _download_totals(self, account_id: str, start_date: date, end_date: date) -> int:
-        """Download and save totals by date data"""
-        logger.info(f"Downloading totals for {account_id} from {start_date} to {end_date}")
+    def _download_summary(self, account_id: str, start_date: date, end_date: date) -> int:
+        """Download and save account daily summary data (summaryByDate)"""
+        logger.info(f"Downloading summary for {account_id} from {start_date} to {end_date}")
+
+        # API request parameters - summaryByDate has no pagination
+        params = {
+            'action': 'report',
+            'type': 'summaryByDate',  # Changed from totalsByDate
+            'token': self.token,
+            'accountId': account_id,
+            'startDate': start_date.strftime('%Y-%m-%d'),
+            'endDate': end_date.strftime('%Y-%m-%d')
+        }
+
+        # Make request
+        csv_content = self._make_request(params)
+        if not csv_content:
+            logger.warning(f"No data returned for {account_id}")
+            return 0
+
+        # Save to temp file for parsing
+        temp_file = Path(f"temp_summary_{account_id}.csv")
+        with open(temp_file, 'w') as f:
+            f.write(csv_content)
 
         total_records = 0
-        page = 1
-        total_pages = None
+        try:
+            # Parse CSV
+            df, report_type = self.parser.parse_csv_file(temp_file)
 
-        while True:
-            # API request parameters
-            params = {
-                'action': 'report',
-                'type': 'totalsByDate',
-                'token': self.token,
-                'accountId': account_id,
-                'startDate': start_date.strftime('%Y-%m-%d'),
-                'endDate': end_date.strftime('%Y-%m-%d'),
-                'page': page
-            }
+            if not df.empty:
+                # Save to database
+                records = self.db.save_account_daily_summary(df, account_id)
+                total_records = records
+                logger.info(f"Saved {records} summary records")
+            else:
+                logger.warning(f"Empty dataframe returned for {account_id}")
 
-            # Make request
-            csv_content = self._make_request(params)
-            if not csv_content:
-                break
-
-            # Check pagination info
-            has_more, extracted_total = self._has_more_pages(csv_content, page)
-
-
-            if total_pages is None:
-                total_pages = extracted_total
-                logger.info(f"Total pages to fetch: {total_pages}")
-
-            # Save to temp file for parsing
-            temp_file = Path(f"temp_totals_{account_id}_{page}.csv")
-            with open(temp_file, 'w') as f:
-                f.write(csv_content)
-
-            try:
-                # Parse CSV
-                df, report_type = self.parser.parse_csv_file(temp_file)
-
-                if not df.empty:
-                    # Save to database
-                    records = self.db.save_daily_summary(df, account_id)
-                    total_records += records
-                    logger.info(f"Page {page}/{total_pages or '?'}: Saved {records} records")
-                else:
-                    logger.warning(f"Page {page} returned empty dataframe")
-                    break
-
-            finally:
-                # Clean up temp file
-                if temp_file.exists():
-                    temp_file.unlink()
-
-            # Check if we should continue
-            if not has_more:
-                logger.info(f"Completed downloading all {page} pages")
-                break
-
-            page += 1
-            time.sleep(self.request_delay)
+        finally:
+            # Clean up temp file
+            if temp_file.exists():
+                temp_file.unlink()
 
         # Record data load
         if total_records > 0:
-            self.db.record_data_load(account_id, 'totals', start_date, end_date, total_records)
+            self.db.record_data_load(account_id, 'summary', start_date, end_date, total_records)
 
         logger.info(f"Downloaded {total_records} daily summary records for {account_id}")
         return total_records
@@ -243,14 +223,15 @@ class DataDownloader:
             # Check pagination info
             has_more, extracted_total = self._has_more_pages(csv_content, page)
 
-
-            #remove last line from csv content
-            csv_content = '\n'.join(csv_content.split('\n')[:-1])
-
+            # Remove last line from csv content if it contains page info
+            lines = csv_content.split('\n')
+            if lines and 'Page' in lines[-1]:
+                csv_content = '\n'.join(lines[:-1])
 
             if total_pages is None:
                 total_pages = extracted_total
-                logger.info(f"Total pages to fetch: {total_pages}")
+                if total_pages and total_pages > 1:
+                    logger.info(f"Total pages to fetch: {total_pages}")
 
             # Save to temp file for parsing
             temp_file = Path(f"temp_fills_{account_id}_{page}.csv")
@@ -316,58 +297,47 @@ class DataDownloader:
 
     def get_download_status(self) -> pd.DataFrame:
         """Get status of data downloads"""
-        with self.db.get_connection() as conn:
-            query = """
-                SELECT
-                    dl.account_id,
-                    a.account_name,
-                    dl.data_type,
-                    dl.start_date,
-                    dl.end_date,
-                    dl.records_loaded,
-                    dl.loaded_at,
-                    dl.status
-                FROM data_loads dl
-                JOIN accounts a ON dl.account_id = a.account_id
-                ORDER BY dl.loaded_at DESC
-                LIMIT 100
-            """
-            return pd.read_sql_query(query, conn)
+        return self.db.get_download_status()
 
     def get_data_summary(self) -> Dict[str, pd.DataFrame]:
         """Get summary of downloaded data"""
-        with self.db.get_connection() as conn:
-            # Summary by trader
-            trader_summary = pd.read_sql_query("""
-                SELECT
-                    a.account_id,
-                    a.account_name,
-                    COUNT(DISTINCT ds.date) as trading_days,
-                    MIN(ds.date) as first_date,
-                    MAX(ds.date) as last_date,
-                    SUM(ds.net_pnl) as total_pnl,
-                    COUNT(DISTINCT f.fill_id) as total_fills
-                FROM accounts a
-                LEFT JOIN daily_summary ds ON a.account_id = ds.account_id
-                LEFT JOIN fills f ON a.account_id = f.account_id
-                GROUP BY a.account_id, a.account_name
-                ORDER BY a.account_name
-            """, conn)
+        return self.db.get_data_summary()
 
-            # Recent activity
-            recent_activity = pd.read_sql_query("""
-                SELECT
-                    DATE(loaded_at) as load_date,
-                    COUNT(DISTINCT account_id) as traders_updated,
-                    SUM(records_loaded) as total_records,
-                    COUNT(DISTINCT data_type) as data_types
-                FROM data_loads
-                WHERE loaded_at >= datetime('now', '-7 days')
-                GROUP BY DATE(loaded_at)
-                ORDER BY load_date DESC
-            """, conn)
+    def validate_downloads(self) -> Dict[str, Any]:
+        """Validate downloaded data for each trader"""
+        validation_results = {}
 
-            return {
-                'trader_summary': trader_summary,
-                'recent_activity': recent_activity
+        for trader in self.traders:
+            account_id = str(trader['account_id'])
+            trader_name = trader['name']
+
+            # Get summary data
+            summary_df = self.db.get_account_daily_summary(account_id=account_id)
+
+            validation = {
+                'trader_name': trader_name,
+                'has_summary_data': not summary_df.empty,
+                'summary_records': len(summary_df) if not summary_df.empty else 0,
+                'date_range': None,
+                'total_pnl': None,
+                'account_type': 'Unknown'
             }
+
+            if not summary_df.empty:
+                validation['date_range'] = (
+                    summary_df['date'].min().strftime('%Y-%m-%d'),
+                    summary_df['date'].max().strftime('%Y-%m-%d')
+                )
+                validation['total_pnl'] = summary_df['net'].sum()
+
+                # Use the improved account type detection
+                validation['account_type'] = self.db.detect_account_type(account_id)
+
+            # Get fills data
+            fills_df = self.db.get_fills(account_id=account_id)
+            validation['has_fills_data'] = not fills_df.empty
+            validation['fills_records'] = len(fills_df) if not fills_df.empty else 0
+
+            validation_results[account_id] = validation
+
+        return validation_results

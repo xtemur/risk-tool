@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Setup Script - Initialize database and download historical data
-Uses new architecture with DatabaseManager and PropreReportsParser
+Updated for new summaryByDate format
 """
 
 import sys
@@ -61,10 +61,10 @@ def main():
         logger.info("\nStarting historical data download...")
         logger.info("This may take several minutes depending on the amount of data...")
 
-        # Download last 365 days of data
+        # Download last 365 days of data with new data types
         results = downloader.download_all_data(
             days_back=365,
-            data_types=['totals', 'fills']
+            data_types=['summary', 'fills']  # Changed from 'totals' to 'summary'
         )
 
         # Show summary
@@ -83,9 +83,9 @@ def main():
         logger.info("\nDetailed Results:")
         for account_id, result in results.items():
             if result.get('success'):
-                totals = result.get('totals', 0)
+                summary_records = result.get('summary', 0)  # Changed from 'totals'
                 fills = result.get('fills', 0)
-                logger.info(f"  Account {account_id}: ✓ Success (Totals: {totals}, Fills: {fills})")
+                logger.info(f"  Account {account_id}: ✓ Success (Summary: {summary_records}, Fills: {fills})")
             else:
                 error = result.get('error', 'Unknown error')
                 logger.error(f"  Account {account_id}: ✗ Failed - {error}")
@@ -113,16 +113,39 @@ def main():
             summary = db_manager.get_account_summary(sample_account)
             logger.info(f"\nSample Account Summary ({sample_account}):")
             for key, value in summary.items():
-                logger.info(f"  {key}: {value}")
+                if key == 'account_type':
+                    logger.info(f"  {key}: {value} Account")
+                else:
+                    logger.info(f"  {key}: {value}")
 
-            # Show recent daily data
-            daily_data = db_manager.get_daily_summary(
+            # Show recent daily data - UPDATED METHOD NAME
+            daily_data = db_manager.get_account_daily_summary(
                 account_id=sample_account
             ).tail(5)
 
             if not daily_data.empty:
                 logger.info(f"\nRecent Daily Summary (last 5 days):")
-                logger.info(daily_data[['date', 'symbol', 'net_pl', 'trades']].to_string())
+                # Updated column names for new schema
+                display_columns = ['date', 'net', 'fills', 'gross', 'end_balance']
+                available_columns = [col for col in display_columns if col in daily_data.columns]
+                logger.info(daily_data[available_columns].to_string())
+
+        # Validate downloaded data
+        logger.info("\n" + "=" * 80)
+        logger.info("DATA VALIDATION")
+        logger.info("=" * 80)
+
+        validation_results = downloader.validate_downloads()
+        for account_id, validation in validation_results.items():
+            trader_name = validation['trader_name']
+            account_type = validation.get('account_type', 'Unknown')
+            logger.info(f"\n{trader_name} ({account_id}) - {account_type} Account:")
+            logger.info(f"  Summary records: {validation['summary_records']}")
+            logger.info(f"  Fills records: {validation['fills_records']}")
+            if validation['date_range']:
+                logger.info(f"  Date range: {validation['date_range'][0]} to {validation['date_range'][1]}")
+            if validation['total_pnl'] is not None:
+                logger.info(f"  Total P&L: ${validation['total_pnl']:,.2f}")
 
         # Next steps
         logger.info("\n" + "=" * 80)

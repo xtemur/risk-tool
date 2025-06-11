@@ -1,6 +1,7 @@
 """
 Database Manager for Risk Tool
 Handles all database operations with proper schema for PropreReports data
+Updated to support new summaryByDate format
 """
 
 import sqlite3
@@ -30,6 +31,13 @@ class DatabaseManager:
         """Context manager for database connections"""
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
+
+        # Optimize for performance with large datasets
+        conn.execute("PRAGMA cache_size = -64000")  # 64MB cache
+        conn.execute("PRAGMA temp_store = MEMORY")
+        conn.execute("PRAGMA journal_mode = WAL")    # Write-Ahead Logging
+        conn.execute("PRAGMA synchronous = NORMAL")  # Faster writes
+
         try:
             yield conn
         finally:
@@ -38,8 +46,10 @@ class DatabaseManager:
     def _init_database(self):
         """Initialize database with proper schema"""
         with self.get_connection() as conn:
-            # Enable foreign keys
+            # Enable foreign keys and optimize settings
             conn.execute("PRAGMA foreign_keys = ON")
+            conn.execute("PRAGMA journal_mode = WAL")
+            conn.execute("PRAGMA busy_timeout = 5000")  # 5 second timeout for locks
 
             # Create tables
             conn.executescript("""
@@ -47,30 +57,49 @@ class DatabaseManager:
                 CREATE TABLE IF NOT EXISTS accounts (
                     account_id TEXT PRIMARY KEY,
                     account_name TEXT,
+                    account_type TEXT DEFAULT NULL,  -- Cached account type
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
                 );
 
-                -- Daily summary table (from totals by date reports)
-                CREATE TABLE IF NOT EXISTS daily_summary (
+                -- Account daily summary table (from summaryByDate reports)
+                -- Includes all possible columns for both equities and options accounts
+                CREATE TABLE IF NOT EXISTS account_daily_summary (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     account_id TEXT NOT NULL,
                     date DATE NOT NULL,
-                    symbol TEXT NOT NULL,
+                    type TEXT DEFAULT 'Eq',
                     orders INTEGER DEFAULT 0,
                     fills INTEGER DEFAULT 0,
-                    shares REAL DEFAULT 0,
-                    gross_pl REAL DEFAULT 0,
-                    net_pl REAL DEFAULT 0,
+                    qty INTEGER DEFAULT 0,
+                    gross REAL DEFAULT 0,
+                    comm REAL DEFAULT 0,
+                    ecn_fee REAL DEFAULT 0,
+                    sec REAL DEFAULT 0,
+                    orf REAL DEFAULT 0,
+                    cat REAL DEFAULT 0,
+                    taf REAL DEFAULT 0,
+                    ftt REAL DEFAULT 0,
+                    nscc REAL DEFAULT 0,
+                    acc REAL DEFAULT 0,
+                    clr REAL DEFAULT 0,
+                    misc REAL DEFAULT 0,
+                    trade_fees REAL DEFAULT 0,
+                    net REAL DEFAULT 0,
+                    fee_software_md REAL DEFAULT NULL,      -- Equities only
+                    fee_vat REAL DEFAULT NULL,              -- Equities only
+                    fee_daily_interest REAL DEFAULT NULL,   -- Options only
+                    adj_fees REAL DEFAULT 0,
+                    adj_net REAL DEFAULT 0,
+                    unrealized_delta REAL DEFAULT 0,
+                    total_delta REAL DEFAULT 0,
+                    transfer_deposit REAL DEFAULT 0,
+                    transfers REAL DEFAULT 0,
+                    cash REAL DEFAULT 0,
                     unrealized REAL DEFAULT 0,
-                    total REAL DEFAULT 0,
-                    volume REAL DEFAULT 0,
-                    high_price REAL,
-                    low_price REAL,
-                    open_shares REAL DEFAULT 0,
-                    closed_pl REAL DEFAULT 0,
-                    trades INTEGER DEFAULT 0,
-                    UNIQUE(account_id, date, symbol),
+                    end_balance REAL DEFAULT 0,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(account_id, date),
                     FOREIGN KEY (account_id) REFERENCES accounts(account_id)
                 );
 
@@ -106,10 +135,9 @@ class DatabaseManager:
                 );
 
                 -- Indexes for performance
-                CREATE INDEX IF NOT EXISTS idx_daily_date ON daily_summary(date);
-                CREATE INDEX IF NOT EXISTS idx_daily_account ON daily_summary(account_id);
-                CREATE INDEX IF NOT EXISTS idx_daily_symbol ON daily_summary(symbol);
-                CREATE INDEX IF NOT EXISTS idx_daily_account_date ON daily_summary(account_id, date);
+                CREATE INDEX IF NOT EXISTS idx_summary_date ON account_daily_summary(date);
+                CREATE INDEX IF NOT EXISTS idx_summary_account ON account_daily_summary(account_id);
+                CREATE INDEX IF NOT EXISTS idx_summary_account_date ON account_daily_summary(account_id, date);
                 CREATE INDEX IF NOT EXISTS idx_fills_datetime ON fills(datetime);
                 CREATE INDEX IF NOT EXISTS idx_fills_account ON fills(account_id);
                 CREATE INDEX IF NOT EXISTS idx_fills_symbol ON fills(symbol);
@@ -130,22 +158,63 @@ class DatabaseManager:
             """)
             conn.commit()
 
-    def save_account(self, account_id: str, account_name: str) -> None:
+    def save_account(self, account_id: str, account_name: str, account_type: Optional[str] = None) -> None:
         """Save or update account information"""
         with self.get_connection() as conn:
-            conn.execute("""
-                INSERT OR REPLACE INTO accounts (account_id, account_name, updated_at)
-                VALUES (?, ?, CURRENT_TIMESTAMP)
-            """, (account_id, account_name))
+            if account_type:
+                conn.execute("""
+                    INSERT OR REPLACE INTO accounts (account_id, account_name, account_type, updated_at)
+                    VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+                """, (account_id, account_name, account_type))
+            else:
+                conn.execute("""
+                    INSERT OR REPLACE INTO accounts (account_id, account_name, updated_at)
+                    VALUES (?, ?, CURRENT_TIMESTAMP)
+                """, (account_id, account_name))
             conn.commit()
 
-    def save_daily_summary(self, df: pd.DataFrame, account_id: str,
-                          handle_duplicates: str = 'replace') -> int:
+    def update_account_type(self, account_id: str, force_refresh: bool = False) -> str:
         """
-        Save daily summary data (totals by date)
+        Update account type in database
 
         Args:
-            df: DataFrame with daily totals
+            account_id: Account ID
+            force_refresh: Force detection even if already cached
+
+        Returns:
+            Detected account type
+        """
+        with self.get_connection() as conn:
+            # Check if we already have a cached type
+            if not force_refresh:
+                cached = conn.execute(
+                    "SELECT account_type FROM accounts WHERE account_id = ?",
+                    (account_id,)
+                ).fetchone()
+
+                if cached and cached['account_type']:
+                    return cached['account_type']
+
+            # Detect account type
+            account_type = self.detect_account_type(account_id)
+
+            # Update cache
+            conn.execute("""
+                UPDATE accounts
+                SET account_type = ?, updated_at = CURRENT_TIMESTAMP
+                WHERE account_id = ?
+            """, (account_type, account_id))
+            conn.commit()
+
+            return account_type
+
+    def save_account_daily_summary(self, df: pd.DataFrame, account_id: str,
+                                 handle_duplicates: str = 'replace') -> int:
+        """
+        Save account daily summary data (summaryByDate)
+
+        Args:
+            df: DataFrame with daily summary
             account_id: Account identifier
             handle_duplicates: How to handle duplicates - 'replace', 'ignore', or 'error'
 
@@ -159,28 +228,44 @@ class DatabaseManager:
         df = df.copy()
         df['account_id'] = account_id
 
-        # Ensure proper column names
+        # Ensure proper column names - handle both equities and options columns
         column_mapping = {
             'Date': 'date',
-            'Symbol': 'symbol',
+            'Type': 'type',
             'Orders': 'orders',
             'Fills': 'fills',
-            'Shares': 'shares',
-            'Gross P&L': 'gross_pl',
-            'Net P&L': 'net_pl',
+            'Qty': 'qty',
+            'Gross': 'gross',
+            'Comm': 'comm',
+            'Ecn Fee': 'ecn_fee',
+            'SEC': 'sec',
+            'ORF': 'orf',
+            'CAT': 'cat',
+            'TAF': 'taf',
+            'FTT': 'ftt',
+            'NSCC': 'nscc',
+            'Acc': 'acc',
+            'Clr': 'clr',
+            'Misc': 'misc',
+            'Trade Fees': 'trade_fees',
+            'Net': 'net',
+            'Fee: Software & MD': 'fee_software_md',      # Equities
+            'Fee: VAT': 'fee_vat',                        # Equities
+            'Fee: Daily Interest': 'fee_daily_interest',  # Options
+            'Adj Fees': 'adj_fees',
+            'Adj Net': 'adj_net',
+            'Unrealized Δ': 'unrealized_delta',
+            'Total Δ': 'total_delta',
+            'Transfer: Deposit': 'transfer_deposit',
+            'Transfers': 'transfers',
+            'Cash': 'cash',
             'Unrealized': 'unrealized',
-            'Total': 'total',
-            'Volume': 'volume',
-            'High': 'high_price',
-            'Low': 'low_price',
-            'Open Shares': 'open_shares',
-            'Closed P&L': 'closed_pl',
-            'Trades': 'trades'
+            'End Balance': 'end_balance'
         }
 
         df = df.rename(columns=column_mapping)
 
-        # Select only columns that exist
+        # Select only columns that exist in the dataframe
         available_cols = [col for col in column_mapping.values() if col in df.columns]
         available_cols = ['account_id'] + available_cols
         df = df[available_cols]
@@ -196,16 +281,26 @@ class DatabaseManager:
         with self.get_connection() as conn:
             if handle_duplicates == 'replace':
                 # Delete existing records for these dates
-                if 'date' in df.columns and 'symbol' in df.columns:
-                    for _, row in df.iterrows():
-                        conn.execute("""
-                            DELETE FROM daily_summary
-                            WHERE account_id = ? AND date = ? AND symbol = ?
-                        """, (account_id, str(row['date']), str(row['symbol'])))
+                if 'date' in df.columns:
+                    dates = df['date'].unique()
+                    # Process in batches to avoid too many SQL variables
+                    batch_size = 500
+                    for i in range(0, len(dates), batch_size):
+                        batch_dates = dates[i:i + batch_size]
+                        placeholders = ','.join(['?' for _ in batch_dates])
+                        conn.execute(
+                            f"DELETE FROM account_daily_summary WHERE account_id = ? AND date IN ({placeholders})",
+                            [account_id] + list(batch_dates)
+                        )
 
-                # Insert new records
-                df.to_sql('daily_summary', conn, if_exists='append', index=False, method='multi')
-                records_saved = len(df)
+                # Insert new records in batches
+                num_columns = len(df.columns)
+                batch_size = min(100, 900 // num_columns)  # Conservative batch size
+
+                for i in range(0, len(df), batch_size):
+                    batch_df = df.iloc[i:i + batch_size]
+                    batch_df.to_sql('account_daily_summary', conn, if_exists='append', index=False, method='multi')
+                    records_saved += len(batch_df)
 
             elif handle_duplicates == 'ignore':
                 # Insert only new records
@@ -216,7 +311,7 @@ class DatabaseManager:
                         placeholders = ', '.join(['?' for _ in row_dict])
 
                         conn.execute(f"""
-                            INSERT OR IGNORE INTO daily_summary ({columns})
+                            INSERT OR IGNORE INTO account_daily_summary ({columns})
                             VALUES ({placeholders})
                         """, list(row_dict.values()))
 
@@ -226,9 +321,14 @@ class DatabaseManager:
                         logger.debug(f"Error inserting row: {e}")
 
             elif handle_duplicates == 'error':
-                # Raise error on duplicates
-                df.to_sql('daily_summary', conn, if_exists='append', index=False, method='multi')
-                records_saved = len(df)
+                # Raise error on duplicates - use batching
+                num_columns = len(df.columns)
+                batch_size = min(100, 900 // num_columns)
+
+                for i in range(0, len(df), batch_size):
+                    batch_df = df.iloc[i:i + batch_size]
+                    batch_df.to_sql('account_daily_summary', conn, if_exists='append', index=False, method='multi')
+                    records_saved += len(batch_df)
 
             conn.commit()
 
@@ -244,9 +344,6 @@ class DatabaseManager:
             df: DataFrame with fills data
             account_id: Account identifier
             handle_duplicates: How to handle duplicates - 'check', 'force', or 'error'
-                - 'check': Skip duplicate fill_ids (recommended)
-                - 'force': Insert all records (may create duplicates)
-                - 'error': Raise error on duplicates
 
         Returns:
             Number of records saved
@@ -293,10 +390,9 @@ class DatabaseManager:
         existing_fees = [col for col in fee_columns if col in df.columns]
         df['total_fees'] = df[existing_fees].fillna(0).sum(axis=1)
 
-        # Convert datetime - IMPORTANT: Convert to string for SQLite
+        # Convert datetime
         if 'datetime' in df.columns:
             df['datetime'] = pd.to_datetime(df['datetime'])
-            # Convert to string format that SQLite understands
             df['datetime'] = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # Select columns to save
@@ -316,58 +412,53 @@ class DatabaseManager:
                 # Check for existing fill_ids
                 if 'fill_id' in df.columns:
                     existing_fills = set()
-                    for fill_id in df['fill_id'].dropna().unique():
-                        result = conn.execute(
-                            "SELECT 1 FROM fills WHERE fill_id = ? AND account_id = ?",
-                            (str(fill_id), account_id)
-                        ).fetchone()
-                        if result:
-                            existing_fills.add(fill_id)
 
-                    # Filter out existing fills
+                    # Process fill_ids in batches to avoid too many SQL variables
+                    unique_fill_ids = df['fill_id'].dropna().unique()
+                    batch_size = 500
+
+                    for i in range(0, len(unique_fill_ids), batch_size):
+                        batch_ids = unique_fill_ids[i:i + batch_size]
+                        placeholders = ','.join(['?' for _ in batch_ids])
+                        query = f"""
+                            SELECT fill_id FROM fills
+                            WHERE fill_id IN ({placeholders})
+                            AND account_id = ?
+                        """
+                        params = list(batch_ids) + [account_id]
+                        results = conn.execute(query, params).fetchall()
+                        existing_fills.update(row[0] for row in results)
+
                     if existing_fills:
                         logger.info(f"Found {len(existing_fills)} duplicate fill_ids, skipping...")
                         df = df[~df['fill_id'].isin(existing_fills)]
 
-                # # Also check by datetime/symbol/quantity to catch duplicates without fill_id
-                # if 'datetime' in df.columns and 'symbol' in df.columns:
-                #     duplicates_to_remove = []
-                #     for idx, row in df.iterrows():
-                #         result = conn.execute("""
-                #             SELECT 1 FROM fills
-                #             WHERE account_id = ?
-                #             AND datetime = ?
-                #             AND symbol = ?
-                #             AND quantity = ?
-                #             AND price = ?
-                #             AND side = ?
-                #         """, (account_id, str(row['datetime']), str(row['symbol']),
-                #               float(row['quantity']), float(row['price']), str(row.get('side', ''))))
-
-                #         if result.fetchone():
-                #             duplicates_to_remove.append(idx)
-
-                #     if duplicates_to_remove:
-                #         logger.info(f"Found {len(duplicates_to_remove)} potential duplicates by transaction details")
-                #         df = df.drop(duplicates_to_remove)
-
             if not df.empty:
-                df.to_sql('fills', conn, if_exists='append', index=False, method='multi')
-                records_saved = len(df)
+                # Batch inserts to avoid "too many SQL variables" error
+                # SQLite limit is typically 999 variables, so calculate batch size based on columns
+                num_columns = len(available_cols)
+                batch_size = min(500, 900 // num_columns)  # Conservative batch size
+
+                for i in range(0, len(df), batch_size):
+                    batch_df = df.iloc[i:i + batch_size]
+                    batch_df.to_sql('fills', conn, if_exists='append', index=False, method='multi')
+                    records_saved += len(batch_df)
+
+                    if i + batch_size < len(df):
+                        logger.debug(f"Saved batch {i//batch_size + 1}, {records_saved}/{len(df)} fills")
 
             conn.commit()
 
         logger.info(f"Saved {records_saved} fill records for account {account_id}")
         return records_saved
 
-    def get_daily_summary(self,
-                         account_id: Optional[str] = None,
-                         start_date: Optional[date] = None,
-                         end_date: Optional[date] = None,
-                         symbols: Optional[List[str]] = None) -> pd.DataFrame:
-        """Get daily summary data with filters - ALWAYS sorted by date"""
+    def get_account_daily_summary(self,
+                                account_id: Optional[str] = None,
+                                start_date: Optional[date] = None,
+                                end_date: Optional[date] = None) -> pd.DataFrame:
+        """Get account daily summary data with filters - ALWAYS sorted by date"""
 
-        query = "SELECT * FROM daily_summary WHERE 1=1"
+        query = "SELECT * FROM account_daily_summary WHERE 1=1"
         params = []
 
         if account_id:
@@ -382,13 +473,8 @@ class DatabaseManager:
             query += " AND date <= ?"
             params.append(end_date)
 
-        if symbols:
-            placeholders = ','.join(['?' for _ in symbols])
-            query += f" AND symbol IN ({placeholders})"
-            params.extend(symbols)
-
-        # ALWAYS sort by date and symbol for consistent ordering
-        query += " ORDER BY account_id, date, symbol"
+        # ALWAYS sort by date for consistent ordering
+        query += " ORDER BY account_id, date"
 
         with self.get_connection() as conn:
             df = pd.read_sql_query(query, conn, params=params)
@@ -396,8 +482,7 @@ class DatabaseManager:
         # Convert date column
         if not df.empty and 'date' in df.columns:
             df['date'] = pd.to_datetime(df['date'])
-            # Set date as index for time series operations
-            df = df.sort_values(['account_id', 'date', 'symbol'])
+            df = df.sort_values(['account_id', 'date'])
 
         return df
 
@@ -437,7 +522,6 @@ class DatabaseManager:
         # Convert datetime column
         if not df.empty and 'datetime' in df.columns:
             df['datetime'] = pd.to_datetime(df['datetime'])
-            # Ensure proper ordering
             df = df.sort_values(['account_id', 'datetime'])
 
         return df
@@ -445,7 +529,24 @@ class DatabaseManager:
     def get_accounts(self) -> pd.DataFrame:
         """Get all accounts"""
         with self.get_connection() as conn:
-            return pd.read_sql_query("SELECT * FROM accounts ORDER BY account_id", conn)
+            df = pd.read_sql_query("""
+                SELECT
+                    account_id,
+                    account_name,
+                    account_type,
+                    created_at,
+                    updated_at
+                FROM accounts
+                ORDER BY account_id
+            """, conn)
+
+            # Update account types if missing
+            for idx, row in df.iterrows():
+                if pd.isna(row['account_type']) or row['account_type'] is None:
+                    account_type = self.update_account_type(row['account_id'])
+                    df.at[idx, 'account_type'] = account_type
+
+            return df
 
     def get_account_summary(self, account_id: str) -> Dict[str, Any]:
         """Get summary statistics for an account"""
@@ -454,22 +555,18 @@ class DatabaseManager:
             date_range = conn.execute("""
                 SELECT MIN(date) as first_date, MAX(date) as last_date,
                        COUNT(DISTINCT date) as trading_days
-                FROM daily_summary
+                FROM account_daily_summary
                 WHERE account_id = ?
             """, (account_id,)).fetchone()
 
             # Get P&L summary
             pl_summary = conn.execute("""
-                SELECT SUM(net_pl) as total_pl,
-                       AVG(net_pl) as avg_daily_pl,
-                       MAX(net_pl) as best_day,
-                       MIN(net_pl) as worst_day
-                FROM (
-                    SELECT date, SUM(net_pl) as net_pl
-                    FROM daily_summary
-                    WHERE account_id = ?
-                    GROUP BY date
-                )
+                SELECT SUM(net) as total_pl,
+                       AVG(net) as avg_daily_pl,
+                       MAX(net) as best_day,
+                       MIN(net) as worst_day
+                FROM account_daily_summary
+                WHERE account_id = ?
             """, (account_id,)).fetchone()
 
             # Get trade statistics
@@ -481,8 +578,12 @@ class DatabaseManager:
                 WHERE account_id = ?
             """, (account_id,)).fetchone()
 
+            # Detect account type using improved method
+            account_type = self.detect_account_type(account_id)
+
         return {
             'account_id': account_id,
+            'account_type': account_type,
             'first_date': date_range['first_date'],
             'last_date': date_range['last_date'],
             'trading_days': date_range['trading_days'],
@@ -494,6 +595,230 @@ class DatabaseManager:
             'unique_symbols': trade_stats['unique_symbols'] or 0,
             'total_fees': trade_stats['total_fees'] or 0
         }
+
+    def detect_account_type(self, account_id: str) -> str:
+        """
+        Detect account type using multiple indicators
+
+        Priority:
+        1. Type column in daily summary ('Op' = Options, 'Eq' = Equities)
+        2. Symbol patterns in fills (options have specific formats)
+        3. Fee columns as fallback
+        """
+        with self.get_connection() as conn:
+            # First, check the Type column - most reliable
+            type_check = conn.execute("""
+                SELECT type, COUNT(*) as count
+                FROM account_daily_summary
+                WHERE account_id = ?
+                GROUP BY type
+                ORDER BY count DESC
+                LIMIT 1
+            """, (account_id,)).fetchone()
+
+            if type_check and type_check['type']:
+                account_type = type_check['type'].strip().upper()
+                if account_type in ['OP', 'OPTIONS']:
+                    return 'Options'
+                elif account_type in ['EQ', 'EQUITIES']:
+                    return 'Equities'
+
+            # Second, check symbols in fills for options patterns
+            # Options symbols typically have formats like: SPY210319C00380000, AAPL 210319C00125000
+            symbol_check = conn.execute("""
+                SELECT symbol, COUNT(*) as trade_count
+                FROM fills
+                WHERE account_id = ?
+                    AND symbol IS NOT NULL
+                GROUP BY symbol
+                ORDER BY trade_count DESC
+                LIMIT 10
+            """, (account_id,)).fetchall()
+
+            if symbol_check:
+                options_patterns = 0
+                equity_patterns = 0
+
+                for row in symbol_check:
+                    symbol = str(row['symbol']).strip()
+                    # Check for options patterns:
+                    # - Contains numbers in middle/end (expiration date)
+                    # - Contains 'C' or 'P' (Call/Put)
+                    # - Length > 10 (options symbols are longer)
+                    if (len(symbol) > 10 and
+                        any(c in symbol for c in ['C', 'P']) and
+                        any(char.isdigit() for char in symbol[3:])):  # digits after first few chars
+                        options_patterns += row['trade_count']
+                    else:
+                        equity_patterns += row['trade_count']
+
+                # If more than 70% of trades look like options
+                if options_patterns > 0 and options_patterns / (options_patterns + equity_patterns) > 0.7:
+                    return 'Options'
+                elif equity_patterns > options_patterns:
+                    return 'Equities'
+
+            # Third, check fee columns as last resort
+            fee_check = conn.execute("""
+                SELECT
+                    CASE
+                        WHEN SUM(fee_daily_interest) > 0 THEN 'Options'
+                        WHEN SUM(fee_software_md) > 0 OR SUM(fee_vat) > 0 THEN 'Equities'
+                        ELSE 'Unknown'
+                    END as account_type
+                FROM account_daily_summary
+                WHERE account_id = ?
+            """, (account_id,)).fetchone()
+
+            if fee_check and fee_check['account_type'] != 'Unknown':
+                return fee_check['account_type']
+
+            return 'Unknown'
+
+    def parse_options_symbol(self, symbol: str) -> Optional[Dict[str, Any]]:
+        """
+        Parse options symbol to extract components
+
+        Common formats:
+        - OCC format: AAPL210319C00125000 (AAPL, 2021-03-19, Call, $125.00)
+        - Some brokers: AAPL 210319C00125000 or AAPL_210319C125
+
+        Returns dict with: underlying, expiration, type, strike
+        """
+        import re
+
+        symbol = symbol.strip().upper()
+
+        # Try different patterns
+        patterns = [
+            # OCC format: AAPL210319C00125000
+            r'^([A-Z]+)(\d{6})([CP])(\d+)$',
+            # With space: AAPL 210319C00125000
+            r'^([A-Z]+)\s+(\d{6})([CP])(\d+)$',
+            # Underscore format: AAPL_210319C125
+            r'^([A-Z]+)_(\d{6})([CP])(\d+)$',
+        ]
+
+        for pattern in patterns:
+            match = re.match(pattern, symbol)
+            if match:
+                underlying = match.group(1)
+                date_str = match.group(2)
+                option_type = 'Call' if match.group(3) == 'C' else 'Put'
+                strike_str = match.group(4)
+
+                # Parse date (YYMMDD format)
+                try:
+                    year = 2000 + int(date_str[:2])
+                    month = int(date_str[2:4])
+                    day = int(date_str[4:6])
+                    expiration = f"{year}-{month:02d}-{day:02d}"
+                except:
+                    expiration = date_str
+
+                # Parse strike price
+                try:
+                    # OCC format has 8 digits with 3 decimal places
+                    if len(strike_str) == 8:
+                        strike = float(strike_str) / 1000
+                    else:
+                        strike = float(strike_str)
+                except:
+                    strike = strike_str
+
+                return {
+                    'underlying': underlying,
+                    'expiration': expiration,
+                    'type': option_type,
+                    'strike': strike,
+                    'original': symbol
+                }
+
+        return None
+
+    def get_symbol_statistics(self, account_id: str) -> Dict[str, Any]:
+        """
+        Get symbol trading statistics for an account
+        Useful for understanding trading patterns and account type
+        """
+        with self.get_connection() as conn:
+            # Get top traded symbols
+            top_symbols = pd.read_sql_query("""
+                SELECT
+                    symbol,
+                    COUNT(*) as trade_count,
+                    SUM(quantity) as total_volume,
+                    AVG(price) as avg_price,
+                    MIN(datetime) as first_trade,
+                    MAX(datetime) as last_trade
+                FROM fills
+                WHERE account_id = ?
+                GROUP BY symbol
+                ORDER BY trade_count DESC
+                LIMIT 20
+            """, conn, params=[account_id])
+
+            # Analyze symbol patterns
+            options_symbols = []
+            equity_symbols = []
+
+            for _, row in top_symbols.iterrows():
+                symbol = str(row['symbol'])
+                options_data = self.parse_options_symbol(symbol)
+
+                if options_data:
+                    options_symbols.append({
+                        'symbol': symbol,
+                        'underlying': options_data['underlying'],
+                        'type': options_data['type'],
+                        'strike': options_data['strike'],
+                        'expiration': options_data['expiration'],
+                        'trades': row['trade_count']
+                    })
+                else:
+                    equity_symbols.append({
+                        'symbol': symbol,
+                        'trades': row['trade_count']
+                    })
+
+            # Get trading style metrics
+            style_metrics = conn.execute("""
+                SELECT
+                    AVG(quantity) as avg_trade_size,
+                    COUNT(DISTINCT DATE(datetime)) as trading_days,
+                    COUNT(DISTINCT symbol) as unique_symbols,
+                    COUNT(*) as total_trades,
+                    COUNT(CASE WHEN side = 'B' THEN 1 END) as buy_trades,
+                    COUNT(CASE WHEN side = 'S' THEN 1 END) as sell_trades
+                FROM fills
+                WHERE account_id = ?
+            """, (account_id,)).fetchone()
+
+            # Get underlying distribution for options
+            underlying_dist = {}
+            if options_symbols:
+                for opt in options_symbols:
+                    underlying = opt['underlying']
+                    if underlying not in underlying_dist:
+                        underlying_dist[underlying] = {'calls': 0, 'puts': 0, 'total': 0}
+                    underlying_dist[underlying]['total'] += opt['trades']
+                    if opt['type'] == 'Call':
+                        underlying_dist[underlying]['calls'] += opt['trades']
+                    else:
+                        underlying_dist[underlying]['puts'] += opt['trades']
+
+            return {
+                'top_symbols': top_symbols.to_dict('records') if not top_symbols.empty else [],
+                'symbol_analysis': {
+                    'options_symbols': len(options_symbols),
+                    'equity_symbols': len(equity_symbols),
+                    'likely_type': 'Options' if len(options_symbols) > len(equity_symbols) else 'Equities',
+                    'options_details': options_symbols[:10],  # Top 10 options
+                    'equity_details': equity_symbols[:10],   # Top 10 equities
+                    'underlying_distribution': underlying_dist
+                },
+                'trading_metrics': dict(style_metrics) if style_metrics else {}
+            }
 
     def record_data_load(self, account_id: str, data_type: str,
                         start_date: date, end_date: date, records: int) -> None:
@@ -511,14 +836,14 @@ class DatabaseManager:
             stats = {}
 
             # Table sizes
-            for table in ['accounts', 'daily_summary', 'fills', 'data_loads']:
+            for table in ['accounts', 'account_daily_summary', 'fills', 'data_loads']:
                 count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
                 stats[f'{table}_count'] = count
 
             # Date ranges
             date_range = conn.execute("""
                 SELECT MIN(date) as min_date, MAX(date) as max_date
-                FROM daily_summary
+                FROM account_daily_summary
             """).fetchone()
 
             stats['date_range'] = f"{date_range['min_date']} to {date_range['max_date']}" if date_range['min_date'] else "No data"
@@ -528,29 +853,119 @@ class DatabaseManager:
 
         return stats
 
-    def remove_duplicates(self) -> Dict[str, int]:
-        """
-        Remove duplicate records from database
+    def get_download_status(self) -> pd.DataFrame:
+        """Get status of data downloads"""
+        with self.get_connection() as conn:
+            query = """
+                SELECT
+                    dl.account_id,
+                    a.account_name,
+                    dl.data_type,
+                    dl.start_date,
+                    dl.end_date,
+                    dl.records_loaded,
+                    dl.loaded_at,
+                    dl.status
+                FROM data_loads dl
+                JOIN accounts a ON dl.account_id = a.account_id
+                ORDER BY dl.loaded_at DESC
+                LIMIT 100
+            """
+            return pd.read_sql_query(query, conn)
 
-        Returns:
-            Dictionary with number of duplicates removed per table
+    def get_data_summary(self) -> Dict[str, pd.DataFrame]:
+        """Get summary of downloaded data"""
+        with self.get_connection() as conn:
+            # Summary by trader
+            trader_summary = pd.read_sql_query("""
+                SELECT
+                    a.account_id,
+                    a.account_name,
+                    COALESCE(a.account_type, 'Unknown') as account_type,
+                    COUNT(DISTINCT ads.date) as trading_days,
+                    MIN(ads.date) as first_date,
+                    MAX(ads.date) as last_date,
+                    SUM(ads.net) as total_pnl,
+                    COUNT(DISTINCT f.fill_id) as total_fills
+                FROM accounts a
+                LEFT JOIN account_daily_summary ads ON a.account_id = ads.account_id
+                LEFT JOIN fills f ON a.account_id = f.account_id
+                GROUP BY a.account_id, a.account_name, a.account_type
+                ORDER BY a.account_name
+            """, conn)
+
+            # Update account types if missing
+            for idx, row in trader_summary.iterrows():
+                if row['account_type'] == 'Unknown':
+                    account_type = self.update_account_type(row['account_id'])
+                    trader_summary.at[idx, 'account_type'] = account_type
+
+            # Recent activity
+            recent_activity = pd.read_sql_query("""
+                SELECT
+                    DATE(loaded_at) as load_date,
+                    COUNT(DISTINCT account_id) as traders_updated,
+                    SUM(records_loaded) as total_records,
+                    COUNT(DISTINCT data_type) as data_types
+                FROM data_loads
+                WHERE loaded_at >= datetime('now', '-7 days')
+                GROUP BY DATE(loaded_at)
+                ORDER BY load_date DESC
+            """, conn)
+
+            return {
+                'trader_summary': trader_summary,
+                'recent_activity': recent_activity
+            }
+
+    def get_trader_time_series(self, account_id: str,
+                               start_date: Optional[date] = None,
+                               end_date: Optional[date] = None) -> pd.DataFrame:
         """
+        Get properly ordered time series data for a trader
+        """
+        # Convert dates to strings if they're date objects
+        if isinstance(start_date, date):
+            start_date = start_date.strftime('%Y-%m-%d')
+        if isinstance(end_date, date):
+            end_date = end_date.strftime('%Y-%m-%d')
+
+        # Get daily data
+        daily_data = self.get_account_daily_summary(
+            account_id=account_id,
+            start_date=start_date,
+            end_date=end_date
+        )
+
+        if daily_data.empty:
+            return pd.DataFrame()
+
+        # Set date as index
+        daily_data = daily_data.set_index('date')
+
+        # Add derived columns
+        daily_data['cumulative_pl'] = daily_data['net'].cumsum()
+        daily_data['trading_days'] = (daily_data['fills'] > 0).cumsum()
+
+        return daily_data
+
+    def remove_duplicates(self) -> Dict[str, int]:
+        """Remove duplicate records from database"""
         removed = {}
 
         with self.get_connection() as conn:
-            # Remove duplicate daily summaries (keep the most recent insert)
+            # Remove duplicate daily summaries
             result = conn.execute("""
-                DELETE FROM daily_summary
+                DELETE FROM account_daily_summary
                 WHERE id NOT IN (
                     SELECT MAX(id)
-                    FROM daily_summary
-                    GROUP BY account_id, date, symbol
+                    FROM account_daily_summary
+                    GROUP BY account_id, date
                 )
             """)
-            removed['daily_summary'] = result.rowcount
+            removed['account_daily_summary'] = result.rowcount
 
             # Remove duplicate fills
-            # First by fill_id (if available)
             result = conn.execute("""
                 DELETE FROM fills
                 WHERE id NOT IN (
@@ -563,137 +978,19 @@ class DatabaseManager:
             """)
             removed['fills_by_fill_id'] = result.rowcount
 
-            # Then by transaction details for fills without fill_id
-            result = conn.execute("""
-                DELETE FROM fills
-                WHERE id NOT IN (
-                    SELECT MIN(id)
-                    FROM fills
-                    GROUP BY account_id, datetime, symbol, quantity, price, side
-                )
-            """)
-            removed['fills_by_details'] = result.rowcount
-
             conn.commit()
 
         logger.info(f"Removed duplicates: {removed}")
         return removed
 
-    def check_duplicates(self) -> Dict[str, pd.DataFrame]:
-        """
-        Check for duplicate records in database
-
-        Returns:
-            Dictionary with DataFrames showing duplicates per table
-        """
-        duplicates = {}
-
-        with self.get_connection() as conn:
-            # Check daily_summary duplicates
-            daily_dupes = pd.read_sql_query("""
-                SELECT account_id, date, symbol, COUNT(*) as duplicate_count
-                FROM daily_summary
-                GROUP BY account_id, date, symbol
-                HAVING COUNT(*) > 1
-                ORDER BY duplicate_count DESC
-            """, conn)
-
-            if not daily_dupes.empty:
-                duplicates['daily_summary'] = daily_dupes
-
-            # Check fills duplicates by fill_id
-            fill_dupes_by_id = pd.read_sql_query("""
-                SELECT account_id, fill_id, COUNT(*) as duplicate_count
-                FROM fills
-                WHERE fill_id IS NOT NULL
-                GROUP BY account_id, fill_id
-                HAVING COUNT(*) > 1
-                ORDER BY duplicate_count DESC
-            """, conn)
-
-            if not fill_dupes_by_id.empty:
-                duplicates['fills_by_fill_id'] = fill_dupes_by_id
-
-            # Check fills duplicates by transaction details
-            fill_dupes_by_details = pd.read_sql_query("""
-                SELECT account_id, datetime, symbol, quantity, price, side,
-                       COUNT(*) as duplicate_count
-                FROM fills
-                GROUP BY account_id, datetime, symbol, quantity, price, side
-                HAVING COUNT(*) > 1
-                ORDER BY duplicate_count DESC
-                LIMIT 20
-            """, conn)
-
-            if not fill_dupes_by_details.empty:
-                duplicates['fills_by_details'] = fill_dupes_by_details
-
-        return duplicates
-
-    def check_time_order_issues(self) -> Dict[str, pd.DataFrame]:
-        """
-        Check for time order issues in the database
-
-        Returns:
-            Dictionary with DataFrames showing time order problems
-        """
-        issues = {}
-
-        with self.get_connection() as conn:
-            # Check if daily_summary has proper date ordering
-            # This query finds cases where a later id has an earlier date
-            daily_issues = pd.read_sql_query("""
-                SELECT
-                    t1.id as id1,
-                    t1.account_id,
-                    t1.date as date1,
-                    t1.symbol,
-                    t2.id as id2,
-                    t2.date as date2
-                FROM daily_summary t1
-                JOIN daily_summary t2
-                    ON t1.account_id = t2.account_id
-                    AND t1.symbol = t2.symbol
-                    AND t1.id > t2.id
-                    AND t1.date < t2.date
-                LIMIT 100
-            """, conn)
-
-            if not daily_issues.empty:
-                issues['daily_summary_order'] = daily_issues
-
-            # Check fills for time order issues
-            fills_issues = pd.read_sql_query("""
-                SELECT
-                    t1.id as id1,
-                    t1.account_id,
-                    t1.datetime as datetime1,
-                    t1.symbol,
-                    t2.id as id2,
-                    t2.datetime as datetime2
-                FROM fills t1
-                JOIN fills t2
-                    ON t1.account_id = t2.account_id
-                    AND t1.id > t2.id
-                    AND t1.datetime < t2.datetime
-                LIMIT 100
-            """, conn)
-
-            if not fills_issues.empty:
-                issues['fills_order'] = fills_issues
-
-        return issues
-
     def create_time_ordered_views(self):
-        """
-        Create views that always return data in proper time order
-        """
+        """Create views that always return data in proper time order"""
         with self.get_connection() as conn:
-            # Create ordered view for daily summaries
+            # Create ordered view for account daily summaries
             conn.execute("""
-                CREATE VIEW IF NOT EXISTS daily_summary_ordered AS
-                SELECT * FROM daily_summary
-                ORDER BY account_id, date, symbol
+                CREATE VIEW IF NOT EXISTS account_summary_ordered AS
+                SELECT * FROM account_daily_summary
+                ORDER BY account_id, date
             """)
 
             # Create ordered view for fills
@@ -703,134 +1000,5 @@ class DatabaseManager:
                 ORDER BY account_id, datetime
             """)
 
-            # Create a view for aggregated daily P&L
-            conn.execute("""
-                CREATE VIEW IF NOT EXISTS daily_pnl AS
-                SELECT
-                    account_id,
-                    date,
-                    SUM(net_pl) as total_net_pl,
-                    SUM(gross_pl) as total_gross_pl,
-                    SUM(trades) as total_trades,
-                    COUNT(DISTINCT symbol) as symbols_traded
-                FROM daily_summary
-                GROUP BY account_id, date
-                ORDER BY account_id, date
-            """)
-
             conn.commit()
             logger.info("Created time-ordered views")
-
-    def get_trader_time_series(self, account_id: str,
-                               start_date: Optional[date] = None,
-                               end_date: Optional[date] = None) -> pd.DataFrame:
-        """
-        Get properly ordered time series data for a trader
-        Ensures data is ready for time series analysis
-        """
-        # Convert dates to strings if they're date objects
-        if isinstance(start_date, date):
-            start_date = start_date.strftime('%Y-%m-%d')
-        if isinstance(end_date, date):
-            end_date = end_date.strftime('%Y-%m-%d')
-
-        # Get daily data
-        daily_data = self.get_daily_summary(
-            account_id=account_id,
-            start_date=start_date,
-            end_date=end_date
-        )
-
-        if daily_data.empty:
-            return pd.DataFrame()
-
-        # Aggregate by date
-        time_series = daily_data.groupby('date').agg({
-            'net_pl': 'sum',
-            'gross_pl': 'sum',
-            'trades': 'sum',
-            'orders': 'sum',
-            'fills': 'sum',
-            'volume': 'sum',
-            'symbol': 'count'  # Number of symbols traded
-        }).rename(columns={'symbol': 'symbols_traded'})
-
-        # Ensure continuous time series (fill missing trading days)
-        if len(time_series) > 1:
-            # Create date range for all trading days
-            date_range = pd.date_range(
-                start=time_series.index.min(),
-                end=time_series.index.max(),
-                freq='B'  # Business days
-            )
-
-            # Reindex to include all trading days
-            time_series = time_series.reindex(date_range)
-
-            # Fill missing values appropriately
-            fill_values = {
-                'net_pl': 0,
-                'gross_pl': 0,
-                'trades': 0,
-                'orders': 0,
-                'fills': 0,
-                'volume': 0,
-                'symbols_traded': 0
-            }
-            time_series = time_series.fillna(fill_values)
-
-            # Add cumulative columns
-            time_series['cumulative_pl'] = time_series['net_pl'].cumsum()
-            time_series['trading_days'] = (time_series['trades'] > 0).cumsum()
-
-        return time_series
-
-    def validate_time_consistency(self, account_id: str) -> Dict[str, Any]:
-        """
-        Validate time consistency for an account
-
-        Returns:
-            Dictionary with validation results
-        """
-        validation = {
-            'is_valid': True,
-            'issues': [],
-            'stats': {}
-        }
-
-        # Get time series
-        ts = self.get_trader_time_series(account_id)
-
-        if ts.empty:
-            validation['is_valid'] = False
-            validation['issues'].append("No data found for account")
-            return validation
-
-        # Check for gaps
-        expected_days = pd.bdate_range(ts.index.min(), ts.index.max())
-        missing_days = expected_days.difference(ts.index)
-
-        if len(missing_days) > 0:
-            validation['stats']['missing_trading_days'] = len(missing_days)
-            if len(missing_days) > len(expected_days) * 0.1:  # More than 10% missing
-                validation['issues'].append(f"Missing {len(missing_days)} trading days")
-
-        # Check for duplicate dates in raw data
-        daily_data = self.get_daily_summary(account_id=account_id)
-        date_counts = daily_data.groupby(['date', 'symbol']).size()
-        duplicates = date_counts[date_counts > 1]
-
-        if not duplicates.empty:
-            validation['is_valid'] = False
-            validation['issues'].append(f"Found {len(duplicates)} duplicate date/symbol combinations")
-            validation['stats']['duplicates'] = duplicates.to_dict()
-
-        # Check time order consistency
-        if not daily_data['date'].is_monotonic_increasing:
-            validation['issues'].append("Data is not properly time-ordered")
-
-        validation['stats']['date_range'] = (ts.index.min(), ts.index.max())
-        validation['stats']['total_days'] = len(ts)
-        validation['stats']['trading_days'] = (ts['trades'] > 0).sum()
-
-        return validation

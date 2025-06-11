@@ -1,6 +1,7 @@
 """
 PropreReports Parser
 Handles parsing of PropreReports CSV files with proper format detection
+Updated to support new summaryByDate format
 """
 
 import pandas as pd
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 class PropreReportsParser:
     """
     Parser for PropreReports CSV files
-    Handles both totals by date and fills reports
+    Handles both summaryByDate and fills reports
     """
 
     def __init__(self):
@@ -29,10 +30,20 @@ class PropreReportsParser:
             'Fill Id', 'Currency', 'ISIN', 'CUSIP', 'Status', 'PropReports Id'
         ]
 
-        self.totals_columns = [
-            'Symbol', 'Orders', 'Fills', 'Shares', 'Gross P&L', 'Net P&L',
-            'Unrealized', 'Total', 'Volume', 'High', 'Low', 'Open Shares',
-            'Closed P&L', 'Trades'
+        # Essential columns common to both equities and options summaryByDate reports
+        self.summary_essential_columns = [
+            'Date', 'Type', 'Orders', 'Fills', 'Qty', 'Gross', 'Comm',
+            'Ecn Fee', 'SEC', 'ORF', 'CAT', 'TAF', 'FTT', 'NSCC', 'Acc',
+            'Clr', 'Misc', 'Trade Fees', 'Net', 'Adj Fees', 'Adj Net',
+            'Unrealized Δ', 'Total Δ', 'Transfer: Deposit', 'Transfers',
+            'Cash', 'Unrealized', 'End Balance'
+        ]
+
+        # Optional columns that may vary between account types
+        self.summary_optional_columns = [
+            'Fee: Software & MD',  # Equities accounts
+            'Fee: VAT',            # Equities accounts
+            'Fee: Daily Interest'  # Options accounts
         ]
 
     def parse_csv_file(self, file_path: str) -> Tuple[pd.DataFrame, str]:
@@ -44,7 +55,7 @@ class PropreReportsParser:
 
         Returns:
             Tuple of (DataFrame, report_type)
-            report_type is either 'fills' or 'totals'
+            report_type is either 'fills' or 'summary'
         """
         file_path = Path(file_path)
 
@@ -58,10 +69,10 @@ class PropreReportsParser:
             logger.info(f"Detected fills report from filename: {filename}")
             df = self.parse_fills_report(file_path)
             return df, 'fills'
-        elif 'tbd' in filename or 'total' in filename:
-            logger.info(f"Detected totals report from filename: {filename}")
-            df = self.parse_totals_report(file_path)
-            return df, 'totals'
+        elif 'summary' in filename or 'summarybydate' in filename:
+            logger.info(f"Detected summary report from filename: {filename}")
+            df = self.parse_summary_report(file_path)
+            return df, 'summary'
         else:
             # Try to detect from content
             logger.info("Detecting report type from content...")
@@ -90,85 +101,75 @@ class PropreReportsParser:
             logger.error(f"Error parsing fills report: {e}")
             raise
 
-    def parse_totals_report(self, file_path: str) -> pd.DataFrame:
-        """Parse totals by date report CSV"""
+    def parse_summary_report(self, file_path: str) -> pd.DataFrame:
+        """Parse summaryByDate report CSV"""
         try:
-            # Read the file content first to handle multi-date format
-            with open(file_path, 'r') as f:
-                content = f.read()
+            # Read CSV directly
+            df = pd.read_csv(file_path)
 
-            # Parse the complex format
-            df = self._parse_totals_content(content)
+            # Check if last row is "Equities" or "Options" summary and remove it
+            if not df.empty and 'Date' in df.columns:
+                last_date_value = str(df.iloc[-1]['Date']).strip()
+                if last_date_value in ['Equities', 'Options', 'Eq', 'Op']:
+                    logger.info(f"Removing '{last_date_value}' summary row")
+                    df = df.iloc[:-1]
 
-            logger.info(f"Parsed {len(df)} daily totals from {file_path}")
+            # Log which columns we found
+            found_columns = set(df.columns)
+            essential_missing = set(self.summary_essential_columns) - found_columns
+            if essential_missing:
+                logger.warning(f"Missing essential columns: {essential_missing}")
+
+            # Log any optional columns found
+            optional_found = found_columns & set(self.summary_optional_columns)
+            if optional_found:
+                logger.info(f"Found optional columns: {optional_found}")
+
+            # Clean and convert data types
+            df = self._clean_summary_data(df)
+
+            # Detect account type
+            account_type = self.detect_account_type(df)
+            logger.info(f"Detected account type: {account_type}")
+
+            logger.info(f"Parsed {len(df)} daily summaries from {file_path}")
             return df
 
         except Exception as e:
-            logger.error(f"Error parsing totals report: {e}")
+            logger.error(f"Error parsing summary report: {e}")
             raise
 
-    def _parse_totals_content(self, content: str) -> pd.DataFrame:
-        """
-        Parse the totals by date content which has multiple dates
-        Each date section starts with a date line (MM/DD/YYYY)
-        """
-        lines = content.strip().split('\n')
-        all_data = []
-        current_date = None
-        date_pattern = r'^\d{1,2}/\d{1,2}/\d{4}$'
+    def _clean_summary_data(self, df: pd.DataFrame) -> pd.DataFrame:
+        """Clean and standardize summary data"""
+        # Convert date
+        if 'Date' in df.columns:
+            df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
+            # Remove any rows where Date conversion failed (like "Equities"/"Options" row)
+            df = df.dropna(subset=['Date'])
 
-        i = 0
-        while i < len(lines):
-            line = lines[i].strip()
+        # List of all numeric columns (essential + optional)
+        numeric_columns = [
+            'Orders', 'Fills', 'Qty', 'Gross', 'Comm', 'Ecn Fee', 'SEC',
+            'ORF', 'CAT', 'TAF', 'FTT', 'NSCC', 'Acc', 'Clr', 'Misc',
+            'Trade Fees', 'Net', 'Adj Fees', 'Adj Net', 'Unrealized Δ',
+            'Total Δ', 'Transfer: Deposit', 'Transfers', 'Cash', 'Unrealized',
+            'End Balance',
+            # Optional columns
+            'Fee: Software & MD', 'Fee: VAT', 'Fee: Daily Interest'
+        ]
 
-            # Check if this line is a date
-            if re.match(date_pattern, line):
-                current_date = pd.to_datetime(line).date()
-                logger.debug(f"Found date: {current_date}")
-                i += 1
-                continue
+        for col in numeric_columns:
+            if col in df.columns:
+                # Handle parentheses for negative numbers and remove commas
+                df[col] = df[col].astype(str).str.replace(',', '')
+                df[col] = df[col].str.replace(r'\(([0-9.]+)\)', r'-\1', regex=True)
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
-            # Look for the header line that starts with "Symbol"
-            if line.startswith('Symbol,') and current_date:
-                # Found header, parse the data section
-                header = line.split(',')
-                i += 1
+        # Clean Type column
+        if 'Type' in df.columns:
+            df['Type'] = df['Type'].str.strip()
 
-                # Read data lines until we hit a summary or new date
-                while i < len(lines):
-                    data_line = lines[i].strip()
-
-                    # Stop conditions
-                    if (not data_line or
-                        data_line.startswith('Fee:') or
-                        data_line.startswith('Daily Total') or
-                        re.match(date_pattern, data_line) or
-                        'Page' in data_line):
-                        break
-
-                    # Parse data line
-                    try:
-                        values = data_line.split(',')
-                        if len(values) >= len(header) and values[0] not in ['', 'Symbol']:
-                            row_data = {
-                                'Date': current_date,
-                                **{header[j]: self._parse_value(values[j])
-                                   for j in range(min(len(header), len(values)))}
-                            }
-                            all_data.append(row_data)
-                    except Exception as e:
-                        logger.debug(f"Skipping line: {data_line} - Error: {e}")
-
-                    i += 1
-            else:
-                i += 1
-
-        # Convert to DataFrame
-        if all_data:
-            df = pd.DataFrame(all_data)
-            return df
-        else:
-            return pd.DataFrame()
+        return df
 
     def _clean_fills_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean and standardize fills data"""
@@ -194,30 +195,6 @@ class PropreReportsParser:
 
         return df
 
-    def _parse_value(self, value: str) -> Any:
-        """Parse a string value to appropriate type"""
-        value = value.strip()
-
-        # Empty or dash values
-        if not value or value == '-':
-            return None
-
-        # Try to parse as number
-        try:
-            # Remove commas and parentheses for negative numbers
-            clean_value = value.replace(',', '')
-            if clean_value.startswith('(') and clean_value.endswith(')'):
-                clean_value = '-' + clean_value[1:-1]
-
-            # Try float
-            if '.' in clean_value:
-                return float(clean_value)
-            else:
-                return int(clean_value)
-        except ValueError:
-            # Return as string
-            return value
-
     def detect_and_parse(self, file_path: str) -> pd.DataFrame:
         """Detect report type and parse accordingly"""
         # Try reading first few lines
@@ -227,16 +204,22 @@ class PropreReportsParser:
         # Check for fills report signature
         if any('Date/Time' in line and 'Symbol' in line for line in first_lines):
             return self.parse_fills_report(file_path)
+        # Check for summary report signature - look for common essential columns
+        elif any('Date' in line and 'Type' in line and 'Orders' in line and 'Net' in line for line in first_lines):
+            return self.parse_summary_report(file_path)
         else:
-            # Assume totals report
-            return self.parse_totals_report(file_path)
+            # Try both and see which works
+            try:
+                return self.parse_summary_report(file_path)
+            except:
+                return self.parse_fills_report(file_path)
 
     def _detect_report_type(self, df: pd.DataFrame) -> str:
         """Detect report type from DataFrame columns"""
         if 'Date/Time' in df.columns and 'B/S' in df.columns:
             return 'fills'
-        elif 'Date' in df.columns and 'Symbol' in df.columns:
-            return 'totals'
+        elif 'Date' in df.columns and 'Type' in df.columns and 'Net' in df.columns:
+            return 'summary'
         else:
             raise ValueError("Unable to determine report type from columns")
 
@@ -274,19 +257,70 @@ class PropreReportsParser:
                 validation['stats']['unique_symbols'] = df['Symbol'].nunique()
                 validation['stats']['total_trades'] = len(df)
 
-        elif report_type == 'totals':
-            # Validate totals data
-            required_cols = ['Date', 'Symbol', 'Net P&L']
+        elif report_type == 'summary':
+            # Validate summary data - only check essential columns
+            required_cols = ['Date', 'Type', 'Net']
             missing = [col for col in required_cols if col not in df.columns]
             if missing:
                 validation['errors'].append(f"Missing required columns: {missing}")
                 validation['is_valid'] = False
+
+            # Check essential columns
+            essential_missing = [col for col in self.summary_essential_columns if col not in df.columns]
+            if essential_missing:
+                validation['warnings'].append(f"Missing essential columns: {essential_missing}")
 
             # Stats
             if 'Date' in df.columns:
                 validation['stats']['date_range'] = (df['Date'].min(), df['Date'].max())
                 validation['stats']['total_days'] = df['Date'].nunique()
 
+            if 'Net' in df.columns:
+                validation['stats']['total_net_pnl'] = df['Net'].sum()
+
+            if 'Type' in df.columns:
+                validation['stats']['account_type'] = df['Type'].iloc[0] if not df.empty else 'Unknown'
+
         validation['stats']['total_rows'] = len(df)
 
         return validation
+
+    def _parse_value(self, value: str) -> Any:
+        """Parse a string value to appropriate type"""
+        value = str(value).strip()
+
+        # Empty or dash values
+        if not value or value == '-':
+            return None
+
+        # Try to parse as number
+        try:
+            # Remove commas and parentheses for negative numbers
+            clean_value = value.replace(',', '')
+            if clean_value.startswith('(') and clean_value.endswith(')'):
+                clean_value = '-' + clean_value[1:-1]
+
+            # Try float
+            if '.' in clean_value:
+                return float(clean_value)
+            else:
+                return int(clean_value)
+        except ValueError:
+            # Return as string
+            return value
+
+    def detect_account_type(self, df: pd.DataFrame) -> str:
+        """Detect whether account is Equities or Options based on columns"""
+        if 'Fee: Software & MD' in df.columns or 'Fee: VAT' in df.columns:
+            return 'Equities'
+        elif 'Fee: Daily Interest' in df.columns:
+            return 'Options'
+        else:
+            # Default based on Type column if available
+            if 'Type' in df.columns and not df.empty:
+                first_type = str(df['Type'].iloc[0]).strip()
+                if first_type in ['Eq', 'Equities']:
+                    return 'Equities'
+                elif first_type in ['Op', 'Options']:
+                    return 'Options'
+            return 'Unknown'
