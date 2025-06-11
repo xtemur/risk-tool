@@ -5,7 +5,7 @@ Proper cross-validation for financial time series with purging and embargo
 
 import pandas as pd
 import numpy as np
-from typing import Iterator, Tuple, Optional, List, Union
+from typing import Iterator, Tuple, Optional, List, Union, Dict
 from dataclasses import dataclass
 import logging
 from datetime import timedelta
