@@ -2,6 +2,7 @@
 Data Downloader for PropreReports
 Simplified API client that downloads and stores trading data
 Updated to use summaryByDate instead of totalsByDate
+Modified to save CSV files for backup/debugging
 """
 
 import os
@@ -15,6 +16,7 @@ from pathlib import Path
 import yaml
 from dotenv import load_dotenv
 import pandas as pd
+import shutil
 
 from src.data.database_manager import DatabaseManager
 from src.data.propreports_parser import PropreReportsParser
@@ -30,13 +32,15 @@ class DataDownloader:
 
     def __init__(self,
                  db_manager: Optional[DatabaseManager] = None,
-                 parser: Optional[PropreReportsParser] = None):
+                 parser: Optional[PropreReportsParser] = None,
+                 backup_dir: str = "data/csv_backups"):
         """
         Initialize downloader
 
         Args:
             db_manager: Database manager instance
             parser: PropreReports parser instance
+            backup_dir: Directory to save CSV backups
         """
         self.token = os.getenv('API_TOKEN')
         self.api_url = os.getenv('API_URL', 'https://api.proprereports.com/api.php')
@@ -50,8 +54,22 @@ class DataDownloader:
         # Load traders config
         self.traders = self._load_traders()
 
+        # Create trader lookup dict for easy name access
+        self.trader_lookup = {str(t['account_id']): t['name'] for t in self.traders}
+
         # Rate limiting
         self.request_delay = 0.5  # seconds between requests
+
+        # Backup directory
+        self.backup_dir = Path(backup_dir)
+        self._ensure_backup_directories()
+
+    def _ensure_backup_directories(self):
+        """Create backup directory structure if it doesn't exist"""
+        self.backup_dir.mkdir(parents=True, exist_ok=True)
+        (self.backup_dir / 'summary').mkdir(exist_ok=True)
+        (self.backup_dir / 'fills').mkdir(exist_ok=True)
+        logger.info(f"Backup directory created/verified at: {self.backup_dir}")
 
     def _load_traders(self) -> List[Dict]:
         """Load trader configuration"""
@@ -63,6 +81,46 @@ class DataDownloader:
             config = yaml.safe_load(f)
 
         return config.get('traders', [])
+
+    def _get_backup_filename(self, account_id: str, data_type: str,
+                           start_date: date, end_date: date,
+                           page: Optional[int] = None) -> Path:
+        """
+        Generate backup filename with account name and dates
+
+        Args:
+            account_id: Account ID
+            data_type: 'summary' or 'fills'
+            start_date: Start date of data
+            end_date: End date of data
+            page: Page number for paginated data
+
+        Returns:
+            Path to backup file
+        """
+        # Get trader name, sanitize for filename
+        trader_name = self.trader_lookup.get(account_id, f"unknown_{account_id}")
+        trader_name = re.sub(r'[^\w\s-]', '', trader_name).strip().replace(' ', '_')
+
+        # Format dates
+        date_range = f"{start_date.strftime('%Y%m%d')}-{end_date.strftime('%Y%m%d')}"
+
+        # Create filename
+        if page is not None:
+            filename = f"{trader_name}_{account_id}_{date_range}_page{page}.csv"
+        else:
+            filename = f"{trader_name}_{account_id}_{date_range}.csv"
+
+        # Return full path
+        return self.backup_dir / data_type / filename
+
+    def _save_backup(self, temp_file: Path, backup_path: Path):
+        """Save temporary file as backup"""
+        try:
+            shutil.copy2(temp_file, backup_path)
+            logger.info(f"CSV backup saved: {backup_path.name}")
+        except Exception as e:
+            logger.error(f"Failed to save backup: {e}")
 
     def _extract_total_pages(self, csv_content: str) -> Optional[int]:
         """Extract total pages from CSV content"""
@@ -91,7 +149,7 @@ class DataDownloader:
         return current_page < total_pages, total_pages
 
     def download_all_data(self,
-                         days_back: int = 365,
+                         days_back: int = 1000,
                          data_types: List[str] = ['summary', 'fills']) -> Dict[str, Dict]:
         """
         Download all data for all traders
@@ -176,6 +234,11 @@ class DataDownloader:
             # Parse CSV
             df, report_type = self.parser.parse_csv_file(temp_file)
 
+
+            # Save backup copy
+            backup_path = self._get_backup_filename(account_id, 'summary', start_date, end_date)
+            self._save_backup(temp_file, backup_path)
+
             if not df.empty:
                 # Save to database
                 records = self.db.save_account_daily_summary(df, account_id)
@@ -183,6 +246,7 @@ class DataDownloader:
                 logger.info(f"Saved {records} summary records")
             else:
                 logger.warning(f"Empty dataframe returned for {account_id}")
+
 
         finally:
             # Clean up temp file
@@ -241,6 +305,10 @@ class DataDownloader:
             try:
                 # Parse CSV
                 df, report_type = self.parser.parse_csv_file(temp_file)
+
+                # Save backup copy
+                backup_path = self._get_backup_filename(account_id, 'fills', start_date, end_date, page)
+                self._save_backup(temp_file, backup_path)
 
                 if not df.empty:
                     # Save to database
@@ -341,3 +409,30 @@ class DataDownloader:
             validation_results[account_id] = validation
 
         return validation_results
+
+    def get_backup_info(self) -> Dict[str, Any]:
+        """Get information about backed up CSV files"""
+        backup_info = {
+            'backup_directory': str(self.backup_dir),
+            'summary_files': [],
+            'fills_files': [],
+            'total_size_mb': 0
+        }
+
+        # Get summary files
+        summary_dir = self.backup_dir / 'summary'
+        if summary_dir.exists():
+            backup_info['summary_files'] = [f.name for f in summary_dir.glob('*.csv')]
+
+        # Get fills files
+        fills_dir = self.backup_dir / 'fills'
+        if fills_dir.exists():
+            backup_info['fills_files'] = [f.name for f in fills_dir.glob('*.csv')]
+
+        # Calculate total size
+        total_size = 0
+        for csv_file in self.backup_dir.rglob('*.csv'):
+            total_size += csv_file.stat().st_size
+        backup_info['total_size_mb'] = round(total_size / (1024 * 1024), 2)
+
+        return backup_info

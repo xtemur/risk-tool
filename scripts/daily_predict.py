@@ -41,7 +41,7 @@ def setup_logging():
     )
 
 
-def download_recent_data(db: Database, days_back: int = 7) -> bool:
+def download_recent_data(db: Database, days_back: int = 3) -> bool:
     """Download recent data for all traders"""
     logger = logging.getLogger(__name__)
     logger.info(f"Downloading last {days_back} days of data")

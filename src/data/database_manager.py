@@ -110,7 +110,7 @@ class DatabaseManager:
                     datetime TIMESTAMP NOT NULL,
                     side TEXT CHECK(side IN ('B', 'S', 'T')),
                     quantity INTEGER NOT NULL,
-                    symbol TEXT NOT NULL,
+                    symbol TEXT DEFAULT 'MISSING',
                     price REAL NOT NULL,
                     route TEXT,
                     liquidity TEXT,
@@ -351,8 +351,10 @@ class DatabaseManager:
         if df.empty:
             return 0
 
+
         # Prepare data
         df = df.copy()
+
         df['account_id'] = account_id
 
         # Column mapping

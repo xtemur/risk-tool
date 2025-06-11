@@ -61,9 +61,9 @@ def main():
         logger.info("\nStarting historical data download...")
         logger.info("This may take several minutes depending on the amount of data...")
 
-        # Download last 365 days of data with new data types
+        # Download last 1000 days of data with new data types
         results = downloader.download_all_data(
-            days_back=365,
+            days_back=1000,
             data_types=['summary', 'fills']  # Changed from 'totals' to 'summary'
         )
 
