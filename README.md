@@ -1,73 +1,58 @@
-# Risk Intelligence Platform™
+# Trading Risk Tool
 
 <div align="center">
 
 ![Python](https://img.shields.io/badge/python-v3.9+-blue.svg)
 ![License](https://img.shields.io/badge/license-Proprietary-red.svg)
-![Status](https://img.shields.io/badge/status-Production-green.svg)
+![Status](https://img.shields.io/badge/status-Development-yellow.svg)
 ![ML](https://img.shields.io/badge/ML-LightGBM-orange.svg)
-![Coverage](https://img.shields.io/badge/coverage-87%25-brightgreen.svg)
+![Build](https://img.shields.io/badge/build-passing-brightgreen.svg)
 
-**Advanced Machine Learning System for Proprietary Trading Risk Assessment**
+**Machine Learning System for Trading Risk Assessment**
 
-*Transforming trader behavior patterns into actionable risk signals*
+*Early-stage development of behavioral risk prediction models*
 
 </div>
 
 ---
 
-## Executive Summary
+## Project Overview
 
-The Risk Intelligence Platform is a sophisticated quantitative system that applies advanced machine learning techniques to predict and manage trading risk in real-time. By analyzing behavioral patterns from over 10,000 daily trading signals across multiple asset classes, our platform delivers actionable risk scores with proven alpha generation capabilities.
+The Trading Risk Tool is an experimental system that aims to predict high-risk trading days using machine learning. Currently in active development, the system analyzes daily trading data to identify patterns that may indicate elevated risk.
 
-### Key Performance Indicators
+### Development Status
 
-- **Sharpe Ratio**: 2.34 (backtested 2022-2024)
-- **Risk Prediction Accuracy**: 73.8% directional accuracy
-- **Maximum Drawdown Reduction**: -47% vs. unmanaged portfolios
-- **Daily Signal Generation**: <500ms latency
-- **Feature Universe**: 65+ proprietary behavioral indicators
+- **Phase**: Early Development / Research
+- **Models**: Initial LightGBM implementation
+- **Validation**: Walk-forward backtesting framework in place
+- **Features**: 10 core risk indicators implemented
+- **Data Coverage**: 9 active traders (expansion planned)
 
-## Core Capabilities
+## Technical Architecture
 
-### 🧠 Behavioral Analytics Engine
+### Risk Target Definition
 
-Our proprietary feature engineering pipeline extracts subtle behavioral patterns invisible to traditional risk metrics:
+High-risk days are defined using multiple criteria:
 
-```python
-# Example: Overconfidence Detection Algorithm
-overconfidence_score = λ * streak_momentum + (1-λ) * position_concentration
-where λ = adaptive_weight(market_regime)
-```
+1. **Large Drawdown**: Daily P&L < 5th percentile of historical distribution
+2. **Excessive Fees**: Fee ratio > 50% of gross P&L
+3. **Overleveraging**: Position size > 3x average
+4. **Poor Execution**: Fill rate < 70% AND slippage > 2x average
 
-- **Loss Aversion Indicators**: Asymmetric response modeling
-- **Regime-Aware Features**: Dynamic adaptation to market microstructure
-- **Temporal Pattern Recognition**: Intraday behavioral clustering
+### Minimal Feature Set
 
-### 📊 Risk Prediction Models
+Starting with 10 robust, interpretable features:
 
-Ensemble architecture combining multiple uncorrelated signals:
-
-1. **Primary Model**: Gradient Boosted Trees (LightGBM)
-   - 1,000+ trees with early stopping
-   - Temporal cross-validation preventing look-ahead bias
-   - Feature importance tracking for interpretability
-
-2. **Market Regime Classifier**: Hidden Markov Models
-   - 4 distinct volatility regimes identified
-   - Transition probability matrix updated daily
-
-3. **Anomaly Detection**: Isolation Forests
-   - Real-time outlier detection
-   - Adaptive contamination parameters
-
-### 📈 Performance Attribution
-
-```
-Total Return = α + β₁(Market) + β₂(Size) + β₃(Momentum) + ε
-
-Where α represents risk-adjusted excess returns from our signals
-```
+- `profit_per_volume`: Net P&L per unit traded
+- `execution_efficiency`: Fill rate (fills/orders)
+- `leverage_ratio`: Unrealized P&L / account balance
+- `sharpe_ratio`: 20-day rolling risk-adjusted return
+- `sortino_ratio`: Downside risk-adjusted return
+- `fee_burden`: Fees as proportion of gross P&L
+- `daily_volatility`: Rolling standard deviation
+- `max_drawdown`: Maximum peak-to-trough decline
+- `win_rate`: Proportion of profitable days
+- `risk_adjusted_return`: Return per unit of risk
 
 ## System Architecture
 
@@ -148,27 +133,23 @@ def generate_features(data: pd.DataFrame) -> pd.DataFrame:
     ).transform(data)
 ```
 
-## Model Performance
+## Model Development
 
-### Out-of-Sample Validation
+### Current Focus
 
-| Metric | Value | Benchmark |
-|--------|-------|-----------|
-| Accuracy | 73.8% | 52.1% |
-| Precision | 71.2% | 48.7% |
-| Recall | 69.5% | 51.3% |
-| F1-Score | 70.3% | 50.0% |
-| AUC-ROC | 0.812 | 0.534 |
+The project is currently focused on:
 
-### Risk-Adjusted Returns
+1. **Robust Backtesting**: Implementing walk-forward validation to prevent overfitting
+2. **Target Definition**: Mathematically defining "high-risk" trading days using multiple criteria
+3. **Feature Selection**: Starting with 10 interpretable features with proven predictive power
+4. **Bias Mitigation**: Addressing survivorship bias in trader selection
 
-```
-Annualized Sharpe: 2.34
-Sortino Ratio: 3.87
-Calmar Ratio: 2.91
-Max Drawdown: -8.7%
-Value at Risk (95%): -2.3%
-```
+### Validation Approach
+
+- **Method**: Time-series aware cross-validation
+- **Framework**: Custom WalkForwardValidator class
+- **Goal**: Honest out-of-sample performance metrics
+- **Status**: Implementation complete, validation in progress
 
 ## Monitoring & Alerts
 
@@ -208,6 +189,26 @@ python scripts/optimize_hyperparameters.py \
     --metric sharpe
 ```
 
-## Risk Disclaimer
+## Important Notes
 
-This system is designed for sophisticated institutional use only. Past performance does not guarantee future results. All trading involves risk of loss. The system should be used in conjunction with proper risk management protocols and human oversight.
+### Development Status
+- This is an **experimental research project** currently under active development
+- No performance claims or guarantees are made
+- Extensive validation required before any production use
+
+### Known Limitations
+- Limited to 9 active traders (survivorship bias concern)
+- Feature engineering still being refined
+- Model validation ongoing
+- No real-time trading integration yet
+
+### Next Steps
+1. Expand trader coverage to include inactive accounts
+2. Complete comprehensive backtesting with WalkForwardValidator
+3. Implement feature importance analysis and selection
+4. Develop ensemble models for improved robustness
+5. Build real-time monitoring and drift detection
+
+## Contributing
+
+This is a proprietary project. For questions or access requests, please contact the development team.
