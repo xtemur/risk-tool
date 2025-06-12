@@ -1,0 +1,19 @@
+{
+  "best_params": {
+    "depth": 5,
+    "l2_leaf_reg": 3.1749941095798633,
+    "learning_rate": 0.11680434866488863,
+    "iterations": 900,
+    "subsample": 0.8,
+    "colsample_bylevel": 0.6
+  },
+  "metrics": {
+    "train_mae": 17235.409442885964,
+    "train_rmse": 44016.69739683915,
+    "train_r2": -0.0005163462572834732,
+    "val_mae": 17025.257420340127,
+    "val_rmse": 36310.39578330249,
+    "val_r2": 0.0012968814613799617
+  },
+  "cv_score": 20318.921716984252
+}
