@@ -216,18 +216,88 @@ class SignalCommand:
                 if len(training_data) < 100:
                     logger.warning("Limited training data available, predictions may be less reliable")
 
-                # Quick training with essential models
-                results = self.prediction_pipeline.run_full_pipeline(
-                    training_data,
-                    model_types=['ridge', 'linear'],  # Fast models for daily signals
-                    individual_traders=True
-                )
+                # Quick training with essential models - use direct model training
+                # Train individual trader models and a global fallback
 
-                if not results:
-                    logger.error("Model training failed")
+                # Feature columns
+                feature_cols = [col for col in training_data.columns
+                               if col not in ['account_id', 'date', 'target_next_pnl']]
+
+                # Clean data - handle NaN values using imputation
+                logger.info("Preprocessing data to handle missing values...")
+
+                # Remove rows where target is NaN
+                training_clean = training_data.dropna(subset=['target_next_pnl'])
+                logger.info(f"After removing rows with NaN target: {len(training_clean)}/{len(training_data)} samples remain")
+
+                if len(training_clean) < 10:
+                    logger.error("Insufficient training data after removing NaN targets")
                     return False
 
-                logger.info("Model training completed successfully")
+                # For features, use simple imputation strategy
+                from sklearn.impute import SimpleImputer
+
+                X_features = training_clean[feature_cols]
+
+                # Remove columns that are all NaN (can't be imputed)
+                valid_feature_cols = []
+                for col in feature_cols:
+                    if not X_features[col].isnull().all():
+                        valid_feature_cols.append(col)
+                    else:
+                        logger.warning(f"Dropping feature column '{col}' - all values are NaN")
+
+                logger.info(f"Using {len(valid_feature_cols)}/{len(feature_cols)} feature columns after filtering")
+
+                # Impute features with median values for valid columns only
+                imputer = SimpleImputer(strategy='median')
+                X_features_valid = X_features[valid_feature_cols]
+                X_imputed = imputer.fit_transform(X_features_valid)
+
+                # Store the imputer and valid columns for later use on prediction data
+                self.feature_imputer = imputer
+                self.feature_columns = valid_feature_cols
+
+                logger.info(f"Imputed {X_features_valid.isnull().sum().sum()} missing feature values")
+
+                # Train global model first as fallback using imputed data
+                X_global_df = pd.DataFrame(X_imputed, columns=valid_feature_cols, index=training_clean.index)
+                y_global = training_clean['target_next_pnl']
+
+                global_result = self.prediction_pipeline.trainer.train_model(
+                    X_global_df, y_global,
+                    model_type='ridge',
+                    model_key='global_final_ridge'
+                )
+                logger.info(f"Global model trained: {global_result.get('model_key')}")
+
+                # Train individual trader models
+                traders = training_clean['account_id'].unique()
+                successful_models = 0
+
+                for trader_id in traders:
+                    trader_mask = training_clean['account_id'] == trader_id
+                    trader_data = training_clean[trader_mask]
+
+                    if len(trader_data) >= 10:  # Minimum samples for individual model
+                        # Use imputed data for this trader
+                        X_trader_df = X_global_df[trader_mask]
+                        y_trader = trader_data['target_next_pnl']
+
+                        try:
+                            trader_result = self.prediction_pipeline.trainer.train_model(
+                                X_trader_df, y_trader,
+                                model_type='ridge',
+                                model_key=f'{trader_id}_final_ridge'
+                            )
+                            logger.info(f"Trader {trader_id} model trained: {trader_result.get('model_key')}")
+                            successful_models += 1
+                        except Exception as e:
+                            logger.warning(f"Failed to train model for trader {trader_id}: {e}")
+                    else:
+                        logger.info(f"Trader {trader_id}: insufficient data ({len(trader_data)} samples), will use global model")
+
+                logger.info(f"Model training completed: {successful_models}/{len(traders)} individual models + 1 global model")
                 return True
 
         except Exception as e:
@@ -254,16 +324,34 @@ class SignalCommand:
             # Get most recent data for each trader (today's features)
             latest_data = data.groupby('account_id').tail(1)
 
-            # Feature columns (exclude metadata)
-            feature_cols = [col for col in data.columns
-                           if col not in ['account_id', 'date', 'target_next_pnl']]
+            # Use the same feature columns that were used in training
+            if hasattr(self, 'feature_columns'):
+                feature_cols = self.feature_columns
+            else:
+                # Fallback to all features (shouldn't happen with proper flow)
+                feature_cols = [col for col in data.columns
+                               if col not in ['account_id', 'date', 'target_next_pnl']]
+
+            # Debug: log available models
+            available_models = list(self.prediction_pipeline.trainer.models.keys())
+            logger.info(f"Available models: {available_models}")
 
             for _, row in latest_data.iterrows():
                 trader_id = row['account_id']
 
                 try:
                     # Prepare features for this trader
-                    features = row[feature_cols].values.reshape(1, -1)
+                    features_raw = row[feature_cols].values.reshape(1, -1)
+
+                    # Use the same imputer as training
+                    if hasattr(self, 'feature_imputer') and hasattr(self, 'feature_columns'):
+                        # Extract only the valid feature columns used in training
+                        features_selected = row[self.feature_columns].values.reshape(1, -1)
+                        features_imputed = self.feature_imputer.transform(features_selected)
+                        features_df = pd.DataFrame(features_imputed, columns=self.feature_columns)
+                    else:
+                        logger.warning(f"No imputer available, using raw features for trader {trader_id}")
+                        features_df = pd.DataFrame(features_raw, columns=feature_cols)
 
                     # Get prediction from trader's model
                     model_key = f"{trader_id}_final_ridge"  # Primary model
@@ -271,7 +359,7 @@ class SignalCommand:
                     if model_key in self.prediction_pipeline.trainer.models:
                         # Use trained model
                         pred_pnl = self.prediction_pipeline.trainer.predict(
-                            pd.DataFrame([row[feature_cols]]),
+                            features_df,
                             model_key
                         )[0]
                     else:
@@ -279,7 +367,7 @@ class SignalCommand:
                         global_key = "global_final_ridge"
                         if global_key in self.prediction_pipeline.trainer.models:
                             pred_pnl = self.prediction_pipeline.trainer.predict(
-                                pd.DataFrame([row[feature_cols]]),
+                                features_df,
                                 global_key
                             )[0]
                         else:
@@ -288,7 +376,7 @@ class SignalCommand:
 
                     # Calculate confidence based on model uncertainty and recent performance
                     confidence = self._calculate_prediction_confidence(
-                        trader_id, features, data
+                        trader_id, features_df.values, data
                     )
 
                     # Get trader name (use ID if name not available)

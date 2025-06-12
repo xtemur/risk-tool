@@ -6,6 +6,7 @@ Updated for new summaryByDate format
 
 import sys
 import logging
+import argparse
 from pathlib import Path
 from datetime import datetime
 
@@ -32,8 +33,16 @@ def setup_logging():
     )
 
 
-def main():
-    """Main setup function"""
+def setup_database(days_back=1000):
+    """
+    Setup database and download historical data
+
+    Args:
+        days_back (int): Number of days back to download data (default: 1000)
+
+    Returns:
+        dict: Download results summary
+    """
     # Create necessary directories
     directories = ['data', 'logs', 'config', 'reports']
     for dir_path in directories:
@@ -44,6 +53,7 @@ def main():
 
     logger.info("=" * 80)
     logger.info("Starting Risk Management Tool Setup")
+    logger.info(f"Downloading {days_back} days of historical data")
     logger.info("=" * 80)
 
     try:
@@ -61,9 +71,9 @@ def main():
         logger.info("\nStarting historical data download...")
         logger.info("This may take several minutes depending on the amount of data...")
 
-        # Download last 1000 days of data with new data types
+        # Download specified days of data
         results = downloader.download_all_data(
-            days_back=1000,
+            days_back=days_back,
             data_types=['summary', 'fills']  # Changed from 'totals' to 'summary'
         )
 
@@ -161,9 +171,39 @@ def main():
             logger.warning("\n⚠️  Some traders failed to download. Check the logs for details.")
             logger.warning("You can retry failed downloads by running this script again.")
 
+        return {
+            'success': True,
+            'total_traders': total_count,
+            'successful_downloads': success_count,
+            'failed_downloads': total_count - success_count,
+            'results': results
+        }
+
     except Exception as e:
         logger.error(f"Setup failed with error: {e}", exc_info=True)
-        raise
+        return {
+            'success': False,
+            'error': str(e)
+        }
+
+
+def main():
+    """Main function with command-line argument parsing"""
+    parser = argparse.ArgumentParser(description='Setup database and download historical trading data')
+    parser.add_argument(
+        '--days-back',
+        type=int,
+        default=1000,
+        help='Number of days back to download data (default: 1000)'
+    )
+
+    args = parser.parse_args()
+
+    # Call the setup_database function with the specified days_back parameter
+    result = setup_database(days_back=args.days_back)
+
+    if not result['success']:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
