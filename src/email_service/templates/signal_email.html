@@ -3,230 +3,200 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Signal Report</title>
+    <title>Daily Risk Signal</title>
     <style>
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            max-width: 800px;
+            font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+            line-height: 1.4;
+            color: #2c3e50;
+            max-width: 900px;
             margin: 0 auto;
-            padding: 20px;
-            background-color: #f5f5f5;
+            padding: 0;
+            background-color: #ffffff;
         }
 
         .container {
-            background-color: white;
-            border-radius: 10px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-            overflow: hidden;
+            background-color: #ffffff;
+            border: 1px solid #bdc3c7;
         }
 
         .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 30px;
-            text-align: center;
+            background-color: #2c3e50;
+            color: #ffffff;
+            padding: 15px 20px;
+            border-bottom: 2px solid #34495e;
         }
 
         .header h1 {
             margin: 0;
-            font-size: 28px;
-            font-weight: 300;
+            font-size: 16px;
+            font-weight: normal;
+            letter-spacing: 1px;
         }
 
         .header .date {
-            font-size: 16px;
-            opacity: 0.9;
-            margin-top: 10px;
+            font-size: 12px;
+            margin-top: 5px;
+            opacity: 0.8;
         }
 
         .content {
-            padding: 30px;
-        }
-
-        .summary-section {
-            background-color: #f8f9fa;
-            border-radius: 8px;
             padding: 20px;
-            margin-bottom: 30px;
-            border-left: 4px solid #667eea;
         }
 
-        .summary-section h2 {
-            margin-top: 0;
-            color: #667eea;
-            font-size: 20px;
+        .section {
+            margin-bottom: 25px;
+            border-bottom: 1px solid #ecf0f1;
+            padding-bottom: 15px;
         }
 
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin: 20px 0;
+        .section:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
         }
 
-        .metric-card {
-            background-color: white;
-            border: 1px solid #e9ecef;
-            border-radius: 8px;
-            padding: 20px;
-            text-align: center;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
-        }
-
-        .metric-card h3 {
+        .section h2 {
             margin: 0 0 10px 0;
             font-size: 14px;
-            color: #6c757d;
+            font-weight: bold;
+            color: #2c3e50;
             text-transform: uppercase;
             letter-spacing: 0.5px;
+            border-bottom: 1px solid #34495e;
+            padding-bottom: 3px;
         }
 
-        .metric-card .value {
-            font-size: 24px;
-            font-weight: bold;
-            color: #333;
-        }
-
-        .metric-card .value.positive {
-            color: #28a745;
-        }
-
-        .metric-card .value.negative {
-            color: #dc3545;
-        }
-
-        .metric-card .value.neutral {
-            color: #667eea;
-        }
-
-        .trader-section {
-            margin-bottom: 30px;
-        }
-
-        .trader-header {
-            background-color: #e9ecef;
-            padding: 15px 20px;
-            border-radius: 8px 8px 0 0;
-            border-bottom: 2px solid #667eea;
-        }
-
-        .trader-header h3 {
-            margin: 0;
-            color: #333;
-            font-size: 18px;
-        }
-
-        .trader-content {
-            background-color: white;
-            border: 1px solid #e9ecef;
-            border-top: none;
-            border-radius: 0 0 8px 8px;
-            padding: 20px;
-        }
-
-        .prediction-item {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 0;
-            border-bottom: 1px solid #f1f3f4;
-        }
-
-        .prediction-item:last-child {
-            border-bottom: none;
-        }
-
-        .prediction-label {
-            font-weight: 500;
-            color: #495057;
-        }
-
-        .prediction-value {
-            font-weight: bold;
-            font-size: 16px;
-        }
-
-        .confidence-bar {
+        .metrics-table {
             width: 100%;
-            height: 6px;
-            background-color: #e9ecef;
-            border-radius: 3px;
-            overflow: hidden;
-            margin-top: 5px;
-        }
-
-        .confidence-fill {
-            height: 100%;
-            background: linear-gradient(90deg, #ffc107, #28a745);
-            transition: width 0.3s ease;
-        }
-
-        .alert {
-            padding: 15px;
-            border-radius: 8px;
-            margin: 20px 0;
-            font-weight: 500;
-        }
-
-        .alert.info {
-            background-color: #d1ecf1;
-            border: 1px solid #bee5eb;
-            color: #0c5460;
-        }
-
-        .alert.warning {
-            background-color: #fff3cd;
-            border: 1px solid #ffeaa7;
-            color: #856404;
-        }
-
-        .alert.success {
-            background-color: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
-        }
-
-        .footer {
-            background-color: #f8f9fa;
-            padding: 20px 30px;
-            text-align: center;
-            border-top: 1px solid #e9ecef;
-            color: #6c757d;
-            font-size: 14px;
-        }
-
-        .footer a {
-            color: #667eea;
-            text-decoration: none;
-        }
-
-        .timestamp {
+            border-collapse: collapse;
             font-size: 12px;
-            color: #adb5bd;
             margin-top: 10px;
         }
 
+        .metrics-table th,
+        .metrics-table td {
+            padding: 6px 12px;
+            text-align: left;
+            border: 1px solid #bdc3c7;
+        }
+
+        .metrics-table th {
+            background-color: #ecf0f1;
+            font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .metrics-table td.number {
+            text-align: right;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .positive { color: #27ae60; }
+        .negative { color: #e74c3c; }
+        .neutral { color: #7f8c8d; }
+
+        .predictions-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            margin-top: 10px;
+        }
+
+        .predictions-table th,
+        .predictions-table td {
+            padding: 8px 10px;
+            text-align: left;
+            border: 1px solid #bdc3c7;
+        }
+
+        .predictions-table th {
+            background-color: #34495e;
+            color: #ffffff;
+            font-weight: bold;
+            font-size: 11px;
+            text-transform: uppercase;
+        }
+
+        .predictions-table td.number {
+            text-align: right;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .predictions-table td.signal {
+            text-align: center;
+            font-weight: bold;
+        }
+
+        .signal-buy { background-color: #d5f4e6; color: #27ae60; }
+        .signal-sell { background-color: #fadbd8; color: #e74c3c; }
+        .signal-hold { background-color: #fef9e7; color: #f39c12; }
+        .signal-neutral { background-color: #eaecee; color: #7f8c8d; }
+
+        .summary-stats {
+            background-color: #f8f9fa;
+            border: 1px solid #bdc3c7;
+            padding: 10px;
+            font-size: 11px;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .model-metrics {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-top: 10px;
+        }
+
+        .metric-box {
+            text-align: center;
+            padding: 8px;
+            border: 1px solid #bdc3c7;
+            background-color: #f8f9fa;
+        }
+
+        .metric-box .label {
+            font-size: 10px;
+            color: #7f8c8d;
+            text-transform: uppercase;
+            margin-bottom: 3px;
+        }
+
+        .metric-box .value {
+            font-size: 14px;
+            font-weight: bold;
+            font-family: 'Consolas', 'Monaco', monospace;
+        }
+
+        .footer {
+            background-color: #ecf0f1;
+            padding: 10px 20px;
+            font-size: 10px;
+            color: #7f8c8d;
+            border-top: 1px solid #bdc3c7;
+        }
+
+        .disclaimer {
+            background-color: #f4f4f4;
+            border: 1px solid #bdc3c7;
+            padding: 10px;
+            margin-top: 15px;
+            font-size: 10px;
+            color: #7f8c8d;
+        }
+
         @media (max-width: 600px) {
-            body {
-                padding: 10px;
+            .model-metrics {
+                grid-template-columns: repeat(2, 1fr);
             }
 
-            .header {
-                padding: 20px;
+            .predictions-table {
+                font-size: 10px;
             }
 
-            .header h1 {
-                font-size: 24px;
-            }
-
-            .content {
-                padding: 20px;
-            }
-
-            .metrics-grid {
-                grid-template-columns: 1fr;
+            .predictions-table th,
+            .predictions-table td {
+                padding: 5px 6px;
             }
         }
     </style>
@@ -234,133 +204,150 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>🔮 Trading Signal Report</h1>
-            <div class="date">{{ report_date }}</div>
+            <h1>DAILY RISK SIGNAL REPORT</h1>
+            <div class="date">{{ report_date }} | Generated: {{ generation_timestamp }}</div>
         </div>
 
         <div class="content">
-            <!-- Summary Section -->
-            <div class="summary-section">
-                <h2>📊 Portfolio Summary</h2>
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <h3>Total Traders</h3>
+            <!-- Portfolio Summary -->
+            <div class="section">
+                <h2>Portfolio Overview</h2>
+                <div class="model-metrics">
+                    <div class="metric-box">
+                        <div class="label">Active Traders</div>
                         <div class="value neutral">{{ total_traders }}</div>
                     </div>
-                    <div class="metric-card">
-                        <h3>Active Signals</h3>
-                        <div class="value neutral">{{ active_signals }}</div>
+                    <div class="metric-box">
+                        <div class="label">Total Expected PnL</div>
+                        <div class="value {{ expected_pnl_class }}">{{ expected_pnl }}</div>
                     </div>
-                    <div class="metric-card">
-                        <h3>Avg Confidence</h3>
+                    <div class="metric-box">
+                        <div class="label">Avg Confidence</div>
                         <div class="value neutral">{{ avg_confidence }}%</div>
                     </div>
-                    <div class="metric-card">
-                        <h3>Expected PnL</h3>
-                        <div class="value {{ expected_pnl_class }}">{{ expected_pnl }}</div>
+                    <div class="metric-box">
+                        <div class="label">Active Signals</div>
+                        <div class="value neutral">{{ active_signals }}</div>
                     </div>
                 </div>
             </div>
 
             <!-- Model Performance -->
             {% if model_performance %}
-            <div class="summary-section">
-                <h2>🎯 Model Performance</h2>
-                <div class="metrics-grid">
-                    <div class="metric-card">
-                        <h3>Recent Hit Rate</h3>
-                        <div class="value {{ hit_rate_class }}">{{ hit_rate }}%</div>
-                    </div>
-                    <div class="metric-card">
-                        <h3>Sharpe Ratio</h3>
-                        <div class="value {{ sharpe_class }}">{{ sharpe_ratio }}</div>
-                    </div>
-                    <div class="metric-card">
-                        <h3>R² Score</h3>
-                        <div class="value {{ r2_class }}">{{ r2_score }}</div>
-                    </div>
-                    <div class="metric-card">
-                        <h3>Model Version</h3>
-                        <div class="value neutral">{{ model_version }}</div>
-                    </div>
-                </div>
+            <div class="section">
+                <h2>Model Performance Metrics</h2>
+                <table class="metrics-table">
+                    <tr>
+                        <th>Metric</th>
+                        <th>Value</th>
+                        <th>Status</th>
+                    </tr>
+                    <tr>
+                        <td>Hit Rate</td>
+                        <td class="number">{{ hit_rate }}%</td>
+                        <td class="{{ hit_rate_class }}">{{ hit_rate_status }}</td>
+                    </tr>
+                    <tr>
+                        <td>Sharpe Ratio</td>
+                        <td class="number">{{ sharpe_ratio }}</td>
+                        <td class="{{ sharpe_class }}">{{ sharpe_status }}</td>
+                    </tr>
+                    <tr>
+                        <td>R² Score</td>
+                        <td class="number">{{ r2_score }}</td>
+                        <td class="{{ r2_class }}">{{ r2_status }}</td>
+                    </tr>
+                    <tr>
+                        <td>Model Version</td>
+                        <td class="number">{{ model_version }}</td>
+                        <td class="neutral">ACTIVE</td>
+                    </tr>
+                </table>
             </div>
             {% endif %}
 
-            <!-- Alerts Section -->
+            <!-- Trading Signals -->
+            <div class="section">
+                <h2>Trading Signals</h2>
+                <table class="predictions-table">
+                    <thead>
+                        <tr>
+                            <th>Trader ID</th>
+                            <th>Predicted PnL</th>
+                            <th>Confidence</th>
+                            <th>Signal</th>
+                            <th>7D Performance</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for trader in traders %}
+                        <tr>
+                            <td>{{ trader.id }}</td>
+                            <td class="number {{ trader.pnl_class }}">{{ trader.predicted_pnl }}</td>
+                            <td class="number">{{ trader.confidence }}%</td>
+                            <td class="signal {{ trader.signal_class }}">{{ trader.signal_code }}</td>
+                            <td class="number {{ trader.recent_performance_class }}">{{ trader.recent_performance }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- Signal Legend -->
+            <div class="section">
+                <h2>Signal Legend</h2>
+                <table class="metrics-table">
+                    <tr>
+                        <th>Code</th>
+                        <th>Description</th>
+                        <th>Criteria</th>
+                    </tr>
+                    <tr>
+                        <td class="signal signal-buy">BUY</td>
+                        <td>Strong positive signal</td>
+                        <td>PnL > $100, Confidence > 70%</td>
+                    </tr>
+                    <tr>
+                        <td class="signal signal-hold">MOD</td>
+                        <td>Moderate positive signal</td>
+                        <td>PnL > $0, Confidence > 50%</td>
+                    </tr>
+                    <tr>
+                        <td class="signal signal-neutral">NEU</td>
+                        <td>Neutral position</td>
+                        <td>-$50 < PnL < $50</td>
+                    </tr>
+                    <tr>
+                        <td class="signal signal-sell">RED</td>
+                        <td>Consider reducing exposure</td>
+                        <td>PnL < -$50, Confidence > 50%</td>
+                    </tr>
+                </table>
+            </div>
+
+            <!-- Risk Summary -->
             {% if alerts %}
-            {% for alert in alerts %}
-            <div class="alert {{ alert.type }}">
-                <strong>{{ alert.title }}:</strong> {{ alert.message }}
-            </div>
-            {% endfor %}
-            {% endif %}
-
-            <!-- Individual Trader Predictions -->
-            <h2 style="color: #667eea; margin-bottom: 20px;">👤 Individual Trader Predictions</h2>
-
-            {% for trader in traders %}
-            <div class="trader-section">
-                <div class="trader-header">
-                    <h3>Trader {{ trader.id }} - {{ trader.name }}</h3>
-                </div>
-                <div class="trader-content">
-                    <div class="prediction-item">
-                        <span class="prediction-label">Expected PnL Tomorrow</span>
-                        <span class="prediction-value {{ trader.pnl_class }}">{{ trader.predicted_pnl }}</span>
-                    </div>
-                    <div class="prediction-item">
-                        <span class="prediction-label">Prediction Confidence</span>
-                        <div style="flex: 1; margin-left: 20px;">
-                            <span class="prediction-value">{{ trader.confidence }}%</span>
-                            <div class="confidence-bar">
-                                <div class="confidence-fill" style="width: {{ trader.confidence }}%;"></div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="prediction-item">
-                        <span class="prediction-label">Recommended Action</span>
-                        <span class="prediction-value {{ trader.action_class }}">{{ trader.recommendation }}</span>
-                    </div>
-                    {% if trader.recent_performance %}
-                    <div class="prediction-item">
-                        <span class="prediction-label">Recent 7-Day Performance</span>
-                        <span class="prediction-value {{ trader.recent_performance_class }}">{{ trader.recent_performance }}</span>
-                    </div>
-                    {% endif %}
-                    {% if trader.risk_notes %}
-                    <div style="margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 4px; font-size: 14px;">
-                        <strong>Risk Notes:</strong> {{ trader.risk_notes }}
-                    </div>
-                    {% endif %}
-                </div>
-            </div>
-            {% endfor %}
-
-            <!-- Market Context -->
-            {% if market_context %}
-            <div class="summary-section">
-                <h2>🌍 Market Context</h2>
-                <div style="line-height: 1.8;">
-                    {% for context_item in market_context %}
-                    <div style="margin-bottom: 10px;">
-                        <strong>{{ context_item.label }}:</strong> {{ context_item.value }}
-                    </div>
+            <div class="section">
+                <h2>Risk Alerts</h2>
+                <div class="summary-stats">
+                    {% for alert in alerts %}
+                    [{{ alert.type|upper }}] {{ alert.message }}<br>
                     {% endfor %}
                 </div>
             </div>
             {% endif %}
 
-            <!-- Disclaimer -->
-            <div class="alert info">
-                <strong>Disclaimer:</strong> These predictions are generated by machine learning models and should not be considered as investment advice. Always perform your own analysis and risk assessment before making trading decisions.
+            <div class="disclaimer">
+                <strong>DISCLAIMER:</strong> These signals are generated by algorithmic models and are for informational purposes only.
+                Trading involves substantial risk of loss. Past performance is not indicative of future results.
+                Always conduct independent analysis before making trading decisions.
             </div>
         </div>
 
         <div class="footer">
-            <p>Generated by Risk Tool AI Trading System</p>
-            <p><a href="mailto:{{ support_email }}">Contact Support</a> | <a href="{{ dashboard_url }}">View Dashboard</a></p>
-            <div class="timestamp">Report generated at {{ generation_timestamp }}</div>
+            Risk Management System v{{ model_version }} |
+            Data as of {{ report_date }} |
+            Next update: {{ next_update_time }}
         </div>
     </div>
 </body>

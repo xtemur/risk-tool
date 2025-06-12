@@ -124,10 +124,15 @@ class SignalEmailService:
         """
         now = datetime.now()
 
+        # Calculate next update time (tomorrow at same time)
+        from datetime import timedelta
+        next_update = now + timedelta(days=1)
+
         # Base template data
         template_data = {
-            'report_date': now.strftime("%A, %B %d, %Y"),
-            'generation_timestamp': now.strftime("%Y-%m-%d %H:%M:%S UTC"),
+            'report_date': now.strftime("%Y-%m-%d"),
+            'generation_timestamp': now.strftime("%Y-%m-%d %H:%M:%S"),
+            'next_update_time': next_update.strftime("%Y-%m-%d %H:%M"),
             'support_email': self.config.email_from,
             'dashboard_url': '#',  # TODO: Add dashboard URL from config
         }
@@ -184,7 +189,7 @@ class SignalEmailService:
             pnl_class = 'neutral'
 
         # Generate recommendation
-        recommendation, action_class = self._generate_recommendation(predicted_pnl, confidence)
+        recommendation, action_class, signal_code, signal_class = self._generate_recommendation(predicted_pnl, confidence)
 
         # Format values
         trader_data = {
@@ -195,6 +200,8 @@ class SignalEmailService:
             'confidence': f"{confidence:.1f}",
             'recommendation': recommendation,
             'action_class': action_class,
+            'signal_code': signal_code,
+            'signal_class': signal_class,
         }
 
         # Add optional fields if available
@@ -217,20 +224,20 @@ class SignalEmailService:
             confidence: Prediction confidence (0-100)
 
         Returns:
-            Tuple of (recommendation_text, css_class)
+            Tuple of (recommendation_text, css_class, signal_code, signal_class)
         """
         if confidence < 30:
-            return "🚫 Avoid Trading", "negative"
+            return "🚫 Avoid Trading", "negative", "AVD", "signal-neutral"
         elif predicted_pnl > 100 and confidence > 70:
-            return "🚀 Strong Buy Signal", "positive"
-        elif predicted_pnl > 50 and confidence > 50:
-            return "📈 Moderate Buy", "positive"
+            return "🚀 Strong Buy Signal", "positive", "BUY", "signal-buy"
+        elif predicted_pnl > 0 and confidence > 50:
+            return "📈 Moderate Buy", "positive", "MOD", "signal-hold"
         elif predicted_pnl > -50 and predicted_pnl <= 50:
-            return "⚖️ Neutral", "neutral"
+            return "⚖️ Neutral", "neutral", "NEU", "signal-neutral"
         elif predicted_pnl <= -50 and confidence > 50:
-            return "📉 Consider Reducing", "negative"
+            return "📉 Consider Reducing", "negative", "RED", "signal-sell"
         else:
-            return "⏸️ Hold Position", "neutral"
+            return "⏸️ Hold Position", "neutral", "HLD", "signal-neutral"
 
     def _calculate_portfolio_summary(self, traders_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
@@ -302,13 +309,21 @@ class SignalEmailService:
         sharpe_ratio = performance.get('sharpe_ratio', 0)
         r2_score = performance.get('r2_score', 0)
 
+        # Generate status descriptions
+        hit_rate_status = 'GOOD' if hit_rate > 55 else 'POOR' if hit_rate < 45 else 'FAIR'
+        sharpe_status = 'EXCELLENT' if sharpe_ratio > 1.5 else 'GOOD' if sharpe_ratio > 1 else 'POOR' if sharpe_ratio < 0 else 'FAIR'
+        r2_status = 'GOOD' if r2_score > 0.15 else 'POOR' if r2_score < 0 else 'FAIR'
+
         return {
             'hit_rate': f"{hit_rate:.1f}",
             'hit_rate_class': 'positive' if hit_rate > 55 else 'negative' if hit_rate < 45 else 'neutral',
+            'hit_rate_status': hit_rate_status,
             'sharpe_ratio': f"{sharpe_ratio:.2f}",
             'sharpe_class': 'positive' if sharpe_ratio > 1 else 'negative' if sharpe_ratio < 0 else 'neutral',
+            'sharpe_status': sharpe_status,
             'r2_score': f"{r2_score:.3f}",
             'r2_class': 'positive' if r2_score > 0.1 else 'negative' if r2_score < 0 else 'neutral',
+            'r2_status': r2_status,
             'model_version': performance.get('model_version', 'v1.0')
         }
 
