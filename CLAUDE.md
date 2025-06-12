@@ -1,244 +1,152 @@
-# Trading Risk Tool MVP - Current Implementation Guide
+# CLAUDE.md
 
-## Overview
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-This document reflects the **actual current state** of the Trading Risk Tool MVP, a system for analyzing day traders' behavior from PropreReports data. This is a working document that shows what's implemented vs. planned.
+# Trading Risk Tool MVP - Development Guide
 
-## Current Project Status
+This is a sophisticated ML-based risk management system for proprietary trading that analyzes day traders' behavior from PropreReports data. The system predicts high-risk trading days and provides behavioral analytics.
 
-### ✅ Fully Implemented Components
+## Essential Commands
 
-#### Data Layer
-- **DatabaseManager** (`src/data/database_manager.py`)
-  - SQLite database with 3 tables: accounts, account_daily_summary, fills
-  - Supports new summaryByDate format
-  - Handles both Equities and Options accounts
-  - Includes CSV backup functionality
-
-- **DataDownloader** (`src/data/data_downloader.py`)
-  - PropreReports API integration
-  - Downloads summary and fills data
-  - Automatic retry logic
-  - CSV backup to `data/csv_backups/`
-
-- **PropreReportsParser** (`src/data/propreports_parser.py`)
-  - Parses both summaryByDate and fills reports
-  - Auto-detects report types
-  - Handles account type detection (Equities vs Options)
-
-#### Scripts
-- **setup_database.py** - Initial data download and setup
-- **daily_predict.py** - Daily prediction pipeline (partial)
-- **Makefile** - Complete automation commands
-
-#### Configuration
-- **traders.yaml** - 9 active traders configured (60+ commented out)
-- **environment.yml** - Basic conda environment
-- **.gitignore** - Comprehensive ignore patterns
-- **.pre-commit-config.yaml** - Code quality hooks
-
-### 🟨 Partially Implemented Components
-
-#### Feature Engineering
-- **BaseFeatures** (`src/features/base_features.py`) - Abstract base class ✅
-- **TechnicalFeatures** (`src/features/technical_features.py`) - Price indicators ✅
-- **BehavioralFeatures** (`src/features/behavioral_features.py`) - Trading patterns ✅
-- **MarketRegimeFeatures** (`src/features/market_regime_features.py`) - Market conditions ✅
-- **FeaturePipeline** (`src/pipeline/feature_pipeline.py`) - Orchestration ✅
-- **FeatureStore** - ❌ Not implemented (caching planned)
-
-#### Models
-- **RiskModel** (`src/models/risk_model.py`) - LightGBM implementation ✅
-- **ModelPipeline** (`src/pipeline/model_pipeline.py`) - Training orchestration ✅
-- **BaseModel** - ❌ Not implemented
-- **EnsembleModel** - ❌ Not implemented
-- **RegimeModel** - ❌ Not implemented
-
-#### Monitoring
-- **ModelMonitor** (`src/monitoring/model_monitor.py`) - Performance tracking ✅
-- **DriftDetector** (`src/monitoring/drift_detector.py`) - Data drift detection ✅
-- **AlertSystem** (`src/monitoring/alert_system.py`) - Email alerts ✅
-- **DashboardGenerator** (`src/monitoring/dashboard_generator.py`) - HTML reports ✅
-
-#### Testing
-- **test_risk_model.py** - Unit tests for RiskModel ✅
-- Other test files referenced but not shown
-
-### ❌ Not Yet Implemented
-
-#### Backtesting Framework
-- BacktestEngine
-- WalkForwardValidator
-- PortfolioSimulator
-- PerformanceMetrics
-
-#### Advanced Features
-- Market regime detection
-- Ensemble modeling
-- Feature versioning/store
-- Comprehensive test coverage
-
-## Current Database Schema
-
-### Tables Overview
-
-1. **accounts** - Trader information
-   - `account_id` (PRIMARY KEY)
-   - `account_name`
-   - `account_type` (Equities/Options)
-   - `created_at`, `updated_at`
-
-2. **account_daily_summary** - Daily aggregated metrics
-   - Core: `date`, `orders`, `fills`, `qty`, `gross`, `net`
-   - Fees: `comm`, `trade_fees` (individual fees available)
-   - Portfolio: `cash`, `unrealized`, `end_balance`
-   - Account-specific: `fee_software_md` (Equities), `fee_daily_interest` (Options)
-
-3. **fills** - Individual trades
-   - Trade: `datetime`, `side`, `quantity`, `symbol`, `price`
-   - Execution: `route`, `liquidity`
-   - Fees: `commission`, `total_fees`
-
-## Current Feature Set
-
-### Technical Features (20+ features)
-- Returns: 1d, 3d, 5d, 10d, 20d
-- Volatility: 5d, 10d, 20d
-- Volume patterns
-- Price momentum indicators
-- Drawdown metrics
-
-### Behavioral Features (30+ features)
-- Loss aversion indicators
-- Overconfidence measures
-- Trading time patterns
-- Win/loss streaks
-- Emotional state proxies
-
-### Market Regime Features (15+ features)
-- Market volatility regimes
-- Trend strength
-- Market stress indicators
-- Correlation patterns
-
-## Current Workflow
-
-### Daily Operations (Makefile)
+### Daily Development Commands
 ```bash
-make download    # Download new data
-make predict     # Generate predictions
-make dashboard   # Create monitoring dashboard
-make report      # Generate text report
+make test          # Run pytest with coverage
+make format        # Format code with black and isort
+make lint          # Run linting with ruff
+make clean         # Clean generated files and caches
 ```
 
-### Setup & Maintenance
+### Data & Model Commands
 ```bash
-make setup       # Create conda environment
-make all         # Complete setup + download + train
-make test        # Run unit tests
-make clean       # Clean temporary files
+make download      # Download new trading data from PropreReports API
+make train         # Train risk prediction models
+make predict       # Generate daily risk predictions
+make backtest      # Run backtesting analysis
 ```
 
-## Tech Stack (Actual)
-
-### Core Dependencies
-- Python 3.9
-- pandas, numpy, scikit-learn
-- SQLite (database)
-- lightgbm (primary ML model)
-
-### Additional Libraries
-- pyyaml, python-dotenv (config)
-- joblib (model persistence)
-- jinja2 (report templates)
-- schedule, pytz (scheduling)
-- smtplib2 (email alerts)
-
-### Not Yet Added
-- plotly (mentioned but not in environment.yml)
-- statsmodels, optuna (planned)
-- pytest (testing - mentioned but not in environment.yml)
-
-## Configuration Files
-
-### config/traders.yaml
-- 9 active traders (NET/NEL/NEO series)
-- 60+ traders commented out for future use
-- All marked as "Day Trading" strategy
-
-### Environment Variables (.env)
-```
-API_TOKEN=your_propreports_token
-API_URL=https://api.proprereports.com/api.php
-```
-
-## Key Implementation Decisions
-
-1. **Database Change**: Switched from "totals" to "account_daily_summary" table
-2. **Multi-Account Support**: Handles both Equities and Options accounts
-3. **CSV Backups**: All downloaded data saved to CSV for debugging
-4. **Simplified MVP**: Many advanced features deferred to focus on core functionality
-5. **Single Model**: Using LightGBM only (no ensemble yet)
-
-## Next Steps (Priority Order)
-
-### Phase 1: Core Completion
-- [ ] Implement train_models.py script
-- [ ] Add DataValidator for quality checks
-- [ ] Create comprehensive test suite
-- [ ] Add plotly to environment.yml
-
-### Phase 2: Backtesting
-- [ ] Implement WalkForwardValidator
-- [ ] Create BacktestEngine
-- [ ] Add PerformanceMetrics
-- [ ] Build backtesting notebook
-
-### Phase 3: Production Hardening
-- [ ] Add feature caching (FeatureStore)
-- [ ] Implement ensemble models
-- [ ] Enhanced error handling
-- [ ] Comprehensive logging
-
-### Phase 4: Advanced Features
-- [ ] Market regime detection
-- [ ] Dynamic feature selection
-- [ ] Real-time monitoring dashboard
-- [ ] API endpoint for predictions
-
-## Common Commands
-
+### Workflow Commands
 ```bash
-# Daily workflow
-make daily       # download + predict + dashboard
-
-# Weekly workflow
-make weekly      # download + train + predict + report
-
-# Check system status
-make status      # Show database stats, models, predictions
-
-# Development
-make format      # Format code with black
-make lint        # Run linting checks
+make daily         # Complete daily workflow: download → predict → dashboard
+make weekly        # Weekly workflow: download → train → predict → report
+make monitor       # Check system health and generate alerts
 ```
 
-## Known Issues & Limitations
+## High-Level Architecture
 
-1. **No Backtesting**: Can't validate model performance historically
-2. **Limited Testing**: Only RiskModel has unit tests
-3. **No Feature Store**: Features recalculated every time
-4. **Single Model**: No ensemble or regime-specific models
-5. **Manual Trading**: No automated position sizing or risk management
+### Data Flow Pipeline
+1. **Data Ingestion**: PropreReports API → PropreReportsParser → SQLite Database
+2. **Feature Engineering**: DatabaseManager → Feature Pipelines → Feature Store (planned)
+3. **Model Training**: FeaturePipeline → RiskModel (LightGBM) → Model Storage
+4. **Prediction**: Latest features → Trained model → Risk predictions
+5. **Monitoring**: Predictions → DriftDetector → AlertSystem → Dashboard
 
-## Data Quality Considerations
+### Key Architectural Components
 
-- Temporal consistency enforced in feature generation
-- Point-in-time data access prevents look-ahead bias
-- Handles missing data and gaps
-- Accounts for different fee structures between account types
+**Data Layer** (`src/data/`)
+- `DatabaseManager`: SQLite interface with 3 tables (accounts, account_daily_summary, fills)
+- `DataDownloader`: API integration with retry logic and CSV backups
+- `PropreReportsParser`: Auto-detects report types, handles Equities/Options accounts
 
----
+**Feature Engineering** (`src/features/`)
+- Abstract `BaseFeatures` class ensures temporal consistency
+- `TechnicalFeatures`: Price/volume indicators (20+ features)
+- `BehavioralFeatures`: Trading psychology patterns (30+ features)
+- `MarketRegimeFeatures`: Market condition indicators (15+ features)
+- `FeaturePipeline`: Orchestrates feature generation with point-in-time guarantees
 
-*Last Updated: Based on current codebase analysis*
-*This is a living document - update as implementation progresses*
+**Model Layer** (`src/models/`)
+- `RiskModel`: LightGBM-based risk predictor with SHAP explanations
+- `ModelPipeline`: Training orchestration with validation
+- Planned: EnsembleModel, RegimeModel for advanced predictions
+
+**Monitoring** (`src/monitoring/`)
+- `ModelMonitor`: Tracks prediction accuracy and model drift
+- `DriftDetector`: Detects data distribution shifts
+- `AlertSystem`: Email alerts for high-risk predictions
+- `DashboardGenerator`: HTML reports with Jinja2 templates
+
+### Database Schema
+- **accounts**: Trader metadata (account_id, name, type)
+- **account_daily_summary**: Daily aggregated metrics (P&L, fees, portfolio)
+- **fills**: Individual trade executions with fees
+
+## Critical Implementation Details
+
+### Temporal Data Handling
+- All feature calculations use point-in-time data to prevent look-ahead bias
+- Features generated with specific date cutoffs for backtesting validity
+- Database queries always filter by date to ensure temporal consistency
+
+### Multi-Account Support
+- Handles both Equities and Options accounts with different fee structures
+- Account type detection built into parser
+- Separate feature handling for account-specific metrics
+
+### Current Limitations
+- No implemented backtesting engine (WalkForwardValidator planned)
+- Limited test coverage (only RiskModel tested)
+- No feature caching (recalculated each run)
+- Single model only (no ensemble yet)
+
+## Configuration
+
+### Environment Setup
+- Python 3.9 with conda environment
+- API credentials in `.env` (use `.env.template`)
+- 9 active traders in `config/traders.yaml` (60+ available)
+
+### Key Dependencies
+- ML: lightgbm, scikit-learn, numpy, pandas
+- Database: sqlite3 with WAL mode
+- Monitoring: jinja2, schedule, smtplib2
+- Config: pyyaml, python-dotenv
+
+## Development Workflow
+
+### Adding New Features
+1. Extend `BaseFeatures` class in `src/features/`
+2. Implement `calculate_features()` with temporal consistency
+3. Add to `FeaturePipeline` configuration
+4. Update feature count in documentation
+
+### Model Development
+1. Use `src/experiments/` for tracking experiments
+2. Implement new models extending base interfaces
+3. Validate with proper train/test splits
+4. Check for data leakage with temporal validation
+
+### Testing Strategy
+- Unit tests in `tests/` mirror `src/` structure
+- Use `make test` for full test suite with coverage
+- Integration tests for data pipeline components
+- Mock PropreReports API for consistent testing
+
+## Current Development State
+
+### Active Work Areas
+- Feature engineering improvements in `base_features.py`
+- Notebook development for data validation
+- Backtesting framework implementation
+
+### Priority Next Steps
+1. Complete `train_models.py` implementation
+2. Add comprehensive test coverage
+3. Implement feature caching for performance
+4. Build backtesting engine for validation
+
+## Common Issues & Solutions
+
+### Data Issues
+- Missing data: Parser handles gracefully, features have fallbacks
+- API timeouts: Automatic retry with exponential backoff
+- Database locks: WAL mode prevents most locking issues
+
+### Model Issues
+- Feature drift: Monitor with `DriftDetector`, retrain weekly
+- Overfitting: Use walk-forward validation (when implemented)
+- Class imbalance: RiskModel uses class weights
+
+### Performance
+- Slow feature calculation: Implement caching (planned)
+- Large database: CSV backups allow selective data loading
+- Memory issues: Process traders in batches if needed
