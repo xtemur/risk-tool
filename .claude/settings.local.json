@@ -14,7 +14,9 @@
       "Bash(python -m pytest tests/test_risk_model.py -v)",
       "Bash(python -m pytest tests/test_risk_model.py::TestRiskModel::test_model_initialization -v)",
       "Bash(python:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)"
     ],
     "deny": []
   }
