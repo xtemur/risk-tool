@@ -7,7 +7,14 @@
       "Bash(python -m pytest tests/test_minimal_features.py -v)",
       "Bash(make test:*)",
       "Bash(python -m pytest tests/ -v)",
-      "Bash(python -m pytest tests/test_walk_forward_validator.py tests/test_target_definition.py tests/test_minimal_features.py tests/test_risk_model.py -v)"
+      "Bash(python -m pytest tests/test_walk_forward_validator.py tests/test_target_definition.py tests/test_minimal_features.py tests/test_risk_model.py -v)",
+      "Bash(find:*)",
+      "Bash(pip install:*)",
+      "Bash(sqlite3:*)",
+      "Bash(python -m pytest tests/test_risk_model.py -v)",
+      "Bash(python -m pytest tests/test_risk_model.py::TestRiskModel::test_model_initialization -v)",
+      "Bash(python:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }

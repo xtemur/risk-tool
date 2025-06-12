@@ -165,7 +165,7 @@ class ModelConfig:
         'lambda_l2': 0.1,
         'max_depth': 6,
         'n_estimators': 100,
-        'early_stopping_rounds': 50,
+        'early_stopping_rounds': None,
         'random_state': 42
     }
 
