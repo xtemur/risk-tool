@@ -57,6 +57,9 @@ htmlcov/
 .env.local
 .env.*.local
 
+# Claude folder
+claude/
+
 # Email credentials
 config/email_secrets.yaml
 
@@ -141,3 +144,6 @@ models/*/
 .env
 .env.local
 .env.*.local
+
+# Claude folder
+claude/
