@@ -19,7 +19,11 @@
       "Bash(chmod:*)",
       "Bash(ls:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(PYTHONPATH=/Users/temurbekkhujaev/risk-tool/src:$PYTHONPATH python examples/advanced_causal_demo.py)"
+      "Bash(PYTHONPATH=/Users/temurbekkhujaev/risk-tool/src:$PYTHONPATH python examples/advanced_causal_demo.py)",
+      "Bash(rm:*)",
+      "Bash(true)",
+      "Bash(mv:*)",
+      "Bash(touch:*)"
     ],
     "deny": []
   }

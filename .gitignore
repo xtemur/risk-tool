@@ -129,6 +129,14 @@ dist/
 build/
 *.egg-info/
 
+# Machine Learning Models
+*.pkl
+*.joblib
+*.h5
+*.onnx
+models/*/
+!models/.gitkeep
+
 # Environment variables
 .env
 .env.local

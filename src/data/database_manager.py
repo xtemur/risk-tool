@@ -1004,3 +1004,112 @@ class DatabaseManager:
 
             conn.commit()
             logger.info("Created time-ordered views")
+
+    def get_recent_trading_data(self, days: int = 30) -> pd.DataFrame:
+        """
+        Get recent trading data for signal generation
+
+        Args:
+            days: Number of recent days to retrieve
+
+        Returns:
+            DataFrame with recent trading data including features needed for prediction
+        """
+        from datetime import datetime, timedelta
+
+        # Calculate date range
+        end_date = datetime.now().date()
+        start_date = end_date - timedelta(days=days)
+
+        with self.get_connection() as conn:
+            # Get recent daily summaries with calculated features
+            query = """
+                SELECT
+                    ads.account_id,
+                    ads.date,
+                    ads.net,
+                    ads.gross,
+                    ads.orders,
+                    ads.fills,
+                    ads.qty,
+                    ads.comm as total_fees,
+                    ads.end_balance,
+                    ads.unrealized,
+                    ads.cash,
+                    -- Calculate some basic features
+                    COALESCE(LAG(ads.net, 1) OVER (PARTITION BY ads.account_id ORDER BY ads.date), 0) as prev_day_net,
+                    COALESCE(LAG(ads.net, 7) OVER (PARTITION BY ads.account_id ORDER BY ads.date), 0) as prev_week_net,
+                    -- Rolling averages
+                    AVG(ads.net) OVER (
+                        PARTITION BY ads.account_id
+                        ORDER BY ads.date
+                        ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+                    ) as rolling_7d_avg_net,
+                    AVG(ads.net) OVER (
+                        PARTITION BY ads.account_id
+                        ORDER BY ads.date
+                        ROWS BETWEEN 29 PRECEDING AND CURRENT ROW
+                    ) as rolling_30d_avg_net,
+                    -- Volatility measures
+                    CASE
+                        WHEN COUNT(*) OVER (
+                            PARTITION BY ads.account_id
+                            ORDER BY ads.date
+                            ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+                        ) >= 7 THEN
+                            -- Simple approximation of standard deviation
+                            ABS(ads.net - AVG(ads.net) OVER (
+                                PARTITION BY ads.account_id
+                                ORDER BY ads.date
+                                ROWS BETWEEN 6 PRECEDING AND CURRENT ROW
+                            ))
+                        ELSE 0
+                    END as rolling_7d_volatility,
+                    -- Account type from accounts table
+                    a.account_type
+                FROM account_daily_summary ads
+                LEFT JOIN accounts a ON ads.account_id = a.account_id
+                WHERE ads.date >= ? AND ads.date <= ?
+                ORDER BY ads.account_id, ads.date
+            """
+
+            df = pd.read_sql_query(query, conn, params=[start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')])
+
+            if df.empty:
+                logger.warning(f"No recent trading data found for last {days} days")
+                return df
+
+            # Convert date column
+            df['date'] = pd.to_datetime(df['date'])
+
+            # Add additional technical features
+            if not df.empty:
+                # Group by account for technical indicators
+                for account_id in df['account_id'].unique():
+                    account_mask = df['account_id'] == account_id
+                    account_data = df[account_mask].copy()
+
+                    if len(account_data) > 1:
+                        # Momentum indicators
+                        df.loc[account_mask, 'net_momentum_3d'] = account_data['net'].rolling(3, min_periods=1).mean()
+                        df.loc[account_mask, 'net_momentum_7d'] = account_data['net'].rolling(7, min_periods=1).mean()
+
+                        # Trend indicators
+                        df.loc[account_mask, 'net_trend'] = account_data['net'].diff()
+                        df.loc[account_mask, 'net_change_pct'] = account_data['net'].pct_change().fillna(0)
+
+                        # Performance ratios
+                        df.loc[account_mask, 'fills_per_order'] = account_data['fills'] / (account_data['orders'] + 1)
+                        df.loc[account_mask, 'gross_to_net_ratio'] = account_data['gross'] / (account_data['net'] + 1)
+
+                        # Risk metrics
+                        df.loc[account_mask, 'daily_sharpe'] = (
+                            account_data['net'] / (account_data['net'].rolling(7, min_periods=1).std() + 1)
+                        )
+
+            # Fill any remaining NaN values
+            numeric_columns = df.select_dtypes(include=[np.number]).columns
+            df[numeric_columns] = df[numeric_columns].fillna(0)
+
+            logger.info(f"Retrieved {len(df)} records for {df['account_id'].nunique()} accounts over last {days} days")
+            return df
