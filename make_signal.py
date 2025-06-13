@@ -25,6 +25,7 @@ from typing import Dict, Any, List
 # Import our modules
 from data.database_manager import DatabaseManager
 from email_service.email_sender import EmailSender
+from config import get_config
 
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -36,19 +37,84 @@ class DiverseTradingSignalGenerator:
     """
 
     def __init__(self):
-        self.db = DatabaseManager()
-        self.email_sender = EmailSender()
+        """Initialize the trading signal generator with configuration and error handling"""
+        try:
+            logger.info("Initializing Trading Signal Generator...")
 
-        # Load ensemble components
-        self.return_models = joblib.load("models/diverse_models/return_models.joblib")
-        self.direction_model = joblib.load("models/diverse_models/direction_model.joblib")
-        self.direction_scaler = joblib.load("models/diverse_models/direction_scaler.joblib")
+            # Load configuration
+            try:
+                self.config = get_config()
+                logger.info("✓ Configuration loaded")
+            except Exception as e:
+                logger.error(f"Failed to load configuration: {e}")
+                raise RuntimeError(f"Configuration loading failed: {e}")
 
-        # Load feature list
-        with open("models/diverse_models/ensemble_features.txt", 'r') as f:
-            self.features = [line.strip() for line in f.readlines()]
+            # Initialize database connection
+            try:
+                self.db = DatabaseManager()
+                logger.info("✓ Database connection established")
+            except Exception as e:
+                logger.error(f"Failed to initialize database: {e}")
+                raise RuntimeError(f"Database initialization failed: {e}")
 
-        logger.info(f"Loaded diverse ensemble with {len(self.features)} features")
+            # Initialize email service
+            try:
+                self.email_sender = EmailSender()
+                logger.info("✓ Email service initialized")
+            except Exception as e:
+                logger.error(f"Failed to initialize email service: {e}")
+                raise RuntimeError(f"Email service initialization failed: {e}")
+
+            # Load ensemble components with validation
+            models_dir = Path(self.config.get('models.directory', 'models/diverse_models'))
+            if not models_dir.exists():
+                logger.error("Models directory not found")
+                raise FileNotFoundError(f"Models directory '{models_dir}' not found. Run model training first.")
+
+            required_files = [
+                "return_models.joblib",
+                "direction_model.joblib",
+                "direction_scaler.joblib",
+                "ensemble_features.txt"
+            ]
+
+            for file_name in required_files:
+                file_path = models_dir / file_name
+                if not file_path.exists():
+                    logger.error(f"Required model file missing: {file_name}")
+                    raise FileNotFoundError(f"Model file '{file_name}' not found. Retrain models.")
+
+            try:
+                self.return_models = joblib.load(models_dir / "return_models.joblib")
+                self.direction_model = joblib.load(models_dir / "direction_model.joblib")
+                self.direction_scaler = joblib.load(models_dir / "direction_scaler.joblib")
+                logger.info("✓ Ensemble models loaded successfully")
+            except Exception as e:
+                logger.error(f"Failed to load models: {e}")
+                raise RuntimeError(f"Model loading failed: {e}")
+
+            # Load and validate feature list
+            try:
+                with open(models_dir / "ensemble_features.txt", 'r') as f:
+                    self.features = [line.strip() for line in f.readlines()]
+
+                if not self.features:
+                    raise ValueError("Feature list is empty")
+
+                expected_count = self.config.get('models.features.count', 15)
+                if len(self.features) != expected_count:
+                    logger.warning(f"Feature count mismatch: expected {expected_count}, got {len(self.features)}")
+
+                logger.info(f"✓ Loaded {len(self.features)} features")
+            except Exception as e:
+                logger.error(f"Failed to load features: {e}")
+                raise RuntimeError(f"Feature loading failed: {e}")
+
+            logger.info("🎯 Trading Signal Generator initialized successfully")
+
+        except Exception as e:
+            logger.error(f"Initialization failed: {e}")
+            raise
 
     def _predict_diverse(self, X_input):
         """Make diverse predictions using account-specific model selection"""
@@ -97,14 +163,14 @@ class DiverseTradingSignalGenerator:
         return predictions
 
     def get_current_trader_features(self) -> pd.DataFrame:
-        """Get current features for all traders from database"""
+        """Get current features for all traders from database with validation"""
         logger.info("Getting current trader features from database...")
 
         # Get comprehensive recent data for feature calculation
         recent_data = self.db.get_account_daily_summary()
 
-        if recent_data.empty:
-            raise ValueError("No trading data available in database")
+        # Validate database data
+        self._validate_database_data(recent_data)
 
         # Get the latest date for each account
         latest_by_account = recent_data.groupby('account_id')['date'].max().reset_index()
@@ -144,6 +210,9 @@ class DiverseTradingSignalGenerator:
         # Select only required features
         final_df = features_df[['account_id', 'date'] + self.features].copy()
         final_df = final_df.fillna(0)
+
+        # Validate feature quality
+        final_df = self._validate_features(final_df)
 
         logger.info(f"Generated features for {len(final_df)} traders")
         return final_df
@@ -230,7 +299,170 @@ class DiverseTradingSignalGenerator:
         logger.info(f"Unique prediction count: {len(np.unique(np.round(returns)))}")
         logger.info(f"Models used: {set(models_used)}")
 
+        # Performance monitoring
+        self._monitor_prediction_quality(returns, directions, models_used)
+
         return predictions
+
+    def _validate_database_data(self, data: pd.DataFrame) -> None:
+        """Validate database data quality and completeness"""
+
+        if data.empty:
+            raise ValueError("No trading data available in database")
+
+        # Check required columns
+        required_columns = ['account_id', 'date', 'net', 'gross', 'fills', 'end_balance']
+        missing_columns = [col for col in required_columns if col not in data.columns]
+        if missing_columns:
+            raise ValueError(f"Missing required columns in database: {missing_columns}")
+
+        # Check data freshness (should have data within last 7 days)
+        from datetime import datetime, timedelta
+        latest_date = pd.to_datetime(data['date']).max()
+        days_old = (datetime.now().date() - latest_date.date()).days
+
+        if days_old > 7:
+            logger.warning(f"Database data is {days_old} days old - signals may be stale")
+        elif days_old > 30:
+            raise ValueError(f"Database data is too old ({days_old} days) - update required")
+
+        # Check for minimum number of accounts (from config)
+        min_accounts = self.config.get('database.validation.min_accounts', 3)
+        unique_accounts = data['account_id'].nunique()
+        if unique_accounts < min_accounts:
+            raise ValueError(f"Insufficient accounts in database: {unique_accounts} (minimum {min_accounts} required)")
+
+        # Check for data quality issues
+        total_records = len(data)
+
+        # Check for excessive NaN values (from config)
+        max_missing_percent = self.config.get('database.validation.max_missing_data_percent', 50)
+        warning_threshold = self.config.get('risk.data_quality.max_missing_percent', 20)
+
+        nan_percentage = data.isnull().sum().sum() / (len(data) * len(data.columns)) * 100
+        if nan_percentage > max_missing_percent:
+            raise ValueError(f"Database has too many missing values: {nan_percentage:.1f}%")
+        elif nan_percentage > warning_threshold:
+            logger.warning(f"Database has significant missing values: {nan_percentage:.1f}%")
+
+        # Check for extreme values that might indicate data corruption
+        if 'net' in data.columns:
+            net_values = data['net'].dropna()
+            if len(net_values) > 0:
+                extreme_threshold = 1000000  # $1M threshold
+                extreme_values = net_values[abs(net_values) > extreme_threshold]
+                if len(extreme_values) > len(net_values) * 0.1:  # >10% extreme values
+                    logger.warning(f"Found {len(extreme_values)} extreme PnL values (>{extreme_threshold:,})")
+
+        # Check for duplicate records
+        if 'account_id' in data.columns and 'date' in data.columns:
+            duplicates = data.duplicated(subset=['account_id', 'date']).sum()
+            if duplicates > 0:
+                logger.warning(f"Found {duplicates} duplicate account-date records in database")
+
+        # Validate account IDs
+        invalid_accounts = data[data['account_id'].isnull() | (data['account_id'] == '')]['account_id'].count()
+        if invalid_accounts > 0:
+            logger.warning(f"Found {invalid_accounts} records with invalid account IDs")
+
+        # Log data quality summary
+        logger.info(f"✓ Data validation passed: {total_records} records, {unique_accounts} accounts, {days_old} days old")
+
+    def _validate_features(self, features_df: pd.DataFrame) -> pd.DataFrame:
+        """Validate and clean feature data"""
+
+        if features_df.empty:
+            raise ValueError("No features generated from database data")
+
+        # Check for required features
+        missing_features = [f for f in self.features if f not in features_df.columns]
+        if missing_features:
+            logger.warning(f"Missing features (will use defaults): {missing_features}")
+
+        # Check for infinite or extremely large values
+        numeric_cols = features_df.select_dtypes(include=[np.number]).columns
+        for col in numeric_cols:
+            if col in features_df.columns:
+                # Replace infinite values
+                inf_count = np.isinf(features_df[col]).sum()
+                if inf_count > 0:
+                    logger.warning(f"Replacing {inf_count} infinite values in {col}")
+                    features_df[col] = features_df[col].replace([np.inf, -np.inf], 0)
+
+                # Check for extremely large values
+                extreme_values = features_df[col][abs(features_df[col]) > 1e10].count()
+                if extreme_values > 0:
+                    logger.warning(f"Found {extreme_values} extremely large values in {col}")
+
+        # Final validation
+        total_features = len(features_df)
+        total_nas = features_df.isnull().sum().sum()
+
+        if total_nas / (total_features * len(features_df.columns)) > 0.5:
+            raise ValueError("Too many missing values in feature data")
+
+        logger.info(f"✓ Feature validation passed: {total_features} traders, {len(features_df.columns)} features")
+        return features_df
+
+    def _monitor_prediction_quality(self, returns: List[float], directions: List[float], models_used: List[str]) -> None:
+        """Monitor prediction quality and alert on issues"""
+
+        if not self.config.get('monitoring.enabled', True):
+            return
+
+        # Check prediction diversity
+        unique_predictions = len(np.unique(np.round(returns)))
+        min_unique = self.config.get('monitoring.metrics.min_unique_predictions', 5)
+
+        if unique_predictions < min_unique:
+            logger.warning(f"⚠️  Low prediction diversity: {unique_predictions} unique predictions (minimum {min_unique})")
+
+        # Check for extreme predictions
+        max_prediction = self.config.get('risk.max_prediction_amount', 100000)
+        extreme_predictions = [r for r in returns if abs(r) > max_prediction]
+
+        if extreme_predictions:
+            logger.warning(f"⚠️  Found {len(extreme_predictions)} extreme predictions (>${max_prediction:,})")
+
+        # Check model distribution
+        model_counts = {}
+        for model in models_used:
+            model_counts[model] = model_counts.get(model, 0) + 1
+
+        # Alert if one model dominates (>80%)
+        total_predictions = len(models_used)
+        for model, count in model_counts.items():
+            if count / total_predictions > 0.8:
+                logger.warning(f"⚠️  Model '{model}' dominates predictions: {count}/{total_predictions} ({count/total_predictions:.1%})")
+
+        # Check direction balance
+        positive_directions = sum(1 for d in directions if d > 0.5)
+        if total_predictions > 0:
+            positive_ratio = positive_directions / total_predictions
+            if positive_ratio > 0.9 or positive_ratio < 0.1:
+                logger.warning(f"⚠️  Imbalanced direction predictions: {positive_ratio:.1%} positive")
+
+        logger.debug(f"✓ Prediction quality monitoring: {unique_predictions} unique, {len(extreme_predictions)} extreme, {len(model_counts)} models used")
+
+    def _monitor_execution_performance(self, start_time: datetime, signals_generated: int) -> None:
+        """Monitor system execution performance"""
+
+        if not self.config.get('monitoring.enabled', True):
+            return
+
+        # Check execution time
+        execution_time = (datetime.now() - start_time).total_seconds()
+        max_time = self.config.get('monitoring.validation.max_execution_time_seconds', 60)
+
+        if execution_time > max_time:
+            logger.warning(f"⚠️  Slow execution: {execution_time:.1f}s (maximum {max_time}s)")
+
+        # Check signals generated
+        min_signals = self.config.get('monitoring.validation.min_signals_generated', 3)
+        if signals_generated < min_signals:
+            logger.warning(f"⚠️  Low signal count: {signals_generated} signals (minimum {min_signals})")
+
+        logger.debug(f"✓ Execution monitoring: {execution_time:.1f}s, {signals_generated} signals")
 
     def _calculate_7day_performance(self, account_id: str) -> float:
         """Calculate actual 7-day performance for an account"""
@@ -428,63 +660,139 @@ class DiverseTradingSignalGenerator:
             return False
 
     def generate_and_send_signal(self) -> Dict[str, Any]:
-        """Main function to generate and send trading signal"""
+        """Main function to generate and send trading signal with comprehensive error handling"""
+        start_time = datetime.now()
+
         logger.info("=" * 80)
         logger.info("GENERATING DIVERSE TRADING SIGNALS")
         logger.info("=" * 80)
 
+        summary = {
+            'signals_generated': 0,
+            'email_sent': False,
+            'total_expected_pnl': 0,
+            'average_confidence': 0,
+            'signal_distribution': {},
+            'model_usage': {},
+            'traders_analyzed': 0,
+            'errors': []
+        }
+
         try:
-            # Get current features for all traders
-            features_df = self.get_current_trader_features()
+            # Step 1: Get current features for all traders
+            logger.info("Step 1: Extracting trader features from database...")
+            try:
+                features_df = self.get_current_trader_features()
+                summary['traders_analyzed'] = len(features_df)
+                logger.info(f"✓ Successfully extracted features for {len(features_df)} traders")
+            except Exception as e:
+                error_msg = f"Feature extraction failed: {e}"
+                logger.error(error_msg)
+                summary['errors'].append(error_msg)
+                raise RuntimeError(error_msg)
 
-            # Generate predictions
-            predictions = self.generate_predictions(features_df)
+            # Step 2: Generate predictions
+            logger.info("Step 2: Generating predictions using ensemble models...")
+            try:
+                predictions = self.generate_predictions(features_df)
+                logger.info("✓ Predictions generated successfully")
+            except Exception as e:
+                error_msg = f"Prediction generation failed: {e}"
+                logger.error(error_msg)
+                summary['errors'].append(error_msg)
+                raise RuntimeError(error_msg)
 
-            # Create trading signals
-            signals = self.create_trading_signals(predictions, features_df)
+            # Step 3: Create trading signals
+            logger.info("Step 3: Creating trading signals...")
+            try:
+                signals = self.create_trading_signals(predictions, features_df)
 
-            if not signals:
-                raise ValueError("No trading signals could be created")
+                if not signals:
+                    error_msg = "No trading signals could be created - all traders filtered out"
+                    logger.error(error_msg)
+                    summary['errors'].append(error_msg)
+                    raise ValueError(error_msg)
 
-            # Send email
-            email_sent = self.send_signal_email(signals)
+                summary['signals_generated'] = len(signals)
+                logger.info(f"✓ Created {len(signals)} trading signals")
+            except Exception as e:
+                error_msg = f"Signal creation failed: {e}"
+                logger.error(error_msg)
+                summary['errors'].append(error_msg)
+                raise RuntimeError(error_msg)
 
-            # Create summary
-            total_expected = sum(s['expected_return'] for s in signals)
-            avg_confidence = np.mean([s['model_confidence'] for s in signals])
+            # Step 4: Send email notification
+            logger.info("Step 4: Sending email notification...")
+            try:
+                email_sent = self.send_signal_email(signals)
+                summary['email_sent'] = email_sent
 
-            signal_distribution = {}
-            for signal in signals:
-                code = signal['signal_code']
-                signal_distribution[code] = signal_distribution.get(code, 0) + 1
+                if email_sent:
+                    logger.info("✓ Email sent successfully")
+                else:
+                    warning_msg = "Email sending failed - check email configuration"
+                    logger.warning(warning_msg)
+                    summary['errors'].append(warning_msg)
 
-            model_usage = {}
-            for signal in signals:
-                model = signal['model_used']
-                model_usage[model] = model_usage.get(model, 0) + 1
+            except Exception as e:
+                error_msg = f"Email sending failed: {e}"
+                logger.error(error_msg)
+                summary['errors'].append(error_msg)
+                # Don't raise here - signals were generated successfully
 
-            summary = {
-                'signals_generated': len(signals),
-                'email_sent': email_sent,
-                'total_expected_pnl': total_expected,
-                'average_confidence': avg_confidence,
-                'signal_distribution': signal_distribution,
-                'model_usage': model_usage,
-                'traders_analyzed': len(features_df)
-            }
+            # Step 5: Calculate summary statistics
+            logger.info("Step 5: Calculating summary statistics...")
+            try:
+                total_expected = sum(s['expected_return'] for s in signals)
+                avg_confidence = np.mean([s['model_confidence'] for s in signals])
 
+                signal_distribution = {}
+                for signal in signals:
+                    code = signal['signal_code']
+                    signal_distribution[code] = signal_distribution.get(code, 0) + 1
+
+                model_usage = {}
+                for signal in signals:
+                    model = signal['model_used']
+                    model_usage[model] = model_usage.get(model, 0) + 1
+
+                summary.update({
+                    'total_expected_pnl': total_expected,
+                    'average_confidence': avg_confidence,
+                    'signal_distribution': signal_distribution,
+                    'model_usage': model_usage
+                })
+
+                logger.info("✓ Summary statistics calculated")
+            except Exception as e:
+                warning_msg = f"Summary calculation failed: {e}"
+                logger.warning(warning_msg)
+                summary['errors'].append(warning_msg)
+
+            # Monitor execution performance
+            self._monitor_execution_performance(start_time, summary['signals_generated'])
+
+            logger.info("🎯 Signal generation completed successfully")
             return summary
 
         except Exception as e:
-            logger.error(f"Signal generation failed: {e}")
+            logger.error(f"Critical failure in signal generation: {e}")
+            summary['errors'].append(f"Critical failure: {e}")
             raise
 
 def main():
-    """Main entry point"""
+    """Main entry point with comprehensive error handling"""
+    start_time = datetime.now()
+
     try:
+        # Initialize system
+        print("🎯 Initializing Trading Signal System...")
         generator = DiverseTradingSignalGenerator()
+
+        # Generate signals
         result = generator.generate_and_send_signal()
 
+        # Display results
         print("\n" + "=" * 60)
         print("DIVERSE TRADING SIGNAL SUMMARY")
         print("=" * 60)
@@ -494,21 +802,53 @@ def main():
         print(f"Average Confidence: {result['average_confidence']:.1%}")
         print(f"Traders Analyzed: {result['traders_analyzed']}")
 
-        print("\nSignal Distribution:")
-        for signal, count in result['signal_distribution'].items():
-            print(f"  {signal}: {count}")
+        if result['signal_distribution']:
+            print("\nSignal Distribution:")
+            for signal, count in result['signal_distribution'].items():
+                print(f"  {signal}: {count}")
 
-        print("\nModel Usage:")
-        for model, count in result['model_usage'].items():
-            print(f"  {model}: {count}")
+        if result['model_usage']:
+            print("\nModel Usage:")
+            for model, count in result['model_usage'].items():
+                print(f"  {model}: {count}")
 
-        print("\n🎯 Diverse trading signals generated successfully!")
+        # Show warnings if any
+        if result.get('errors'):
+            print("\n⚠️  Warnings/Issues:")
+            for error in result['errors']:
+                print(f"  - {error}")
 
-        return result
+        # Execution time
+        duration = datetime.now() - start_time
+        print(f"\n⏱️  Execution time: {duration.total_seconds():.1f} seconds")
+
+        # Final status
+        if result['signals_generated'] > 0:
+            print("\n🎯 Diverse trading signals generated successfully!")
+            return result
+        else:
+            print("\n⚠️  No signals generated - check system status")
+            return result
+
+    except FileNotFoundError as e:
+        error_msg = f"Required file missing: {e}"
+        logger.error(error_msg)
+        print(f"\n❌ Setup Error: {error_msg}")
+        print("💡 Tip: Run 'python create_diverse_models.py' to create models")
+        return None
+
+    except RuntimeError as e:
+        error_msg = f"System error: {e}"
+        logger.error(error_msg)
+        print(f"\n❌ Runtime Error: {error_msg}")
+        print("💡 Tip: Check database connection and email configuration")
+        return None
 
     except Exception as e:
-        logger.error(f"Signal generation failed: {e}")
-        print(f"\n❌ Error: {e}")
+        error_msg = f"Unexpected error: {e}"
+        logger.error(error_msg)
+        print(f"\n❌ Critical Error: {error_msg}")
+        print("💡 Tip: Check logs for detailed error information")
         return None
 
 if __name__ == "__main__":
