@@ -1,0 +1,162 @@
+{
+  "validation_metadata": {
+    "validation_date": "2025-06-13T10:56:18.373704",
+    "data_period": {
+      "start": "2025-01-16 00:00:00",
+      "end": "2025-06-08 00:00:00"
+    },
+    "models_analyzed": [
+      "future_1d_direction",
+      "future_1d_return"
+    ],
+    "total_test_samples": 850
+  },
+  "causal_analysis_results": {
+    "future_1d_direction": {
+      "basic_causal_analysis": {
+        "average_treatment_effect": 0.09097090798862861,
+        "treated_mean": 0.4972677595628415,
+        "control_mean": 0.4062968515742129,
+        "treated_count": 183,
+        "control_count": 667,
+        "t_statistic": 2.208360444966029,
+        "p_value": 0.02748600287998144,
+        "is_significant": true
+      },
+      "validation_summary": {
+        "overall_score": 0.725,
+        "reliability_rating": "medium",
+        "robustness_tests": {
+          "sensitivity_robust": false,
+          "placebo_tests_pass": true,
+          "bootstrap_stable": true
+        }
+      },
+      "model_analysis": {
+        "prediction_accuracy": 0.07561828004628655,
+        "prediction_bias": -0.21058823529411766,
+        "prediction_variance": 0.16894256055363324,
+        "actual_variance": 0.24450657439446366
+      },
+      "business_impact": {
+        "baseline_hit_rate": 0.5741176470588235,
+        "model_hit_rate": 0.5729411764705883,
+        "hit_rate_improvement": -0.0011764705882352233,
+        "relative_improvement_pct": -0.20491803278687293
+      },
+      "sample_characteristics": {
+        "total_samples": 850,
+        "treatment_prevalence": 0.21529411764705883,
+        "outcome_distribution": {
+          "mean": 0.4258823529411765,
+          "std": 0.4944760604867173,
+          "min": 0.0,
+          "max": 1.0
+        }
+      }
+    },
+    "future_1d_return": {
+      "basic_causal_analysis": {
+        "average_treatment_effect": 9801.123190319346,
+        "treated_mean": 8627.4481156615,
+        "control_mean": -1173.6750746578462,
+        "treated_count": 200,
+        "control_count": 650,
+        "t_statistic": 2.2068360427795124,
+        "p_value": 0.027592768593185137,
+        "is_significant": true
+      },
+      "validation_summary": {
+        "overall_score": 0.75,
+        "reliability_rating": "medium",
+        "robustness_tests": {
+          "sensitivity_robust": "True",
+          "placebo_tests_pass": true,
+          "bootstrap_stable": true
+        }
+      },
+      "model_analysis": {
+        "prediction_accuracy": 0.3014791839026754,
+        "prediction_bias": -2991.076726588619,
+        "prediction_variance": 523593356.17973423,
+        "actual_variance": 3026913162.5169773
+      },
+      "business_impact": {
+        "daily_pnl_improvement": 9801.123190319346,
+        "annual_pnl_improvement": 2469883.043960475,
+        "improvement_per_trade": 49.00561595159673
+      },
+      "sample_characteristics": {
+        "total_samples": 850,
+        "treatment_prevalence": 0.23529411764705882,
+        "outcome_distribution": {
+          "mean": 1132.4715583584712,
+          "std": 55017.389637431705,
+          "min": -385959.5804,
+          "max": 367694.515
+        }
+      }
+    }
+  },
+  "production_readiness_assessment": {
+    "overall_readiness_score": 0.6508062596475122,
+    "readiness_level": "CONDITIONAL_APPROVAL",
+    "recommendation": "Approved with enhanced monitoring",
+    "component_scores": {
+      "model_performance": 0.32389064911878024,
+      "causal_significance": 1.0,
+      "statistical_reliability": 0.7375
+    },
+    "models_validated": 2,
+    "significant_models": 2,
+    "best_models_for_signals": {
+      "direction_prediction": "future_1d_direction",
+      "return_prediction": "future_1d_return"
+    },
+    "validation_timestamp": "2025-06-13T10:56:18.373700"
+  },
+  "model_performance_summary": {
+    "future_1d_return": {
+      "mae": 23708.003764121368,
+      "r2": 0.07484012176697219,
+      "rmse": 52918.60365557802,
+      "sample_size": 850
+    },
+    "future_3d_return": {
+      "mae": 47479.545080456555,
+      "r2": -0.03864880623168143,
+      "rmse": 105430.26218456595,
+      "sample_size": 850
+    },
+    "future_5d_return": {
+      "mae": 66411.79258040652,
+      "r2": -0.014095010815298181,
+      "rmse": 134428.9826189594,
+      "sample_size": 850
+    },
+    "future_1d_direction": {
+      "accuracy": 0.5729411764705883,
+      "baseline_accuracy": 0.5741176470588235,
+      "improvement_vs_random": 7.294117647058829,
+      "sample_size": 850
+    },
+    "future_3d_direction": {
+      "accuracy": 0.5329411764705883,
+      "baseline_accuracy": 0.5282352941176471,
+      "improvement_vs_random": 3.294117647058825,
+      "sample_size": 850
+    },
+    "future_5d_direction": {
+      "accuracy": 0.5258823529411765,
+      "baseline_accuracy": 0.5047058823529411,
+      "improvement_vs_random": 2.5882352941176467,
+      "sample_size": 850
+    },
+    "future_5d_volatility": {
+      "mae": 17765.343470039235,
+      "r2": 0.46318656595046936,
+      "rmse": 32780.944651593025,
+      "sample_size": 850
+    }
+  }
+}

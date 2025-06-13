@@ -1,0 +1,23 @@
+
+PORTFOLIO CAUSAL IMPACT ANALYSIS
+================================
+
+Total Portfolio Summary:
+- Number of Traders: 5
+- Combined Baseline PnL: $70,575.73
+- Combined Potential Improvement: $-37,525.07 (-53.2%)
+
+Success Metrics:
+- Traders Who Would Improve: 0 out of 5
+- Portfolio Success Rate: 0.0%
+- Average Improvement per Trader: $-7,505.01
+
+Distribution Analysis:
+- 25th Percentile: $-8,804.31
+- 50th Percentile: $-7,225.26
+- 75th Percentile: $-6,353.56
+- Standard Deviation: $1,952.27
+
+BUSINESS IMPACT:
+0% of traders would benefit from following model recommendations.
+The model shows potential to improve portfolio PnL by $-37,525.07 (-53.2%).

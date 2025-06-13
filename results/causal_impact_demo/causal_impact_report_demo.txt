@@ -1,0 +1,72 @@
+
+CAUSAL IMPACT ANALYSIS REPORT
+=============================
+
+Trader: DEMO001
+Analysis Period: 100 trading days
+Date Range: 2024-01-01 00:00:00 to 2024-05-17 00:00:00
+
+BASELINE PERFORMANCE
+--------------------
+Actual Total PnL: $13,920.61
+Average Daily PnL: $139.21
+Volatility: $257.38
+Sharpe Ratio: 8.586
+Win Rate: 67.0%
+Winning Days: 67
+Losing Days: 33
+
+CAUSAL IMPACT SCENARIOS
+-----------------------
+
+1. PERFECT MODEL FOLLOWING
+   PnL Improvement: $-7,225.26
+   Improvement %: -51.9%
+   Description: PnL if trader perfectly followed model predictions
+
+2. DIRECTIONAL TRADING
+   PnL Improvement: $4,936.95
+   Improvement %: 35.5%
+   Trading Frequency: 69.0%
+   Trade Days: 69
+   Skip Days: 31
+   PnL from Trades: $16,389.08
+   PnL Saved: $2,468.47
+   Description: PnL if trader only traded when model predicted profit
+
+3. RISK-ADJUSTED TRADING
+   PnL Improvement: $-6,541.43
+   Improvement %: -47.0%
+   Average Position Weight: 0.33
+   Description: PnL if position size scaled by model confidence
+
+4. SELECTIVE TRADING
+   PnL Improvement: $-11,316.90
+   Improvement %: -81.3%
+   Trading Frequency: 8.0%
+   Confidence Threshold: 70%
+   Description: PnL if trader only traded on predictions with >70% confidence
+
+STATISTICAL SIGNIFICANCE
+-------------------------
+Test Statistic: -3.637
+P-value: 0.000441
+Is Significant: True
+Effect Size: -0.365
+95% Confidence Interval: [-111.67, -32.83]
+Interpretation: The model impact is statistically significant with a small negative effect size
+
+DAILY IMPACT ANALYSIS
+----------------------
+Days Model Would Improve: 44
+Days Model Would Hurt: 56
+Improvement Rate: 44.0%
+Average Daily Improvement: $116.96
+Average Daily Deterioration: $-220.92
+Max Daily Improvement: $368.43
+Max Daily Deterioration: $-471.66
+
+CONCLUSION
+----------
+The model shows potential for negative impact on trader performance.
+Best strategy appears to be: Directional Trading with $4,936.95 improvement

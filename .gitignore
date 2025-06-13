@@ -11,9 +11,10 @@ ipython_config.py
 # Remove previous ipynb_checkpoints
 #   git rm -r .ipynb_checkpoints/
 *.py[cod]
-data/
+/data
 
 .vscode/
+.config/traders.yaml
 
 # Editors
 .vscode/
@@ -69,3 +70,74 @@ config/api_keys.yaml
 
 # Ignore log files
 *.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# Testing
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+
+# Logs
+*.log
+logs/
+
+# Data
+*.csv
+*.xlsx
+*.db
+*.sqlite3
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# Distribution
+dist/
+build/
+*.egg-info/
+
+# Machine Learning Models
+*.pkl
+*.joblib
+*.h5
+*.onnx
+models/*/
+!models/.gitkeep
+
+# Environment variables
+.env
+.env.local
+.env.*.local
