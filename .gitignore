@@ -12,7 +12,7 @@ ipython_config.py
 #   git rm -r .ipynb_checkpoints/
 *.py[cod]
 /data
-
+.claude
 .vscode/
 .config/traders.yaml
 
