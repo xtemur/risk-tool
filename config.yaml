@@ -53,7 +53,7 @@ signals:
 
 # Email Configuration
 email:
-  template: "quant_professional_signal.html"
+  template: "trading_report.html"
   subject: "🎯 Trading Signals - {trust_score}% Ensemble Models"
   trust_score: 88
   model_version: "5.0-DIVERSE"

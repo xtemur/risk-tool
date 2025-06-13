@@ -598,7 +598,7 @@ class DiverseTradingSignalGenerator:
             }
 
             # Load and render template
-            template_path = Path("src/email_service/templates/quant_professional_signal.html")
+            template_path = Path("src/email_service/templates/trading_report.html")
             with open(template_path, 'r') as f:
                 template_content = f.read()
 

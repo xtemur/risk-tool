@@ -124,7 +124,7 @@ risk-tool/
 │   └── email_service/
 │       ├── email_sender.py     # Email functionality
 │       └── templates/
-│           └── quant_professional_signal.html  # Email template
+│           └── trading_report.html  # Email template
 ├── models/
 │   └── diverse_models/         # Trained ensemble models (gitignored)
 │       ├── return_models.joblib
@@ -222,7 +222,7 @@ print(f'✅ {len(data)} records, {data['account_id'].nunique()} accounts')
 1. **Daily Usage**: Run `python make_signal.py` daily for fresh signals
 2. **Monitor Performance**: Track prediction accuracy over time
 3. **Model Updates**: Retrain models weekly/monthly with new data
-4. **Email Customization**: Modify `quant_professional_signal.html` template
+4. **Email Customization**: Modify `trading_report.html` template
 
 ---
 
