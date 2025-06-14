@@ -1,0 +1,10 @@
+# Trading Signal System Configuration
+
+# Database Configuration
+database:
+  path: "data/trading_risk.db"
+  timeout: 30  # seconds
+  validation:
+    min_accounts: 3
+    max_data_age_days: 30
+    max_missing_data_percent: 50

@@ -15,10 +15,12 @@ ipython_config.py
 .claude/
 .vscode/
 .config/traders.yaml
+CLAUDE.md
 
 # Editors
 .vscode/
 .idea/
+.cursorignore
 
 # Virtual environments
 .venv/
