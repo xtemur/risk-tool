@@ -131,6 +131,7 @@ class DatabaseManager:
                     currency TEXT DEFAULT 'USD',
                     status TEXT,
                     propreports_id INTEGER,
+                    UNIQUE(accoutn_id, fill_id),
                     FOREIGN KEY (account_id) REFERENCES accounts(account_id)
                 );
 

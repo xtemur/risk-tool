@@ -33,6 +33,7 @@ class DataDownloader:
     def __init__(self,
                  db_manager: Optional[DatabaseManager] = None,
                  parser: Optional[PropreReportsParser] = None,
+                 token: Optional[str] = None,
                  backup_dir: str = "data/csv_backups"):
         """
         Initialize downloader
@@ -40,13 +41,15 @@ class DataDownloader:
         Args:
             db_manager: Database manager instance
             parser: PropreReports parser instance
+            token: API token for authentication (if not provided, will try to get from env)
             backup_dir: Directory to save CSV backups
         """
-        self.token = os.getenv('API_TOKEN')
+        # Use provided token or fall back to environment variable
+        self.token = token or os.getenv('API_TOKEN')
         self.api_url = os.getenv('API_URL', 'https://api.proprereports.com/api.php')
 
         if not self.token:
-            raise ValueError("API_TOKEN not found in environment")
+            raise ValueError("API token not provided and API_TOKEN not found in environment")
 
         self.db = db_manager or DatabaseManager()
         self.parser = parser or PropreReportsParser()

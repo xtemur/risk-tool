@@ -9,6 +9,9 @@ import logging
 import argparse
 from pathlib import Path
 from datetime import datetime
+import os
+import requests
+from dotenv import load_dotenv
 
 # Add parent directory to path
 sys.path.append(str(Path(__file__).parent.parent))
@@ -16,6 +19,9 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.data.database_manager import DatabaseManager
 from src.data.data_downloader import DataDownloader
 from src.data.propreports_parser import PropreReportsParser
+
+# Load environment variables
+load_dotenv()
 
 
 def setup_logging():
@@ -31,6 +37,68 @@ def setup_logging():
             logging.FileHandler(f'logs/setup_{datetime.now().strftime("%Y%m%d_%H%M%S")}.log')
         ]
     )
+
+
+def authenticate_api():
+    """
+    Authenticate with PropreReports API to get token
+
+    Returns:
+        str: API token for subsequent requests
+    """
+    logger = logging.getLogger(__name__)
+
+    # Get credentials from environment
+    api_url = os.getenv('API_URL', 'https://api.proprereports.com/api.php')
+    api_user = os.getenv('API_USER')
+    api_pass = os.getenv('API_PASS')
+
+    if not api_user or not api_pass:
+        raise ValueError("API_USER and API_PASS must be set in environment variables")
+
+    # Prepare login request
+    login_data = {
+        'action': 'login',
+        'user': api_user,
+        'password': api_pass
+    }
+
+    logger.info(f"Authenticating with API as user: {api_user}")
+
+    try:
+        response = requests.post(
+            api_url,
+            data=login_data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+            timeout=30
+        )
+
+        if response.status_code == 200:
+            # Parse response to get token
+            response_text = response.text.strip()
+
+            # The API might return the token in different formats
+            # It could be just the token, or JSON with a token field
+            if response_text.startswith('{'):
+                # JSON response
+                import json
+                data = json.loads(response_text)
+                token = data.get('token') or data.get('auth_token') or data.get('access_token')
+                if not token:
+                    raise ValueError(f"No token found in response: {response_text}")
+            else:
+                # Plain text token
+                token = response_text
+
+            logger.info("Successfully authenticated with API")
+            return token
+
+        else:
+            raise Exception(f"Authentication failed with status {response.status_code}: {response.text}")
+
+    except Exception as e:
+        logger.error(f"Authentication error: {e}")
+        raise
 
 
 def setup_database(days_back=1000):
@@ -57,6 +125,10 @@ def setup_database(days_back=1000):
     logger.info("=" * 80)
 
     try:
+        # Authenticate with API first
+        logger.info("Authenticating with PropreReports API...")
+        token = authenticate_api()
+
         # Initialize components
         logger.info("Initializing database...")
         db_manager = DatabaseManager()
@@ -64,8 +136,8 @@ def setup_database(days_back=1000):
         logger.info("Initializing parser...")
         parser = PropreReportsParser()
 
-        logger.info("Initializing downloader...")
-        downloader = DataDownloader(db_manager, parser)
+        logger.info("Initializing downloader with API token...")
+        downloader = DataDownloader(db_manager, parser, token=token)
 
         # Download historical data
         logger.info("\nStarting historical data download...")
@@ -160,12 +232,6 @@ def setup_database(days_back=1000):
         # Next steps
         logger.info("\n" + "=" * 80)
         logger.info("SETUP COMPLETE!")
-        logger.info("=" * 80)
-        logger.info("\nNext steps:")
-        logger.info("  1. Review the data in notebooks/db_preview.ipynb")
-        logger.info("  2. Run feature engineering: python scripts/generate_features.py")
-        logger.info("  3. Train models: python scripts/train_models.py")
-        logger.info("  4. Start daily predictions: python scripts/daily_predict.py")
 
         if success_count < total_count:
             logger.warning("\n⚠️  Some traders failed to download. Check the logs for details.")
