@@ -108,6 +108,7 @@ class DatabaseManager:
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     account_id TEXT NOT NULL,
                     datetime TIMESTAMP NOT NULL,
+                    date DATE NOT NULL,
                     side TEXT CHECK(side IN ('B', 'S', 'T')),
                     quantity INTEGER NOT NULL,
                     symbol TEXT DEFAULT 'MISSING',
@@ -131,7 +132,7 @@ class DatabaseManager:
                     currency TEXT DEFAULT 'USD',
                     status TEXT,
                     propreports_id INTEGER,
-                    UNIQUE(accoutn_id, fill_id),
+                    UNIQUE(account_id, date, fill_id, order_id),
                     FOREIGN KEY (account_id) REFERENCES accounts(account_id)
                 );
 
@@ -140,9 +141,11 @@ class DatabaseManager:
                 CREATE INDEX IF NOT EXISTS idx_summary_account ON account_daily_summary(account_id);
                 CREATE INDEX IF NOT EXISTS idx_summary_account_date ON account_daily_summary(account_id, date);
                 CREATE INDEX IF NOT EXISTS idx_fills_datetime ON fills(datetime);
+                CREATE INDEX IF NOT EXISTS idx_fills_date ON fills(date);
                 CREATE INDEX IF NOT EXISTS idx_fills_account ON fills(account_id);
                 CREATE INDEX IF NOT EXISTS idx_fills_symbol ON fills(symbol);
                 CREATE INDEX IF NOT EXISTS idx_fills_account_datetime ON fills(account_id, datetime);
+                CREATE INDEX IF NOT EXISTS idx_fills_account_date ON fills(account_id, date);
                 CREATE INDEX IF NOT EXISTS idx_fills_fill_id ON fills(fill_id);
 
                 -- Metadata table for tracking data loads
@@ -336,18 +339,16 @@ class DatabaseManager:
         logger.info(f"Saved {records_saved} daily summary records for account {account_id}")
         return records_saved
 
-    def save_fills(self, df: pd.DataFrame, account_id: str,
-                   handle_duplicates: str = 'check') -> int:
+    def save_fills(self, df: pd.DataFrame, account_id: str) -> int:
         """
         Save fills (individual trades) data
 
         Args:
             df: DataFrame with fills data
             account_id: Account identifier
-            handle_duplicates: How to handle duplicates - 'check', 'force', or 'error'
 
         Returns:
-            Number of records saved
+            Number of records saved (excluding duplicates)
         """
         if df.empty:
             return 0
@@ -393,13 +394,16 @@ class DatabaseManager:
         existing_fees = [col for col in fee_columns if col in df.columns]
         df['total_fees'] = df[existing_fees].fillna(0).sum(axis=1)
 
-        # Convert datetime
+        # Convert datetime and extract date
         if 'datetime' in df.columns:
             df['datetime'] = pd.to_datetime(df['datetime'])
+            # Extract date for the date column
+            df['date'] = df['datetime'].dt.date
+            # Format datetime as string for storage
             df['datetime'] = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
 
         # Select columns to save
-        db_columns = ['account_id', 'datetime', 'side', 'quantity', 'symbol', 'price',
+        db_columns = ['account_id', 'datetime', 'date', 'side', 'quantity', 'symbol', 'price',
                       'route', 'liquidity', 'commission', 'ecn_fee', 'sec_fee', 'orf_fee',
                       'cat_fee', 'taf_fee', 'ftt_fee', 'nscc_fee', 'acc_fee', 'clr_fee',
                       'misc_fee', 'total_fees', 'order_id', 'fill_id', 'currency',
@@ -411,31 +415,6 @@ class DatabaseManager:
         records_saved = 0
 
         with self.get_connection() as conn:
-            if handle_duplicates == 'check':
-                # Check for existing fill_ids
-                if 'fill_id' in df.columns:
-                    existing_fills = set()
-
-                    # Process fill_ids in batches to avoid too many SQL variables
-                    unique_fill_ids = df['fill_id'].dropna().unique()
-                    batch_size = 500
-
-                    for i in range(0, len(unique_fill_ids), batch_size):
-                        batch_ids = unique_fill_ids[i:i + batch_size]
-                        placeholders = ','.join(['?' for _ in batch_ids])
-                        query = f"""
-                            SELECT fill_id FROM fills
-                            WHERE fill_id IN ({placeholders})
-                            AND account_id = ?
-                        """
-                        params = list(batch_ids) + [account_id]
-                        results = conn.execute(query, params).fetchall()
-                        existing_fills.update(row[0] for row in results)
-
-                    if existing_fills:
-                        logger.info(f"Found {len(existing_fills)} duplicate fill_ids, skipping...")
-                        df = df[~df['fill_id'].isin(existing_fills)]
-
             if not df.empty:
                 # Batch inserts to avoid "too many SQL variables" error
                 # SQLite limit is typically 999 variables, so calculate batch size based on columns
@@ -444,11 +423,23 @@ class DatabaseManager:
 
                 for i in range(0, len(df), batch_size):
                     batch_df = df.iloc[i:i + batch_size]
-                    batch_df.to_sql('fills', conn, if_exists='append', index=False, method='multi')
-                    records_saved += len(batch_df)
+                    try:
+                        # Try to insert the batch
+                        batch_df.to_sql('fills', conn, if_exists='append', index=False, method='multi')
+                        records_saved += len(batch_df)
+                    except sqlite3.IntegrityError:
+                        # If we get integrity error (duplicate), insert one by one
+                        logger.debug(f"Batch {i//batch_size + 1} had duplicates, inserting individually")
+                        for _, row in batch_df.iterrows():
+                            try:
+                                row.to_frame().T.to_sql('fills', conn, if_exists='append', index=False)
+                                records_saved += 1
+                            except sqlite3.IntegrityError:
+                                # Skip this duplicate silently
+                                pass
 
                     if i + batch_size < len(df):
-                        logger.debug(f"Saved batch {i//batch_size + 1}, {records_saved}/{len(df)} fills")
+                        logger.debug(f"Saved batch {i//batch_size + 1}, {records_saved} records saved so far")
 
             conn.commit()
 

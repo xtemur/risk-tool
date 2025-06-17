@@ -139,15 +139,18 @@ class DataDownloader:
             if match:
                 return int(match.group(1))
 
-        # If no pagination info found, assume single page
-        return 1
+        # If no pagination info found, return None to indicate uncertainty
+        # This will cause the system to continue fetching until empty response
+        return None
 
     def _has_more_pages(self, csv_content: str, current_page: int) -> Tuple[bool, Optional[int]]:
         """Check if there are more pages to fetch"""
         total_pages = self._extract_total_pages(csv_content)
 
         if total_pages is None:
-            return False, None
+            # If we can't determine total pages, continue fetching
+            # The main loop will break when it gets an empty response
+            return True, None
 
         return current_page < total_pages, total_pages
 
