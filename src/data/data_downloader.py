@@ -18,8 +18,9 @@ from dotenv import load_dotenv
 import pandas as pd
 import shutil
 
-from src.data.database_manager import DatabaseManager
-from src.data.propreports_parser import PropreReportsParser
+from .database_manager import DatabaseManager
+from .propreports_parser import PropreReportsParser
+from .data_validation import DataValidator
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -373,48 +374,6 @@ class DataDownloader:
         """Get status of data downloads"""
         return self.db.get_download_status()
 
-    def get_data_summary(self) -> Dict[str, pd.DataFrame]:
-        """Get summary of downloaded data"""
-        return self.db.get_data_summary()
-
-    def validate_downloads(self) -> Dict[str, Any]:
-        """Validate downloaded data for each trader"""
-        validation_results = {}
-
-        for trader in self.traders:
-            account_id = str(trader['account_id'])
-            trader_name = trader['name']
-
-            # Get summary data
-            summary_df = self.db.get_account_daily_summary(account_id=account_id)
-
-            validation = {
-                'trader_name': trader_name,
-                'has_summary_data': not summary_df.empty,
-                'summary_records': len(summary_df) if not summary_df.empty else 0,
-                'date_range': None,
-                'total_pnl': None,
-                'account_type': 'Unknown'
-            }
-
-            if not summary_df.empty:
-                validation['date_range'] = (
-                    summary_df['date'].min().strftime('%Y-%m-%d'),
-                    summary_df['date'].max().strftime('%Y-%m-%d')
-                )
-                validation['total_pnl'] = summary_df['net'].sum()
-
-                # Use the improved account type detection
-                validation['account_type'] = self.db.detect_account_type(account_id)
-
-            # Get fills data
-            fills_df = self.db.get_fills(account_id=account_id)
-            validation['has_fills_data'] = not fills_df.empty
-            validation['fills_records'] = len(fills_df) if not fills_df.empty else 0
-
-            validation_results[account_id] = validation
-
-        return validation_results
 
     def get_backup_info(self) -> Dict[str, Any]:
         """Get information about backed up CSV files"""
