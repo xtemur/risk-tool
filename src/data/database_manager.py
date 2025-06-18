@@ -1,281 +1,316 @@
 """
-Database Manager for Risk Tool
-Handles core database operations with schema creation, data insertion, and simple queries
+Simple Database Manager for Risk Tool
+Essential operations only: insert data and get data
+No complex SQLite queries - keep it simple and clean
 """
 
 import sqlite3
 import pandas as pd
+import numpy as np
+from typing import Optional, Dict, Any, List
 from pathlib import Path
-from typing import Optional, List
-from contextlib import contextmanager
 import logging
+from datetime import datetime
 
 logger = logging.getLogger(__name__)
 
 
 class DatabaseManager:
-    """Simple database manager for trading data"""
+    """
+    Simple database manager with only essential operations:
+    - Insert data (with duplicate handling)
+    - Get data
+    - Basic stats
+    """
 
-    def __init__(self, db_path: str = "data/trading_risk.db"):
+    def __init__(self, db_path: str = "data/trading_data.db"):
+        """Initialize database manager"""
         self.db_path = Path(db_path)
-        self.db_path.parent.mkdir(exist_ok=True, parents=True)
-        self._create_schemas()
+        self.db_path.parent.mkdir(exist_ok=True)
 
-    @contextmanager
-    def get_connection(self):
-        """Context manager for database connections"""
-        conn = sqlite3.connect(self.db_path)
-        conn.row_factory = sqlite3.Row
-        try:
-            yield conn
-        finally:
-            conn.close()
+        # Create tables if they don't exist
+        self._create_tables()
 
-    def _create_schemas(self):
-        """Create database schemas"""
-        with self.get_connection() as conn:
-            conn.executescript("""
-                -- Accounts table
+        # Run database migrations for existing databases
+        self._migrate_database()
+
+    def _create_tables(self):
+        """Create database tables"""
+        with sqlite3.connect(self.db_path) as conn:
+            # Accounts table
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS accounts (
                     account_id TEXT PRIMARY KEY,
                     account_name TEXT,
                     account_type TEXT,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-                );
+                )
+            """)
 
-                -- Account daily summary table
+            # Daily summary table - essential fields only
+            # UNIQUE constraint on (account_id, date) prevents duplicate daily summaries
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS account_daily_summary (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id TEXT NOT NULL,
-                    date DATE NOT NULL,
-                    type TEXT DEFAULT 'Eq',
-                    orders INTEGER DEFAULT 0,
-                    fills INTEGER DEFAULT 0,
-                    qty INTEGER DEFAULT 0,
-                    gross REAL DEFAULT 0,
-                    comm REAL DEFAULT 0,
-                    ecn_fee REAL DEFAULT 0,
-                    sec REAL DEFAULT 0,
-                    orf REAL DEFAULT 0,
-                    cat REAL DEFAULT 0,
-                    taf REAL DEFAULT 0,
-                    ftt REAL DEFAULT 0,
-                    nscc REAL DEFAULT 0,
-                    acc REAL DEFAULT 0,
-                    clr REAL DEFAULT 0,
-                    misc REAL DEFAULT 0,
-                    trade_fees REAL DEFAULT 0,
-                    net REAL DEFAULT 0,
-                    fee_software_md REAL DEFAULT NULL,
-                    fee_vat REAL DEFAULT NULL,
-                    fee_daily_interest REAL DEFAULT NULL,
-                    adj_fees REAL DEFAULT 0,
-                    adj_net REAL DEFAULT 0,
-                    unrealized_delta REAL DEFAULT 0,
-                    total_delta REAL DEFAULT 0,
-                    transfer_deposit REAL DEFAULT 0,
-                    transfers REAL DEFAULT 0,
-                    cash REAL DEFAULT 0,
-                    unrealized REAL DEFAULT 0,
-                    end_balance REAL DEFAULT 0,
+                    account_id TEXT,
+                    date DATE,
+                    type TEXT,
+                    orders INTEGER,
+                    fills INTEGER,
+                    qty REAL,
+                    gross REAL,
+                    net REAL,
+                    trade_fees REAL,
+                    total_delta REAL,
+                    end_balance REAL,
                     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                    UNIQUE(account_id, date),
-                    FOREIGN KEY (account_id) REFERENCES accounts(account_id)
-                );
+                    PRIMARY KEY (account_id, date),
+                    UNIQUE(account_id, date)
+                )
+            """)
 
-                -- Fills table
+            # Fills table - essential fields only
+            # Need to add order_id and fill_id columns for proper uniqueness
+            conn.execute("""
                 CREATE TABLE IF NOT EXISTS fills (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    account_id TEXT NOT NULL,
-                    datetime TIMESTAMP NOT NULL,
-                    date DATE NOT NULL,
-                    side TEXT CHECK(side IN ('B', 'S', 'T')),
-                    quantity INTEGER NOT NULL,
-                    symbol TEXT DEFAULT 'MISSING',
-                    price REAL NOT NULL,
-                    route TEXT,
-                    liquidity TEXT,
-                    commission REAL DEFAULT 0,
-                    ecn_fee REAL DEFAULT 0,
-                    sec_fee REAL DEFAULT 0,
-                    orf_fee REAL DEFAULT 0,
-                    cat_fee REAL DEFAULT 0,
-                    taf_fee REAL DEFAULT 0,
-                    ftt_fee REAL DEFAULT 0,
-                    nscc_fee REAL DEFAULT 0,
-                    acc_fee REAL DEFAULT 0,
-                    clr_fee REAL DEFAULT 0,
-                    misc_fee REAL DEFAULT 0,
-                    total_fees REAL DEFAULT 0,
+                    account_id TEXT,
+                    datetime TIMESTAMP,
+                    symbol TEXT,
+                    side TEXT,
+                    qty REAL,
+                    price REAL,
+                    total_fee REAL,
                     order_id TEXT,
                     fill_id TEXT,
-                    currency TEXT DEFAULT 'USD',
-                    status TEXT,
-                    propreports_id INTEGER,
-                    UNIQUE(account_id, date, fill_id, order_id),
-                    FOREIGN KEY (account_id) REFERENCES accounts(account_id)
-                );
-
-                -- Indexes
-                CREATE INDEX IF NOT EXISTS idx_summary_account_date ON account_daily_summary(account_id, date);
-                CREATE INDEX IF NOT EXISTS idx_fills_account_datetime ON fills(account_id, datetime);
-                CREATE INDEX IF NOT EXISTS idx_fills_symbol ON fills(symbol);
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    UNIQUE(account_id, fill_id)
+                )
             """)
-            conn.commit()
 
-    def insert_account(self, account_id: str, account_name: str, account_type: str = None):
-        """Insert or update account"""
-        with self.get_connection() as conn:
-            conn.execute("""
+            # Create indexes for performance
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_summary_account_date ON account_daily_summary (account_id, date)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fills_account_datetime ON fills (account_id, datetime)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fills_symbol ON fills (symbol)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_fills_order_id ON fills (order_id)")
+
+    def _migrate_database(self):
+        """Handle database migrations for existing databases"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Check if fills table has the new columns
+            cursor.execute("PRAGMA table_info(fills)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            # Add order_id column if it doesn't exist
+            if 'order_id' not in columns:
+                logger.info("Adding order_id column to fills table")
+                cursor.execute("ALTER TABLE fills ADD COLUMN order_id TEXT")
+
+            # Add fill_id column if it doesn't exist
+            if 'fill_id' not in columns:
+                logger.info("Adding fill_id column to fills table")
+                cursor.execute("ALTER TABLE fills ADD COLUMN fill_id TEXT")
+
+            # Add unique constraint if it doesn't exist
+            try:
+                cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_fills_unique ON fills (account_id, fill_id)")
+                logger.info("Created unique index on fills table")
+            except Exception as e:
+                logger.debug(f"Unique index might already exist: {e}")
+
+    def insert_summary_data(self, df: pd.DataFrame, account_id: str, replace_existing: bool = False) -> int:
+        """
+        Insert daily summary data, with option to replace existing data
+
+        Args:
+            df: DataFrame with summary data
+            account_id: Account ID
+            replace_existing: If True, replace existing data; if False, ignore duplicates
+
+        Returns:
+            Number of records inserted/updated
+        """
+        if df.empty:
+            return 0
+
+        # Prepare data with only essential fields
+        data = []
+        for _, row in df.iterrows():
+            # Convert date to string if it's a pandas Timestamp
+            date_value = row.get('Date')
+            if pd.notna(date_value):
+                if hasattr(date_value, 'strftime'):
+                    date_str = date_value.strftime('%Y-%m-%d')
+                else:
+                    date_str = str(date_value)
+            else:
+                date_str = None
+
+            record = (
+                str(account_id),  # Ensure string
+                date_str,
+                str(row.get('Type', 'Eq')),
+                int(row.get('Orders', 0)) if pd.notna(row.get('Orders')) else 0,
+                int(row.get('Fills', 0)) if pd.notna(row.get('Fills')) else 0,
+                float(row.get('Qty', 0)) if pd.notna(row.get('Qty')) else 0.0,
+                float(row.get('Gross', 0)) if pd.notna(row.get('Gross')) else 0.0,
+                float(row.get('Net', 0)) if pd.notna(row.get('Net')) else 0.0,
+                float(row.get('Trade Fees', 0)) if pd.notna(row.get('Trade Fees')) else 0.0,
+                float(row.get('Total Δ', 0)) if pd.notna(row.get('Total Δ')) else 0.0,
+                float(row.get('End Balance', 0)) if pd.notna(row.get('End Balance')) else 0.0
+            )
+            data.append(record)
+
+        # Insert with ignore duplicates
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Store account info
+            cursor.execute("""
                 INSERT OR REPLACE INTO accounts (account_id, account_name, account_type)
                 VALUES (?, ?, ?)
-            """, (account_id, account_name, account_type))
-            conn.commit()
+            """, (str(account_id), f"Account_{account_id}", str(data[0][2] if data else 'Eq')))
 
-    def insert_summary_data(self, df: pd.DataFrame, account_id: str):
-        """Insert account daily summary data"""
+            # Insert summary data with appropriate strategy
+            inserted = 0
+            for record in data:
+                try:
+                    if replace_existing:
+                        # Use INSERT OR REPLACE to update existing records
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO account_daily_summary
+                            (account_id, date, type, orders, fills, qty, gross, net, trade_fees, total_delta, end_balance)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, record)
+                        inserted += 1
+                    else:
+                        # Use INSERT OR IGNORE to skip duplicates
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO account_daily_summary
+                            (account_id, date, type, orders, fills, qty, gross, net, trade_fees, total_delta, end_balance)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, record)
+                        if cursor.rowcount > 0:
+                            inserted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to insert summary record: {e}")
+
+        logger.info(f"Inserted {inserted} new summary records for {account_id}")
+        return inserted
+
+    def insert_fills_data(self, df: pd.DataFrame, account_id: str, replace_existing: bool = False) -> int:
+        """
+        Insert fills data with option to replace existing data
+
+        Args:
+            df: DataFrame with fills data
+            account_id: Account ID
+            replace_existing: If True, delete existing data for the date range first
+
+        Returns:
+            Number of records inserted
+        """
         if df.empty:
             return 0
 
-        df = df.copy()
-        df['account_id'] = account_id
+        # Calculate total fees (sum of all fee columns)
+        fee_columns = ['Comm', 'Ecn Fee', 'SEC', 'ORF', 'CAT', 'TAF', 'FTT', 'NSCC', 'Acc', 'Clr', 'Misc']
+        df['total_fee'] = 0
+        for col in fee_columns:
+            if col in df.columns:
+                df['total_fee'] += df[col].fillna(0)
 
-        # Column mapping for PropreReports data
-        column_mapping = {
-            'Date': 'date',
-            'Type': 'type',
-            'Orders': 'orders',
-            'Fills': 'fills',
-            'Qty': 'qty',
-            'Gross': 'gross',
-            'Comm': 'comm',
-            'Ecn Fee': 'ecn_fee',
-            'SEC': 'sec',
-            'ORF': 'orf',
-            'CAT': 'cat',
-            'TAF': 'taf',
-            'FTT': 'ftt',
-            'NSCC': 'nscc',
-            'Acc': 'acc',
-            'Clr': 'clr',
-            'Misc': 'misc',
-            'Trade Fees': 'trade_fees',
-            'Net': 'net',
-            'Fee: Software & MD': 'fee_software_md',
-            'Fee: VAT': 'fee_vat',
-            'Fee: Daily Interest': 'fee_daily_interest',
-            'Adj Fees': 'adj_fees',
-            'Adj Net': 'adj_net',
-            'Unrealized Δ': 'unrealized_delta',
-            'Total Δ': 'total_delta',
-            'Transfer: Deposit': 'transfer_deposit',
-            'Transfers': 'transfers',
-            'Cash': 'cash',
-            'Unrealized': 'unrealized',
-            'End Balance': 'end_balance'
-        }
+        # Prepare data with only essential fields
+        data = []
+        for _, row in df.iterrows():
+            # Convert datetime to string if it's a pandas Timestamp
+            datetime_value = row.get('Date/Time')
+            if pd.notna(datetime_value):
+                if hasattr(datetime_value, 'strftime'):
+                    datetime_str = datetime_value.strftime('%Y-%m-%d %H:%M:%S')
+                else:
+                    datetime_str = str(datetime_value)
+            else:
+                datetime_str = None
 
-        df = df.rename(columns=column_mapping)
+            record = (
+                str(account_id),  # Ensure string
+                datetime_str,
+                str(row.get('Symbol', '')).strip().upper(),
+                str(row.get('B/S', '')).strip().upper(),
+                float(row.get('Qty', 0)) if pd.notna(row.get('Qty')) else 0.0,
+                float(row.get('Price', 0)) if pd.notna(row.get('Price')) else 0.0,
+                float(row.get('total_fee', 0)) if pd.notna(row.get('total_fee')) else 0.0,
+                str(row.get('Order Id', '')) if pd.notna(row.get('Order Id')) else None,
+                str(row.get('Fill Id', '')) if pd.notna(row.get('Fill Id')) else None
+            )
+            data.append(record)
 
-        # Convert date column
-        if 'date' in df.columns:
-            df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
+        # Insert data
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-        with self.get_connection() as conn:
-            # Delete existing records for these dates first
-            if 'date' in df.columns:
-                dates = df['date'].unique()
-                placeholders = ','.join(['?' for _ in dates])
-                conn.execute(
-                    f"DELETE FROM account_daily_summary WHERE account_id = ? AND date IN ({placeholders})",
-                    [account_id] + list(dates)
-                )
+            # If replacing existing data, delete fills for the date range first
+            if replace_existing and data:
+                # Get date range from the data
+                dates = [record[1] for record in data if record[1]]  # datetime column
+                if dates:
+                    # Extract just the date part for deletion
+                    date_strs = list(set(dt.split(' ')[0] if ' ' in dt else dt for dt in dates if dt))
+                    if date_strs:
+                        placeholders = ','.join(['?' for _ in date_strs])
+                        cursor.execute(f"""
+                            DELETE FROM fills
+                            WHERE account_id = ? AND date(datetime) IN ({placeholders})
+                        """, [str(account_id)] + date_strs)
+                        deleted_count = cursor.rowcount
+                        if deleted_count > 0:
+                            logger.info(f"Deleted {deleted_count} existing fill records for replacement")
 
-            # Insert new records
-            df.to_sql('account_daily_summary', conn, if_exists='append', index=False)
-            conn.commit()
+            inserted = 0
+            for record in data:
+                try:
+                    if replace_existing:
+                        # Use INSERT OR REPLACE to update existing records
+                        cursor.execute("""
+                            INSERT OR REPLACE INTO fills
+                            (account_id, datetime, symbol, side, qty, price, total_fee, order_id, fill_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, record)
+                    else:
+                        # Use INSERT OR IGNORE to skip duplicates
+                        cursor.execute("""
+                            INSERT OR IGNORE INTO fills
+                            (account_id, datetime, symbol, side, qty, price, total_fee, order_id, fill_id)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        """, record)
+                    if cursor.rowcount > 0:
+                        inserted += 1
+                except Exception as e:
+                    logger.warning(f"Failed to insert fill record: {e}")
 
-        return len(df)
-
-    def insert_fills_data(self, df: pd.DataFrame, account_id: str):
-        """Insert fills data"""
-        if df.empty:
-            return 0
-
-        df = df.copy()
-        df['account_id'] = account_id
-
-        # Column mapping for PropreReports fills data
-        column_mapping = {
-            'Date/Time': 'datetime',
-            'B/S': 'side',
-            'Qty': 'quantity',
-            'Symbol': 'symbol',
-            'Price': 'price',
-            'Route': 'route',
-            'Liq': 'liquidity',
-            'Comm': 'commission',
-            'Ecn Fee': 'ecn_fee',
-            'SEC': 'sec_fee',
-            'ORF': 'orf_fee',
-            'CAT': 'cat_fee',
-            'TAF': 'taf_fee',
-            'FTT': 'ftt_fee',
-            'NSCC': 'nscc_fee',
-            'Acc': 'acc_fee',
-            'Clr': 'clr_fee',
-            'Misc': 'misc_fee',
-            'Order Id': 'order_id',
-            'Fill Id': 'fill_id',
-            'Currency': 'currency',
-            'Status': 'status',
-            'PropReports Id': 'propreports_id'
-        }
-
-        df = df.rename(columns=column_mapping)
-
-        # Calculate total fees
-        fee_columns = ['commission', 'ecn_fee', 'sec_fee', 'orf_fee', 'cat_fee',
-                      'taf_fee', 'ftt_fee', 'nscc_fee', 'acc_fee', 'clr_fee', 'misc_fee']
-        existing_fees = [col for col in fee_columns if col in df.columns]
-        df['total_fees'] = df[existing_fees].fillna(0).sum(axis=1)
-
-        # Convert datetime and extract date
-        if 'datetime' in df.columns:
-            df['datetime'] = pd.to_datetime(df['datetime'])
-            df['date'] = df['datetime'].dt.date
-            df['datetime'] = df['datetime'].dt.strftime('%Y-%m-%d %H:%M:%S')
-
-        with self.get_connection() as conn:
-            try:
-                df.to_sql('fills', conn, if_exists='append', index=False)
-                conn.commit()
-                return len(df)
-            except sqlite3.IntegrityError:
-                # Handle duplicates by inserting one by one
-                records_saved = 0
-                for _, row in df.iterrows():
-                    try:
-                        row.to_frame().T.to_sql('fills', conn, if_exists='append', index=False)
-                        records_saved += 1
-                    except sqlite3.IntegrityError:
-                        pass  # Skip duplicates
-                conn.commit()
-                return records_saved
+        logger.info(f"Inserted {inserted} fill records for {account_id}")
+        return inserted
 
     def get_accounts(self) -> pd.DataFrame:
         """Get all accounts"""
-        with self.get_connection() as conn:
-            return pd.read_sql_query("""
-                SELECT account_id, account_name, account_type, created_at
-                FROM accounts
-                ORDER BY account_id
-            """, conn)
+        with sqlite3.connect(self.db_path) as conn:
+            return pd.read_sql_query("SELECT * FROM accounts", conn)
 
     def get_summary_data(self, account_id: Optional[str] = None,
                         start_date: Optional[str] = None,
                         end_date: Optional[str] = None) -> pd.DataFrame:
-        """Get account daily summary data"""
+        """
+        Get daily summary data
+
+        Args:
+            account_id: Filter by account ID
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+
+        Returns:
+            DataFrame with summary data
+        """
         query = "SELECT * FROM account_daily_summary WHERE 1=1"
         params = []
 
@@ -293,19 +328,28 @@ class DatabaseManager:
 
         query += " ORDER BY account_id, date"
 
-        with self.get_connection() as conn:
+        with sqlite3.connect(self.db_path) as conn:
             df = pd.read_sql_query(query, conn, params=params)
-
-        if not df.empty and 'date' in df.columns:
-            df['date'] = pd.to_datetime(df['date'])
-
-        return df
+            if not df.empty and 'date' in df.columns:
+                df['date'] = pd.to_datetime(df['date'])
+            return df
 
     def get_fills_data(self, account_id: Optional[str] = None,
                       start_date: Optional[str] = None,
                       end_date: Optional[str] = None,
-                      symbols: Optional[List[str]] = None) -> pd.DataFrame:
-        """Get fills data"""
+                      symbol: Optional[str] = None) -> pd.DataFrame:
+        """
+        Get fills data
+
+        Args:
+            account_id: Filter by account ID
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+            symbol: Filter by symbol
+
+        Returns:
+            DataFrame with fills data
+        """
         query = "SELECT * FROM fills WHERE 1=1"
         params = []
 
@@ -314,24 +358,82 @@ class DatabaseManager:
             params.append(account_id)
 
         if start_date:
-            query += " AND datetime >= ?"
+            query += " AND date(datetime) >= ?"
             params.append(start_date)
 
         if end_date:
-            query += " AND datetime <= ?"
+            query += " AND date(datetime) <= ?"
             params.append(end_date)
 
-        if symbols:
-            placeholders = ','.join(['?' for _ in symbols])
-            query += f" AND symbol IN ({placeholders})"
-            params.extend(symbols)
+        if symbol:
+            query += " AND symbol = ?"
+            params.append(symbol.upper())
 
         query += " ORDER BY account_id, datetime"
 
-        with self.get_connection() as conn:
+        with sqlite3.connect(self.db_path) as conn:
             df = pd.read_sql_query(query, conn, params=params)
+            if not df.empty and 'datetime' in df.columns:
+                df['datetime'] = pd.to_datetime(df['datetime'])
+            return df
 
-        if not df.empty and 'datetime' in df.columns:
-            df['datetime'] = pd.to_datetime(df['datetime'])
+    def get_database_stats(self) -> Dict[str, Any]:
+        """Get basic database statistics"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
 
-        return df
+            # Count records in each table
+            cursor.execute("SELECT COUNT(*) FROM accounts")
+            accounts_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM account_daily_summary")
+            summary_count = cursor.fetchone()[0]
+
+            cursor.execute("SELECT COUNT(*) FROM fills")
+            fills_count = cursor.fetchone()[0]
+
+            # Date ranges
+            cursor.execute("SELECT MIN(date), MAX(date) FROM account_daily_summary")
+            summary_dates = cursor.fetchone()
+
+            cursor.execute("SELECT MIN(date(datetime)), MAX(date(datetime)) FROM fills")
+            fills_dates = cursor.fetchone()
+
+            stats = {
+                'Total Accounts': accounts_count,
+                'Daily Summary Records': summary_count,
+                'Fills Records': fills_count,
+                'Summary Date Range': f"{summary_dates[0]} to {summary_dates[1]}" if summary_dates[0] else "No data",
+                'Fills Date Range': f"{fills_dates[0]} to {fills_dates[1]}" if fills_dates[0] else "No data"
+            }
+
+        return stats
+
+    def delete_data_for_period(self, account_id: str, start_date: str, end_date: str):
+        """
+        Delete data for a specific account and date range
+        Used before reinserting updated data
+
+        Args:
+            account_id: Account ID
+            start_date: Start date (YYYY-MM-DD)
+            end_date: End date (YYYY-MM-DD)
+        """
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+
+            # Delete summary data
+            cursor.execute("""
+                DELETE FROM account_daily_summary
+                WHERE account_id = ? AND date >= ? AND date <= ?
+            """, (account_id, start_date, end_date))
+            summary_deleted = cursor.rowcount
+
+            # Delete fills data
+            cursor.execute("""
+                DELETE FROM fills
+                WHERE account_id = ? AND date(datetime) >= ? AND date(datetime) <= ?
+            """, (account_id, start_date, end_date))
+            fills_deleted = cursor.rowcount
+
+            logger.info(f"Deleted {summary_deleted} summary and {fills_deleted} fills records for {account_id} ({start_date} to {end_date})")

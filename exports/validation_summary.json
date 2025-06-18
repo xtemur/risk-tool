@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-06-18 12:53:21",
+  "total_accounts": 9,
+  "accounts_with_data": 9,
+  "total_summary_records": 4077,
+  "total_fills_records": 795249,
+  "data_date_range": {
+    "start": "2023-04-03",
+    "end": "2025-05-07"
+  },
+  "portfolio_performance": {
+    "total_pnl": 5251600.4886952005,
+    "total_volume": 237324889.0,
+    "total_trades": 1502195,
+    "total_trading_days": 3475,
+    "total_profitable_days": 1652,
+    "total_losing_days": 1844,
+    "best_account_pnl": 4160733.1723537007,
+    "worst_account_pnl": -20487.00033599999,
+    "best_day_pnl": 496739.5956,
+    "worst_day_pnl": -391048.7141
+  },
+  "validation_status": {
+    "fast_validation_passed": true,
+    "full_validation_passed": true,
+    "total_warnings": 0
+  }
+}

@@ -1,7 +1,7 @@
 """
 Data Downloader for PropreReports
 Simplified API client that downloads and stores trading data
-Updated to use summaryByDate instead of totalsByDate
+Updated to use summaryByDate
 Modified to save CSV files for backup/debugging
 """
 
@@ -20,7 +20,6 @@ import shutil
 
 from .database_manager import DatabaseManager
 from .propreports_parser import PropreReportsParser
-from .data_validation import DataValidator
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -157,13 +156,15 @@ class DataDownloader:
 
     def download_all_data(self,
                          days_back: int = 1000,
-                         data_types: List[str] = ['summary', 'fills']) -> Dict[str, Dict]:
+                         data_types: List[str] = ['summary', 'fills'],
+                         replace_existing: bool = False) -> Dict[str, Dict]:
         """
         Download all data for all traders
 
         Args:
             days_back: Number of days to download
             data_types: List of data types to download ('summary', 'fills')
+            replace_existing: If True, replace existing data; if False, ignore duplicates
 
         Returns:
             Dictionary with results for each trader
@@ -180,19 +181,17 @@ class DataDownloader:
 
             logger.info(f"[{i}/{total_traders}] Processing {trader_name} ({account_id})")
 
-            # Save account info
-            self.db.save_account(account_id, trader_name)
 
             trader_results = {}
 
             try:
                 # Download each data type
                 if 'summary' in data_types:
-                    summary_count = self._download_summary(account_id, start_date, end_date)
+                    summary_count = self._download_summary(account_id, start_date, end_date, replace_existing)
                     trader_results['summary'] = summary_count
 
                 if 'fills' in data_types:
-                    fills_count = self._download_fills(account_id, start_date, end_date)
+                    fills_count = self._download_fills(account_id, start_date, end_date, replace_existing)
                     trader_results['fills'] = fills_count
 
                 trader_results['success'] = True
@@ -211,7 +210,7 @@ class DataDownloader:
 
         return results
 
-    def _download_summary(self, account_id: str, start_date: date, end_date: date) -> int:
+    def _download_summary(self, account_id: str, start_date: date, end_date: date, replace_existing: bool = False) -> int:
         """Download and save account daily summary data (summaryByDate)"""
         logger.info(f"Downloading summary for {account_id} from {start_date} to {end_date}")
 
@@ -248,9 +247,10 @@ class DataDownloader:
 
             if not df.empty:
                 # Save to database
-                records = self.db.save_account_daily_summary(df, account_id)
+                records = self.db.insert_summary_data(df, account_id, replace_existing)
                 total_records = records
-                logger.info(f"Saved {records} summary records")
+                action = "Updated" if replace_existing else "Saved"
+                logger.info(f"{action} {records} summary records")
             else:
                 logger.warning(f"Empty dataframe returned for {account_id}")
 
@@ -260,14 +260,12 @@ class DataDownloader:
             if temp_file.exists():
                 temp_file.unlink()
 
-        # Record data load
-        if total_records > 0:
-            self.db.record_data_load(account_id, 'summary', start_date, end_date, total_records)
+        # Note: Data load recording removed (not in simplified database manager)
 
         logger.info(f"Downloaded {total_records} daily summary records for {account_id}")
         return total_records
 
-    def _download_fills(self, account_id: str, start_date: date, end_date: date) -> int:
+    def _download_fills(self, account_id: str, start_date: date, end_date: date, replace_existing: bool = False) -> int:
         """Download and save fills data"""
         logger.info(f"Downloading fills for {account_id} from {start_date} to {end_date}")
 
@@ -318,10 +316,12 @@ class DataDownloader:
                 self._save_backup(temp_file, backup_path)
 
                 if not df.empty:
-                    # Save to database
-                    records = self.db.save_fills(df, account_id)
+                    # Save to database (only replace on first page to avoid multiple deletions)
+                    replace_for_page = replace_existing and page == 1
+                    records = self.db.insert_fills_data(df, account_id, replace_for_page)
                     total_records += records
-                    logger.info(f"Page {page}/{total_pages or '?'}: Saved {records} records")
+                    action = "Updated" if replace_for_page else "Saved"
+                    logger.info(f"Page {page}/{total_pages or '?'}: {action} {records} records")
                 else:
                     logger.warning(f"Page {page} returned empty dataframe")
                     break
@@ -339,9 +339,7 @@ class DataDownloader:
             page += 1
             time.sleep(self.request_delay)
 
-        # Record data load
-        if total_records > 0:
-            self.db.record_data_load(account_id, 'fills', start_date, end_date, total_records)
+        # Note: Data load recording removed (not in simplified database manager)
 
         logger.info(f"Downloaded {total_records} fill records for {account_id}")
         return total_records
@@ -372,7 +370,10 @@ class DataDownloader:
 
     def get_download_status(self) -> pd.DataFrame:
         """Get status of data downloads"""
-        return self.db.get_download_status()
+        # Note: Download status tracking removed from simplified database manager
+        # Return empty DataFrame for compatibility
+        import pandas as pd
+        return pd.DataFrame()
 
 
     def get_backup_info(self) -> Dict[str, Any]:

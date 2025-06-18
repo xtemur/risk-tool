@@ -19,6 +19,7 @@ sys.path.append(str(Path(__file__).parent.parent))
 from src.data.database_manager import DatabaseManager
 from src.data.data_downloader import DataDownloader
 from src.data.propreports_parser import PropreReportsParser
+from src.data.data_validator import validate_data_fast
 
 # Load environment variables
 load_dotenv()
@@ -144,10 +145,18 @@ def setup_database(days_back=1000):
         logger.info("This may take several minutes depending on the amount of data...")
 
         # Download specified days of data
+        # Use replace_existing=True for recent data downloads to get updated data
+        replace_existing = days_back <= 30  # Replace existing data for recent downloads
         results = downloader.download_all_data(
             days_back=days_back,
-            data_types=['summary', 'fills']  # Changed from 'totals' to 'summary'
+            data_types=['summary', 'fills'],
+            replace_existing=replace_existing
         )
+
+        if replace_existing:
+            logger.info(f"Downloading with data replacement enabled (last {days_back} days)")
+        else:
+            logger.info(f"Downloading with duplicate ignoring (last {days_back} days)")
 
         # Show summary
         logger.info("\n" + "=" * 80)
@@ -190,18 +199,12 @@ def setup_database(days_back=1000):
         accounts = db_manager.get_accounts()
         if not accounts.empty:
             sample_account = accounts.iloc[0]['account_id']
+            account_name = accounts.iloc[0]['account_name']
 
-            # Show account summary
-            summary = db_manager.get_account_summary(sample_account)
-            logger.info(f"\nSample Account Summary ({sample_account}):")
-            for key, value in summary.items():
-                if key == 'account_type':
-                    logger.info(f"  {key}: {value} Account")
-                else:
-                    logger.info(f"  {key}: {value}")
+            logger.info(f"\nSample Account: {account_name} ({sample_account})")
 
-            # Show recent daily data - UPDATED METHOD NAME
-            daily_data = db_manager.get_account_daily_summary(
+            # Show recent daily data
+            daily_data = db_manager.get_summary_data(
                 account_id=sample_account
             ).tail(5)
 
@@ -212,22 +215,24 @@ def setup_database(days_back=1000):
                 available_columns = [col for col in display_columns if col in daily_data.columns]
                 logger.info(daily_data[available_columns].to_string())
 
-        # Validate downloaded data
+        # Run data validation (fast validation during setup)
         logger.info("\n" + "=" * 80)
-        logger.info("DATA VALIDATION")
+        logger.info("RUNNING FAST DATA VALIDATION")
         logger.info("=" * 80)
 
-        validation_results = downloader.validate_downloads()
-        for account_id, validation in validation_results.items():
-            trader_name = validation['trader_name']
-            account_type = validation.get('account_type', 'Unknown')
-            logger.info(f"\n{trader_name} ({account_id}) - {account_type} Account:")
-            logger.info(f"  Summary records: {validation['summary_records']}")
-            logger.info(f"  Fills records: {validation['fills_records']}")
-            if validation['date_range']:
-                logger.info(f"  Date range: {validation['date_range'][0]} to {validation['date_range'][1]}")
-            if validation['total_pnl'] is not None:
-                logger.info(f"  Total P&L: ${validation['total_pnl']:,.2f}")
+        try:
+            validation_result = validate_data_fast()
+            validation_stats = validation_result['stats']
+
+            if validation_stats['failed_validation'] == 0:
+                logger.info("✓ All data passed fast validation!")
+                logger.info("   Run with --validate for full day-by-day validation")
+            else:
+                logger.warning(f"⚠️  {validation_stats['failed_validation']} accounts failed validation")
+                logger.warning(f"   Total discrepancy days: {validation_stats['total_discrepancy_days']}")
+
+        except Exception as e:
+            logger.error(f"Data validation failed: {e}")
 
         # Next steps
         logger.info("\n" + "=" * 80)
@@ -262,14 +267,122 @@ def main():
         default=1000,
         help='Number of days back to download data (default: 1000)'
     )
+    parser.add_argument(
+        '--validate',
+        action='store_true',
+        help='Only run full data validation on existing data (skip download)'
+    )
+    parser.add_argument(
+        '--validate-fast',
+        action='store_true',
+        help='Only run fast aggregate validation (skip download)'
+    )
+    parser.add_argument(
+        '--account',
+        type=str,
+        help='Validate specific account ID only (use with --validate)'
+    )
 
     args = parser.parse_args()
 
-    # Call the setup_database function with the specified days_back parameter
-    result = setup_database(days_back=args.days_back)
+    if args.validate or args.validate_fast:
+        # Only run validation
+        setup_logging()
+        logger = logging.getLogger(__name__)
 
-    if not result['success']:
-        sys.exit(1)
+        validation_type = "FAST" if args.validate_fast else "FULL"
+        logger.info("=" * 80)
+        logger.info(f"RUNNING {validation_type} DATA VALIDATION")
+        logger.info("=" * 80)
+
+        try:
+            if args.validate_fast:
+                validation_result = validate_data_fast()
+            else:
+                # Import the base validate_data function for account-specific validation
+                from src.data.data_validator import validate_data
+                validation_result = validate_data(account_id=args.account, fast_only=False)
+            validation_stats = validation_result['stats']
+
+            # Show comprehensive validation results
+            logger.info(f"Total accounts: {validation_stats['total_accounts']}")
+            logger.info(f"Accounts with data: {validation_stats['accounts_with_data']}")
+
+            if validation_stats.get('date_range'):
+                date_range = validation_stats['date_range']
+                logger.info(f"Data coverage: {date_range['start']} to {date_range['end']} ({date_range['total_days']} days)")
+
+            # Database stats
+            if 'database' in validation_stats:
+                db_stats = validation_stats['database']
+                logger.info(f"Database stats:")
+                for key, value in db_stats.items():
+                    logger.info(f"  {key}: {value}")
+
+            # Portfolio statistics
+            if 'portfolio' in validation_stats:
+                ps = validation_stats['portfolio']
+                logger.info(f"\nPortfolio statistics:")
+                logger.info(f"  Total P&L: ${ps['total_pnl']:,.2f}")
+                logger.info(f"  Best account P&L: ${ps['best_account_pnl']:,.2f}")
+                logger.info(f"  Worst account P&L: ${ps['worst_account_pnl']:,.2f}")
+                logger.info(f"  Best daily P&L: ${ps['best_day_pnl']:,.2f}")
+                logger.info(f"  Worst daily P&L: ${ps['worst_day_pnl']:,.2f}")
+                logger.info(f"  Total volume: {ps['total_volume']:,.0f} shares")
+                logger.info(f"  Total trades: {ps['total_trades']:,}")
+                win_rate = ps['total_profitable_days'] / (ps['total_profitable_days'] + ps['total_losing_days']) * 100 if (ps['total_profitable_days'] + ps['total_losing_days']) > 0 else 0
+                logger.info(f"  Win rate: {win_rate:.1f}% ({ps['total_profitable_days']} profitable vs {ps['total_losing_days']} losing days)")
+
+            # Account-by-account summary
+            if validation_stats['by_account']:
+                logger.info("\nAccount summaries:")
+                for acc_id, acc_stats in validation_stats['by_account'].items():
+                    if acc_stats['has_data']:
+                        summary_count = acc_stats['summary_records']
+                        fills_count = acc_stats['fills_records']
+                        logger.info(f"  {acc_id}: {summary_count} summary, {fills_count} fills")
+                        if acc_stats.get('date_range'):
+                            dr = acc_stats['date_range']
+                            logger.info(f"    Date range: {dr['start']} to {dr['end']} ({dr['days']} days)")
+
+                        # Display trading statistics
+                        if acc_stats.get('trading_stats'):
+                            ts = acc_stats['trading_stats']
+                            logger.info(f"    Total P&L: ${ts['total_pnl']:,.2f}")
+                            logger.info(f"    Daily P&L: Min ${ts['min_daily_pnl']:,.2f}, Max ${ts['max_daily_pnl']:,.2f}, Avg ${ts['avg_daily_pnl']:,.2f}")
+                            logger.info(f"    Win/Loss: {ts['profitable_days']} profitable, {ts['losing_days']} losing days")
+                            logger.info(f"    Trading: {ts['trading_days']} active days, {ts['total_trades']:,} trades, {ts['total_volume']:,.0f} shares")
+                    else:
+                        logger.warning(f"  {acc_id}: No data")
+
+            # Show any errors or warnings
+            if validation_result['errors']:
+                logger.error("Validation errors:")
+                for error in validation_result['errors']:
+                    logger.error(f"  {error}")
+
+            if validation_result['warnings']:
+                logger.warning("Validation warnings:")
+                for warning in validation_result['warnings']:
+                    logger.warning(f"  {warning}")
+
+            # Final result
+            if validation_stats['failed_validation'] == 0:
+                logger.info("\n✓ All data passed validation!")
+                sys.exit(0)
+            else:
+                logger.error(f"\n✗ {validation_stats['failed_validation']} accounts failed validation")
+                sys.exit(1)
+
+        except Exception as e:
+            logger.error(f"Data validation failed: {e}")
+            sys.exit(1)
+    else:
+        # Call the setup_database function with the specified days_back parameter
+        result = setup_database(days_back=args.days_back)
+
+        if not result['success']:
+            sys.exit(1)
 
 
 if __name__ == "__main__":

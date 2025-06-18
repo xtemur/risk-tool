@@ -141,6 +141,9 @@ class PropreReportsParser:
 
     def _clean_summary_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean and standardize summary data"""
+        # Make a copy to avoid SettingWithCopyWarning
+        df = df.copy()
+
         # Convert date
         if 'Date' in df.columns:
             df['Date'] = pd.to_datetime(df['Date'], errors='coerce')
@@ -161,37 +164,43 @@ class PropreReportsParser:
         for col in numeric_columns:
             if col in df.columns:
                 # Handle parentheses for negative numbers and remove commas
-                df[col] = df[col].astype(str).str.replace(',', '')
-                df[col] = df[col].str.replace(r'\(([0-9.]+)\)', r'-\1', regex=True)
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                # Work with a string series to avoid dtype warnings
+                col_str = df[col].astype(str)
+                col_str = col_str.str.replace(',', '')
+                col_str = col_str.str.replace(r'\(([0-9.]+)\)', r'-\1', regex=True)
+                # Convert to numeric and assign back
+                df.loc[:, col] = pd.to_numeric(col_str, errors='coerce').fillna(0)
 
         # Clean Type column
         if 'Type' in df.columns:
-            df['Type'] = df['Type'].str.strip()
+            df.loc[:, 'Type'] = df['Type'].str.strip()
 
         return df
 
     def _clean_fills_data(self, df: pd.DataFrame) -> pd.DataFrame:
         """Clean and standardize fills data"""
+        # Make a copy to avoid SettingWithCopyWarning
+        df = df.copy()
+
         # Convert numeric columns
         numeric_columns = ['Qty', 'Price', 'Comm', 'Ecn Fee', 'SEC', 'ORF',
                           'CAT', 'TAF', 'FTT', 'NSCC', 'Acc', 'Clr', 'Misc']
 
         for col in numeric_columns:
             if col in df.columns:
-                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+                df.loc[:, col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
 
         # Convert datetime
         if 'Date/Time' in df.columns:
-            df['Date/Time'] = pd.to_datetime(df['Date/Time'], errors='coerce')
+            df.loc[:, 'Date/Time'] = pd.to_datetime(df['Date/Time'], errors='coerce')
 
         # Clean B/S column
         if 'B/S' in df.columns:
-            df['B/S'] = df['B/S'].str.strip().str.upper()
+            df.loc[:, 'B/S'] = df['B/S'].str.strip().str.upper()
 
         # Clean symbol
         if 'Symbol' in df.columns:
-            df['Symbol'] = df['Symbol'].str.strip().str.upper()
+            df.loc[:, 'Symbol'] = df['Symbol'].str.strip().str.upper()
 
         return df
 

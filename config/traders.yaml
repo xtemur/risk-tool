@@ -1,31 +1,31 @@
 traders:
-  - account_id: 3946
-    name: "NET005_OLD"
-    strategy: "Day Trading"
-  - account_id: 4004
-    name: "NEL005_OLD"
-    strategy: "Day Trading"
-  - account_id: 3951
-    name: "NET010_OLD"
-    strategy: "Day Trading"
-  - account_id: 3956
-    name: "NET015_OLD"
-    strategy: "Day Trading"
-  - account_id: 3942
-    name: "NET001_OLD"
-    strategy: "Day Trading"
-  - account_id: 3950
-    name: "NET009_OLD"
-    strategy: "Day Trading"
+  # - account_id: 3946
+  #   name: "NET005_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 4004
+  #   name: "NEL005_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3951
+  #   name: "NET010_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3956
+  #   name: "NET015_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3942
+  #   name: "NET001_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 3950
+  #   name: "NET009_OLD"
+  #   strategy: "Day Trading"
   - account_id: 3978
     name: "NEO006OP_OLD"
     strategy: "Day Trading"
-  - account_id: 3957
-    name: "NEO006_OLD"
-    strategy: "Day Trading"
-  - account_id: 5093
-    name: "NET026_OLD"
-    strategy: "Day Trading"
+  # - account_id: 3957
+  #   name: "NEO006_OLD"
+  #   strategy: "Day Trading"
+  # - account_id: 5093
+  #   name: "NET026_OLD"
+  #   strategy: "Day Trading"
 
 
 
