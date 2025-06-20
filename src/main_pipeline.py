@@ -6,10 +6,15 @@ Orchestrates the entire 7-step process
 
 import sys
 import os
+import json
 from datetime import datetime
+from pathlib import Path
 
 # Add src to path for imports
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
+from config import get_config
+from utils import get_logger, log_system_event, log_error
 
 from data.data_validator import DataValidator
 from features.feature_engineer import FeatureEngineer
@@ -21,8 +26,13 @@ from models.signal_generator import DeploymentReadySignals
 
 class RiskManagementPipeline:
     def __init__(self):
+        self.config = get_config()
+        self.logger = get_logger(__name__)
         self.checkpoint_results = {}
         self.start_time = datetime.now()
+
+        # Create output directories
+        self._setup_directories()
 
     def run_complete_pipeline(self):
         """Run the complete 7-step risk management pipeline"""
@@ -91,8 +101,8 @@ class RiskManagementPipeline:
         try:
             validator = DataValidator()
 
-            # Load and validate data
-            validator.load_and_validate_data()
+            # Load and validate data - ACTIVE TRADERS ONLY
+            validator.load_and_validate_data(active_only=True)
 
             # Create daily aggregations
             validator.create_daily_aggregations()
@@ -107,14 +117,17 @@ class RiskManagementPipeline:
             checkpoint_pass = validator.generate_summary_report()
 
             # Save processed data
-            validator.daily_df.to_pickle('data/daily_aggregated.pkl')
-            print(f"✓ Saved daily aggregated data to data/daily_aggregated.pkl")
+            output_path = Path(self.config.paths.data_dir) / 'daily_aggregated.pkl'
+            validator.daily_df.to_pickle(output_path)
+            print(f"✓ Saved daily aggregated data to {output_path}")
+            self.logger.info("Step 1 completed", output_path=str(output_path))
 
             self.checkpoint_results['step1'] = checkpoint_pass
             return checkpoint_pass
 
         except Exception as e:
             print(f"❌ Step 1 failed: {e}")
+            log_error("Step 1 failed", str(e), {"step": "data_validation"})
             return False
 
     def run_step2_feature_engineering(self):
@@ -145,19 +158,26 @@ class RiskManagementPipeline:
             ])
 
             # Save feature data
-            engineer.feature_df.to_pickle('data/features_engineered.pkl')
-            print(f"✓ Saved engineered features to data/features_engineered.pkl")
+            feature_path = Path(self.config.paths.data_dir) / 'features_engineered.pkl'
+            engineer.feature_df.to_pickle(feature_path)
+            print(f"✓ Saved engineered features to {feature_path}")
 
             # Save feature list
-            with open('data/feature_list.txt', 'w') as f:
+            feature_list_path = Path(self.config.paths.data_dir) / 'feature_list.txt'
+            with open(feature_list_path, 'w') as f:
                 for feature in available_features:
                     f.write(f"{feature}\\n")
+
+            self.logger.info("Step 2 completed",
+                           feature_count=len(available_features),
+                           output_path=str(feature_path))
 
             self.checkpoint_results['step2'] = checkpoint_pass
             return checkpoint_pass
 
         except Exception as e:
             print(f"❌ Step 2 failed: {e}")
+            log_error("Step 2 failed", str(e), {"step": "feature_engineering"})
             return False
 
     def run_step3_target_strategy(self):
@@ -385,8 +405,42 @@ class RiskManagementPipeline:
 
         print("\\n" + "="*80)
 
+        # Log final summary
+        log_system_event(
+            "pipeline_completed",
+            "Risk management pipeline execution completed",
+            {
+                "execution_time": str(execution_time),
+                "all_passed": all_passed,
+                "checkpoint_results": self.checkpoint_results
+            }
+        )
+
+    def _setup_directories(self):
+        """Create necessary output directories"""
+        directories = [
+            self.config.paths.data_dir,
+            self.config.paths.models_dir,
+            self.config.paths.reports_dir,
+            self.config.paths.logs_dir,
+            self.config.paths.signals_dir
+        ]
+
+        for dir_path in directories:
+            Path(dir_path).mkdir(parents=True, exist_ok=True)
+
+        self.logger.info("Output directories created")
+
+
 def main():
     """Main entry point for the pipeline"""
+    # Log pipeline start
+    log_system_event(
+        "pipeline_started",
+        "Risk management pipeline execution started",
+        {"environment": get_config().app.environment}
+    )
+
     pipeline = RiskManagementPipeline()
     success = pipeline.run_complete_pipeline()
 

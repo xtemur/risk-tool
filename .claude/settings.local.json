@@ -1,0 +1,39 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make test:*)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(find:*)",
+      "Bash(pip install:*)",
+      "Bash(sqlite3:*)",
+      "Bash(python:*)",
+      "Bash(grep:*)",
+      "Bash(mkdir:*)",
+      "Bash(chmod:*)",
+      "Bash(ls:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(rm:*)",
+      "Bash(true)",
+      "Bash(mv:*)",
+      "Bash(touch:*)",
+      "Bash(git rm:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(conda activate:*)",
+      "Bash(conda info:*)",
+      "Bash(source:*)",
+      "Bash(jupyter:*)",
+      "mcp__ide__executeCode",
+      "Bash(rg:*)",
+      "WebFetch(domain:propreports.atlassian.net)",
+      "WebFetch(domain:propreports.atlassian.net)",
+      "Bash(cat:*)",
+      "Bash(conda install:*)",
+      "Bash(streamlit run:*)",
+      "Bash(conda:*)",
+      "Bash(tree:*)"
+    ],
+    "deny": []
+  }
+}

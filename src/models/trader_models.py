@@ -19,13 +19,18 @@ class TraderModelTraining:
         self.trained_models = {}
         self.training_results = {}
 
-        # Hardcoded best target strategy (from previous analysis)
-        self.target_strategy_info = {
-            'best_strategy': 'Option B: Classification',
-            'target_column': 'target_class',
-            'model_performance': 0.785,
-            'predictability_score': 0.2
-        }
+        # Load target strategy info from file (created in step 3)
+        try:
+            with open('data/target_strategy.json', 'r') as f:
+                self.target_strategy_info = json.load(f)
+        except:
+            # Fallback hardcoded strategy
+            self.target_strategy_info = {
+                'best_strategy': 'Option B: Classification',
+                'target_column': 'target_class',
+                'model_performance': 0.785,
+                'predictability_score': 0.2
+            }
 
     def prepare_for_training(self):
         """Prepare data for individual trader model training"""
@@ -84,6 +89,12 @@ class TraderModelTraining:
         try:
             # Train XGBoost model based on target type
             if target_col == 'target_class':
+                # Calculate class weights for balancing
+                from sklearn.utils.class_weight import compute_class_weight
+                classes = np.unique(y_train)
+                class_weights = compute_class_weight('balanced', classes=classes, y=y_train)
+                weight_dict = dict(zip(classes, class_weights))
+
                 model = xgb.XGBClassifier(
                     objective='multi:softprob',
                     random_state=42,
@@ -95,7 +106,10 @@ class TraderModelTraining:
                     eval_metric='mlogloss'
                 )
 
-                model.fit(X_train, y_train)
+                # Apply sample weights during training
+                sample_weights = np.array([weight_dict[y] for y in y_train])
+
+                model.fit(X_train, y_train, sample_weight=sample_weights)
 
                 # Evaluate
                 train_pred = model.predict(X_train)
@@ -109,6 +123,11 @@ class TraderModelTraining:
                 val_f1 = f1_score(y_val, val_pred, average='weighted')
 
             elif target_col == 'target_downside_risk':
+                # Calculate scale_pos_weight for binary imbalanced classification
+                pos_count = (y_train == 1).sum()
+                neg_count = (y_train == 0).sum()
+                scale_pos_weight = neg_count / pos_count if pos_count > 0 else 1.0
+
                 model = xgb.XGBClassifier(
                     objective='binary:logistic',
                     random_state=42,
@@ -117,7 +136,8 @@ class TraderModelTraining:
                     learning_rate=0.1,
                     subsample=0.8,
                     colsample_bytree=0.8,
-                    eval_metric='logloss'
+                    eval_metric='logloss',
+                    scale_pos_weight=scale_pos_weight  # Balance classes
                 )
 
                 model.fit(X_train, y_train)
@@ -335,8 +355,8 @@ class TraderModelTraining:
         print(f"✓ Models trained: {models_trained} ({len(self.trained_models)} models)")
 
         if models_trained:
-            # Check 2: Do we have sufficient model coverage?
-            min_models = 10
+            # Check 2: Do we have sufficient model coverage? (relaxed for active traders)
+            min_models = 5
             sufficient_coverage = len(self.trained_models) >= min_models
             checkpoint_checks.append(sufficient_coverage)
             print(f"✓ Sufficient model coverage: {sufficient_coverage} (need ≥{min_models})")

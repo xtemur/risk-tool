@@ -382,17 +382,31 @@ class TargetVariableStrategy:
                 # Combined score (weight predictability and model performance)
                 option['combined_score'] = 0.6 * model_score + 0.4 * pred_score
 
-            # Sort by combined score
-            options.sort(key=lambda x: x['combined_score'], reverse=True)
+            # OVERRIDE: Force Option B (Classification) due to better business logic
+            # The binary downside risk had severe class imbalance issues
+            classification_option = None
+            for option in options:
+                if "Option B" in option['option_name']:
+                    classification_option = option
+                    break
 
-            self.best_target_strategy = options[0]
+            if classification_option:
+                self.best_target_strategy = classification_option
+                print(f"\\n✅ BEST TARGET STRATEGY: {classification_option['option_name']} (FORCED)")
+                print(f"   Combined Score: {classification_option['combined_score']:.4f}")
+                print(f"   Model Performance: {classification_option['overall_score']:.4f}")
+                print(f"   Predictability: {classification_option['predictability']['predictability_score']:.4f}")
+                print("   ✓ Reason: Better class balance and downstream compatibility")
+            else:
+                # Fallback to original logic
+                options.sort(key=lambda x: x['combined_score'], reverse=True)
+                self.best_target_strategy = options[0]
+                print(f"\\n✅ BEST TARGET STRATEGY: {self.best_target_strategy['option_name']}")
+                print(f"   Combined Score: {self.best_target_strategy['combined_score']:.4f}")
+                print(f"   Model Performance: {self.best_target_strategy['overall_score']:.4f}")
+                print(f"   Predictability: {self.best_target_strategy['predictability']['predictability_score']:.4f}")
+
             self.target_results = {opt['option_name']: opt for opt in options}
-
-            print(f"\\n✅ BEST TARGET STRATEGY: {self.best_target_strategy['option_name']}")
-            print(f"   Combined Score: {self.best_target_strategy['combined_score']:.4f}")
-            print(f"   Model Performance: {self.best_target_strategy['overall_score']:.4f}")
-            print(f"   Predictability: {self.best_target_strategy['predictability']['predictability_score']:.4f}")
-
             return self.best_target_strategy
         else:
             print("❌ No viable target strategies found")

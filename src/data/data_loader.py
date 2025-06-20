@@ -7,23 +7,39 @@ class DataLoader:
     def __init__(self, db_path: str = 'data/risk_tool.db'):
         self.db_path = db_path
 
-    def load_trades_data(self, test_cutoff_date: str = '2025-04-01') -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def load_trades_data(self, test_cutoff_date: str = '2025-04-01', active_only: bool = True) -> Tuple[pd.DataFrame, pd.DataFrame]:
         """
         Load trades data and split into train/test based on cutoff date.
         Focus only on realized PNL from closed trades.
+        If active_only=True, only load data for active traders.
         """
         conn = sqlite3.connect(self.db_path)
 
-        query = """
-        SELECT
-            account_id,
-            trade_date,
-            net as realized_pnl,
-            CASE WHEN net > 0 THEN 1 ELSE 0 END as is_winner
-        FROM trades
-        WHERE trade_date IS NOT NULL
-        ORDER BY account_id, trade_date
-        """
+        if active_only:
+            query = """
+            SELECT
+                t.account_id,
+                t.trade_date,
+                t.net as realized_pnl,
+                CASE WHEN t.net > 0 THEN 1 ELSE 0 END as is_winner
+            FROM trades t
+            INNER JOIN accounts a ON t.account_id = a.account_id
+            WHERE t.trade_date IS NOT NULL AND a.is_active = 1
+            ORDER BY t.account_id, t.trade_date
+            """
+            print("Loading trades for ACTIVE TRADERS ONLY")
+        else:
+            query = """
+            SELECT
+                account_id,
+                trade_date,
+                net as realized_pnl,
+                CASE WHEN net > 0 THEN 1 ELSE 0 END as is_winner
+            FROM trades
+            WHERE trade_date IS NOT NULL
+            ORDER BY account_id, trade_date
+            """
+            print("Loading trades for ALL traders")
 
         df = pd.read_sql_query(query, conn)
         conn.close()

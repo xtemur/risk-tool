@@ -74,9 +74,8 @@ class CausalImpactAnalysis:
         print("\\n=== GENERATING RISK SIGNALS ===")
 
         test_cutoff = pd.to_datetime('2025-04-01')
-        feature_cols = [col for col in self.feature_df.columns
-                       if col not in ['account_id', 'trade_date', 'realized_pnl',
-                                     'next_day_pnl', 'target_class']]
+        # Use the exact feature names that models were trained with
+        feature_cols = self.feature_names
 
         signal_data = []
 
@@ -104,14 +103,17 @@ class CausalImpactAnalysis:
                 test_data['risk_signal'] = predictions[:len(test_data)]  # Use direct predictions first
 
                 if probabilities.shape[1] >= 3:
-                    # Multi-class: use probabilities for refinement
+                    # Multi-class: Class 0=Loss, Class 1=Neutral, Class 2=Win
                     loss_proba = probabilities[:, 0]  # Class 0 = Loss
+                    neutral_proba = probabilities[:, 1]  # Class 1 = Neutral
                     win_proba = probabilities[:, 2] if probabilities.shape[1] > 2 else np.zeros(len(predictions))
 
-                    # Refine signals based on confidence
+                    # CORRECTED: Map predictions to risk signals properly
+                    # predictions: 0=Loss, 1=Neutral, 2=Win
+                    # risk_signal: 0=Low Risk, 1=Neutral, 2=High Risk
                     test_data['risk_signal'] = np.where(
-                        loss_proba > 0.5, 2,  # High risk if high loss probability
-                        np.where(win_proba > 0.5, 0, 1)  # Low risk if high win probability, else neutral
+                        predictions == 0, 2,  # Loss prediction → High risk signal
+                        np.where(predictions == 2, 0, 1)  # Win prediction → Low risk signal, else neutral
                     )
                 elif probabilities.shape[1] == 2:
                     # Binary classification

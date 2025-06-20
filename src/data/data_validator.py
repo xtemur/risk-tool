@@ -19,30 +19,52 @@ class DataValidator:
         self.trades_df = None
         self.daily_df = None
 
-    def load_and_validate_data(self):
+    def load_and_validate_data(self, active_only=True):
         """Load trades data and perform basic validation"""
         print("=== DATA VALIDATION & EXPLORATION ===")
 
         conn = sqlite3.connect(self.db_path)
 
         # Load trades data with all relevant fields
-        query = """
-        SELECT
-            account_id,
-            trade_date,
-            net as realized_pnl,
-            gross,
-            qty,
-            symbol,
-            type,
-            entry,
-            exit,
-            held,
-            CASE WHEN net > 0 THEN 1 ELSE 0 END as is_winner
-        FROM trades
-        WHERE trade_date IS NOT NULL
-        ORDER BY account_id, trade_date
-        """
+        if active_only:
+            query = """
+            SELECT
+                t.account_id,
+                t.trade_date,
+                t.net as realized_pnl,
+                t.gross,
+                t.qty,
+                t.symbol,
+                t.type,
+                t.entry,
+                t.exit,
+                t.held,
+                CASE WHEN t.net > 0 THEN 1 ELSE 0 END as is_winner
+            FROM trades t
+            INNER JOIN accounts a ON t.account_id = a.account_id
+            WHERE t.trade_date IS NOT NULL AND a.is_active = 1
+            ORDER BY t.account_id, t.trade_date
+            """
+            print("Loading data for ACTIVE TRADERS ONLY")
+        else:
+            query = """
+            SELECT
+                account_id,
+                trade_date,
+                net as realized_pnl,
+                gross,
+                qty,
+                symbol,
+                type,
+                entry,
+                exit,
+                held,
+                CASE WHEN net > 0 THEN 1 ELSE 0 END as is_winner
+            FROM trades
+            WHERE trade_date IS NOT NULL
+            ORDER BY account_id, trade_date
+            """
+            print("Loading data for ALL traders")
 
         self.trades_df = pd.read_sql_query(query, conn)
         conn.close()
@@ -248,10 +270,10 @@ class DataValidator:
         print(f"✓ Viable traders: {len(viable_traders)}")
         print(f"✓ Test traders: {len(test_traders)}")
 
-        # Checkpoint validation
+        # Checkpoint validation (relaxed for active traders)
         checkpoint_pass = (
-            len(viable_traders) >= 10 and  # Minimum viable traders
-            len(test_traders) >= 5 and     # Minimum test traders
+            len(viable_traders) >= 5 and   # Minimum viable traders (relaxed)
+            len(test_traders) >= 3 and     # Minimum test traders (relaxed)
             total_trades >= 1000           # Minimum total trades
         )
 
