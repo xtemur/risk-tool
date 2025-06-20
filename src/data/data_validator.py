@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Step 1: Data Validation & Exploration
-Following CLAUDE.md methodology
+Data Validation & Exploration
+Migrated from step1_data_validation.py
 """
 
 import sqlite3
@@ -21,7 +21,7 @@ class DataValidator:
 
     def load_and_validate_data(self):
         """Load trades data and perform basic validation"""
-        print("=== STEP 1: DATA VALIDATION & EXPLORATION ===")
+        print("=== DATA VALIDATION & EXPLORATION ===")
 
         conn = sqlite3.connect(self.db_path)
 
@@ -233,7 +233,7 @@ class DataValidator:
     def generate_summary_report(self):
         """Generate final validation summary"""
         print("\n" + "="*50)
-        print("STEP 1 VALIDATION SUMMARY")
+        print("DATA VALIDATION SUMMARY")
         print("="*50)
 
         total_trades = len(self.trades_df)
@@ -256,36 +256,8 @@ class DataValidator:
         )
 
         if checkpoint_pass:
-            print("\n✅ CHECKPOINT 1 PASSED - Proceeding to Step 2")
+            print("\n✅ DATA VALIDATION PASSED")
         else:
-            print("\n❌ CHECKPOINT 1 FAILED - Insufficient data quality")
+            print("\n❌ DATA VALIDATION FAILED - Insufficient data quality")
 
         return checkpoint_pass
-
-def main():
-    """Run Step 1 validation"""
-    validator = DataValidator()
-
-    # Load and validate data
-    validator.load_and_validate_data()
-
-    # Create daily aggregations
-    validator.create_daily_aggregations()
-
-    # Validate data quality
-    validator.validate_data_quality()
-
-    # Analyze predictability
-    validator.analyze_predictability()
-
-    # Generate summary
-    checkpoint_pass = validator.generate_summary_report()
-
-    # Save processed data
-    validator.daily_df.to_pickle('data/daily_aggregated.pkl')
-    print(f"\n✓ Saved daily aggregated data to data/daily_aggregated.pkl")
-
-    return checkpoint_pass
-
-if __name__ == "__main__":
-    main()

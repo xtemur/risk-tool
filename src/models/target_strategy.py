@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """
-Step 3: Target Variable Strategy
-Testing multiple target definitions and selecting the best approach
-Following CLAUDE.md methodology
+Target Variable Strategy
+Migrated from step3_target_strategy.py
 """
 
 import pandas as pd
@@ -21,7 +20,7 @@ class TargetVariableStrategy:
 
     def prepare_data(self):
         """Prepare data for target variable testing"""
-        print("=== STEP 3: TARGET VARIABLE STRATEGY ===")
+        print("=== TARGET VARIABLE STRATEGY ===")
 
         # Sort data
         self.feature_df = self.feature_df.sort_values(['account_id', 'trade_date'])
@@ -423,84 +422,3 @@ class TargetVariableStrategy:
         print(f"✓ Final dataset prepared with {len(final_df)} observations")
 
         return final_df, target_col
-
-    def generate_checkpoint_report(self):
-        """Generate Step 3 checkpoint report"""
-        print("\\n" + "="*50)
-        print("STEP 3 CHECKPOINT VALIDATION")
-        print("="*50)
-
-        checkpoint_checks = []
-
-        # Check 1: Was a target strategy selected?
-        has_strategy = self.best_target_strategy is not None
-        checkpoint_checks.append(has_strategy)
-        print(f"✓ Target strategy selected: {has_strategy}")
-
-        if has_strategy:
-            # Check 2: Is the target predictable?
-            pred_score = self.best_target_strategy['predictability']['predictability_score']
-            is_predictable = pred_score > 0
-            checkpoint_checks.append(is_predictable)
-            print(f"✓ Target is predictable: {is_predictable} (score: {pred_score:.4f})")
-
-            # Check 3: Do features correlate in expected directions?
-            strong_corrs = self.best_target_strategy['predictability']['strong_correlations']
-            has_correlations = strong_corrs >= 3
-            checkpoint_checks.append(has_correlations)
-            print(f"✓ Sufficient feature correlations: {has_correlations} ({strong_corrs} features)")
-
-            # Check 4: Is model performance reasonable?
-            model_score = self.best_target_strategy['overall_score']
-            reasonable_performance = model_score > 0.3 if 'class' in self.best_target_strategy['target_column'] else model_score > -1000
-            checkpoint_checks.append(reasonable_performance)
-            print(f"✓ Reasonable model performance: {reasonable_performance} (score: {model_score:.4f})")
-
-        checkpoint_pass = all(checkpoint_checks)
-
-        if checkpoint_pass:
-            print("\\n✅ CHECKPOINT 3 PASSED - Proceeding to Step 4")
-        else:
-            print("\\n❌ CHECKPOINT 3 FAILED - Target strategy issues")
-
-        return checkpoint_pass
-
-def main():
-    """Run Step 3 target variable strategy"""
-    strategy = TargetVariableStrategy()
-
-    # Prepare data
-    feature_cols = strategy.prepare_data()
-
-    # Compare target options
-    best_strategy = strategy.compare_target_options()
-
-    # Generate checkpoint report
-    checkpoint_pass = strategy.generate_checkpoint_report()
-
-    if checkpoint_pass and best_strategy:
-        # Prepare final target data
-        final_df, target_col = strategy.prepare_final_target_data()
-
-        # Save results
-        final_df.to_pickle('data/target_prepared.pkl')
-
-        # Save target strategy info
-        import json
-        strategy_info = {
-            'best_strategy': best_strategy['option_name'],
-            'target_column': target_col,
-            'model_performance': best_strategy['overall_score'],
-            'predictability_score': best_strategy['predictability']['predictability_score']
-        }
-
-        with open('data/target_strategy.json', 'w') as f:
-            json.dump(strategy_info, f, indent=2)
-
-        print(f"\\n✓ Saved target data to data/target_prepared.pkl")
-        print(f"✓ Saved strategy info to data/target_strategy.json")
-
-    return checkpoint_pass, best_strategy
-
-if __name__ == "__main__":
-    main()
