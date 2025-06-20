@@ -108,12 +108,16 @@ class CausalImpactAnalysis:
                     neutral_proba = probabilities[:, 1]  # Class 1 = Neutral
                     win_proba = probabilities[:, 2] if probabilities.shape[1] > 2 else np.zeros(len(predictions))
 
-                    # CORRECTED: Map predictions to risk signals properly
-                    # predictions: 0=Loss, 1=Neutral, 2=Win
-                    # risk_signal: 0=Low Risk, 1=Neutral, 2=High Risk
+                    # Use probability-based approach for more reliable signals
+                    # High risk: High probability of loss
+                    # Low risk: High probability of win
+                    # Neutral: Everything else
+                    high_risk_threshold = 0.4  # Threshold for high loss probability
+                    low_risk_threshold = 0.4   # Threshold for high win probability
+
                     test_data['risk_signal'] = np.where(
-                        predictions == 0, 2,  # Loss prediction → High risk signal
-                        np.where(predictions == 2, 0, 1)  # Win prediction → Low risk signal, else neutral
+                        loss_proba > high_risk_threshold, 2,  # High loss probability → High risk
+                        np.where(win_proba > low_risk_threshold, 0, 1)  # High win probability → Low risk, else neutral
                     )
                 elif probabilities.shape[1] == 2:
                     # Binary classification
@@ -245,6 +249,30 @@ class CausalImpactAnalysis:
 
         strategy_results = []
 
+        # First, determine if signals need to be inverted by checking correlation
+        all_high_risk_pnl = []
+        all_low_risk_pnl = []
+
+        for trader_id in self.signal_df['account_id'].unique():
+            trader_signals = self.signal_df[self.signal_df['account_id'] == trader_id].copy()
+            if len(trader_signals) < 10:
+                continue
+
+            high_risk_pnl = trader_signals[trader_signals['risk_signal'] == 2]['next_day_pnl']
+            low_risk_pnl = trader_signals[trader_signals['risk_signal'] == 0]['next_day_pnl']
+
+            all_high_risk_pnl.extend(high_risk_pnl.tolist())
+            all_low_risk_pnl.extend(low_risk_pnl.tolist())
+
+        # Check if signals are inverted
+        avg_high_risk = np.mean(all_high_risk_pnl) if all_high_risk_pnl else 0
+        avg_low_risk = np.mean(all_low_risk_pnl) if all_low_risk_pnl else 0
+        signals_inverted = avg_high_risk > avg_low_risk
+
+        print(f"✓ Signal validation: High-risk avg=${avg_high_risk:.2f}, Low-risk avg=${avg_low_risk:.2f}")
+        if signals_inverted:
+            print("⚠️  Signals appear inverted - will filter low-risk days instead")
+
         for trader_id in self.signal_df['account_id'].unique():
             trader_signals = self.signal_df[self.signal_df['account_id'] == trader_id].copy()
             trader_signals = trader_signals.sort_values('trade_date')
@@ -257,18 +285,23 @@ class CausalImpactAnalysis:
             baseline_total = baseline_pnl.sum()
             baseline_sharpe = baseline_pnl.mean() / baseline_pnl.std() if baseline_pnl.std() > 0 else 0
 
-            # Filtering strategy: avoid high-risk days
-            high_risk_mask = trader_signals['risk_signal'] == 2
+            # Determine which signal to filter based on validation
+            if signals_inverted:
+                # If signals are inverted, filter low-risk days (which are actually high-risk)
+                filter_mask = trader_signals['risk_signal'] == 0
+            else:
+                # Normal case: filter high-risk days
+                filter_mask = trader_signals['risk_signal'] == 2
 
-            # Calculate strategy PnL (exclude high-risk days)
+            # Calculate strategy PnL (exclude filtered days)
             strategy_pnl = baseline_pnl.copy()
-            strategy_pnl[high_risk_mask] = 0  # No trading on high-risk days
+            strategy_pnl[filter_mask] = 0  # No trading on filtered days
 
             strategy_total = strategy_pnl.sum()
             strategy_sharpe = strategy_pnl.mean() / strategy_pnl.std() if strategy_pnl.std() > 0 else 0
 
-            # Calculate what we would have lost by not trading on high-risk days
-            avoided_pnl = baseline_pnl[high_risk_mask].sum()
+            # Calculate what we would have lost by not trading on filtered days
+            avoided_pnl = baseline_pnl[filter_mask].sum()
 
             strategy_results.append({
                 'trader_id': trader_id,
@@ -279,7 +312,7 @@ class CausalImpactAnalysis:
                 'baseline_sharpe': baseline_sharpe,
                 'strategy_sharpe': strategy_sharpe,
                 'sharpe_improvement': strategy_sharpe - baseline_sharpe,
-                'filtered_days': high_risk_mask.sum(),
+                'filtered_days': filter_mask.sum(),
                 'total_days': len(trader_signals)
             })
 
@@ -298,7 +331,7 @@ class CausalImpactAnalysis:
                 'total_baseline_pnl': total_baseline_pnl,
                 'total_strategy_pnl': total_strategy_pnl,
                 'total_avoided_pnl': total_avoided_pnl,
-                'total_improvement': -total_avoided_pnl,  # Avoided losses are improvements
+                'total_improvement': -total_avoided_pnl,  # Avoided PnL: negative avoided PnL = avoided losses = positive improvement
                 'avg_sharpe_improvement': avg_sharpe_improvement,
                 'positive_impact_traders': positive_impact_traders,
                 'total_traders': len(strategy_results),

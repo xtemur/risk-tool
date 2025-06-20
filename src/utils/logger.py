@@ -11,7 +11,14 @@ import json
 import structlog
 from pythonjsonlogger import jsonlogger
 
-from ..config import get_config
+try:
+    from ..config import get_config
+except ImportError:
+    # Fallback for when running as script
+    import sys
+    import os
+    sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from config import get_config
 
 
 class RiskManagementLogger:
