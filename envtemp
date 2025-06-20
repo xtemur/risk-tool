@@ -1,0 +1,7 @@
+EMAIL_FROM=email@gmail.com
+EMAIL_PASSWORD=password
+EMAIL_RECIPIENTS= email1@com, email2@gmail.com
+API_URL="https://api.propreports.com/api.php"
+API_USER = "api_user"
+API_PASS = "api_pass"
+EOF
