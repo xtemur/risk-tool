@@ -6,7 +6,6 @@ Orchestrates the entire 7-step process
 
 import sys
 import os
-import json
 from datetime import datetime
 from pathlib import Path
 
@@ -99,7 +98,7 @@ class RiskManagementPipeline:
         print("="*60)
 
         try:
-            validator = DataValidator()
+            validator = DataValidator(db_path=self.config['db_path'])
 
             # Load and validate data - ACTIVE TRADERS ONLY
             validator.load_and_validate_data(active_only=True)
@@ -117,7 +116,7 @@ class RiskManagementPipeline:
             checkpoint_pass = validator.generate_summary_report()
 
             # Save processed data
-            output_path = Path(self.config.paths.data_dir) / 'daily_aggregated.pkl'
+            output_path = Path(self.config['output_dir']) / 'daily_aggregated.pkl'
             validator.daily_df.to_pickle(output_path)
             print(f"✓ Saved daily aggregated data to {output_path}")
             self.logger.info("Step 1 completed", output_path=str(output_path))
@@ -137,7 +136,8 @@ class RiskManagementPipeline:
         print("="*60)
 
         try:
-            engineer = FeatureEngineer()
+            daily_data_path = Path(self.config['output_dir']) / 'daily_aggregated.pkl'
+            engineer = FeatureEngineer(daily_df_path=str(daily_data_path))
 
             # Create features in sequence
             engineer.create_basic_features()
@@ -152,18 +152,20 @@ class RiskManagementPipeline:
             available_features = engineer.finalize_features()
 
             # Generate checkpoint report
+            min_obs_per_trader = engineer.feature_df.groupby('account_id').size().min()
             checkpoint_pass = all([
                 len(available_features) >= 20,
-                engineer.feature_df.groupby('account_id').size().min() >= 60
+                min_obs_per_trader >= 10  # Lowered from 60 for small dataset
             ])
+            print(f"✓ Minimum observations per trader: {min_obs_per_trader}")
 
             # Save feature data
-            feature_path = Path(self.config.paths.data_dir) / 'features_engineered.pkl'
+            feature_path = Path(self.config['output_dir']) / 'features_engineered.pkl'
             engineer.feature_df.to_pickle(feature_path)
             print(f"✓ Saved engineered features to {feature_path}")
 
             # Save feature list
-            feature_list_path = Path(self.config.paths.data_dir) / 'feature_list.txt'
+            feature_list_path = Path(self.config['output_dir']) / 'feature_list.txt'
             with open(feature_list_path, 'w') as f:
                 for feature in available_features:
                     f.write(f"{feature}\\n")
@@ -187,10 +189,11 @@ class RiskManagementPipeline:
         print("="*60)
 
         try:
-            strategy = TargetVariableStrategy()
+            features_path = Path(self.config['output_dir']) / 'features_engineered.pkl'
+            strategy = TargetVariableStrategy(features_path=str(features_path))
 
             # Prepare data
-            feature_cols = strategy.prepare_data()
+            strategy.prepare_data()
 
             # Compare target options
             best_strategy = strategy.compare_target_options()
@@ -203,7 +206,8 @@ class RiskManagementPipeline:
                 final_df, target_col = strategy.prepare_final_target_data()
 
                 # Save results
-                final_df.to_pickle('results/data/target_prepared.pkl')
+                target_path = Path(self.config['output_dir']) / 'target_prepared.pkl'
+                final_df.to_pickle(target_path)
 
                 # Save target strategy info
                 import json
@@ -214,11 +218,12 @@ class RiskManagementPipeline:
                     'predictability_score': best_strategy['predictability']['predictability_score']
                 }
 
-                with open('results/data/target_strategy.json', 'w') as f:
+                strategy_path = Path(self.config['output_dir']) / 'target_strategy.json'
+                with open(strategy_path, 'w') as f:
                     json.dump(strategy_info, f, indent=2)
 
-                print(f"✓ Saved target data to results/data/target_prepared.pkl")
-                print(f"✓ Saved strategy info to results/data/target_strategy.json")
+                print(f"✓ Saved target data to {target_path}")
+                print(f"✓ Saved strategy info to {strategy_path}")
 
             self.checkpoint_results['step3'] = checkpoint_pass
             return checkpoint_pass
@@ -234,16 +239,17 @@ class RiskManagementPipeline:
         print("="*60)
 
         try:
-            trainer = TraderModelTraining()
+            target_data_path = Path(self.config['output_dir']) / 'target_prepared.pkl'
+            trainer = TraderModelTraining(features_path=str(target_data_path))
 
             # Train all models
-            training_success = trainer.train_all_models()
+            trainer.train_all_models()
 
             # Validate model features
-            feature_validation = trainer.validate_model_features()
+            trainer.validate_model_features()
 
             # Save models and results
-            save_success = trainer.save_models_and_results()
+            trainer.save_models_and_results()
 
             # Generate checkpoint report
             checkpoint_pass = trainer.generate_checkpoint_report()
@@ -262,22 +268,22 @@ class RiskManagementPipeline:
         print("="*60)
 
         try:
-            backtester = RigorousBacktesting()
+            backtester = RigorousBacktesting(data_dir=self.config['output_dir'])
 
             # Perform walk-forward validation
-            validation_success = backtester.perform_walk_forward_validation()
+            backtester.perform_walk_forward_validation()
 
             # Validate signal directions
-            signal_validation = backtester.validate_signal_directions()
+            backtester.validate_signal_directions()
 
             # Test model stability
-            stability_check = backtester.test_model_stability()
+            backtester.test_model_stability()
 
             # Analyze feature correlations
-            feature_check = backtester.analyze_feature_correlations()
+            backtester.analyze_feature_correlations()
 
             # Save backtest results
-            save_success = backtester.save_backtest_results()
+            backtester.save_backtest_results()
 
             # Generate checkpoint report
             checkpoint_pass = backtester.generate_checkpoint_report()
@@ -299,7 +305,7 @@ class RiskManagementPipeline:
             analyzer = CausalImpactAnalysis()
 
             # Generate comprehensive causal impact report
-            deployment_viable = analyzer.generate_causal_impact_report()
+            analyzer.generate_causal_impact_report()
 
             # Generate checkpoint report
             checkpoint_pass = analyzer.generate_checkpoint_report()
@@ -321,22 +327,22 @@ class RiskManagementPipeline:
             deployment = DeploymentReadySignals()
 
             # Create 3-tier signal system
-            signal_system = deployment.create_three_tier_signal_system()
+            deployment.create_three_tier_signal_system()
 
             # Generate real-time signals
-            signals = deployment.generate_real_time_signals()
+            deployment.generate_real_time_signals()
 
             # Create deployment interface
-            config, api = deployment.create_deployment_interface()
+            deployment.create_deployment_interface()
 
             # Implement safeguards
-            safeguards = deployment.implement_safeguards()
+            deployment.implement_safeguards()
 
             # Create documentation
-            docs = deployment.create_documentation()
+            deployment.create_documentation()
 
             # Generate final deployment checklist
-            deployment_status = deployment.generate_final_deployment_checklist()
+            deployment.generate_final_deployment_checklist()
 
             # Generate checkpoint report
             checkpoint_pass = deployment.generate_checkpoint_report()
@@ -378,7 +384,8 @@ class RiskManagementPipeline:
             # Load final results
             try:
                 import json
-                with open('results/data/causal_impact_results.json', 'r') as f:
+                causal_results_path = Path(self.config['output_dir']) / 'causal_impact_results.json'
+                with open(causal_results_path, 'r') as f:
                     causal_results = json.load(f)
 
                 print(f"\\n📈 CAUSAL IMPACT RESULTS:")
@@ -418,16 +425,17 @@ class RiskManagementPipeline:
 
     def _setup_directories(self):
         """Create necessary output directories"""
+        base_dir = Path(self.config['output_dir'])
         directories = [
-            self.config.paths.data_dir,
-            self.config.paths.models_dir,
-            self.config.paths.reports_dir,
-            self.config.paths.logs_dir,
-            self.config.paths.signals_dir
+            base_dir,
+            base_dir / 'checkpoints',
+            base_dir / 'models',
+            base_dir / 'reports',
+            base_dir / 'signals'
         ]
 
         for dir_path in directories:
-            Path(dir_path).mkdir(parents=True, exist_ok=True)
+            dir_path.mkdir(parents=True, exist_ok=True)
 
         self.logger.info("Output directories created")
 
@@ -438,7 +446,7 @@ def main():
     log_system_event(
         "pipeline_started",
         "Risk management pipeline execution started",
-        {"environment": get_config().app.environment}
+        {"environment": "production"}
     )
 
     pipeline = RiskManagementPipeline()

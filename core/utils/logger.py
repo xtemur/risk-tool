@@ -42,11 +42,11 @@ class RiskManagementLogger:
 
     def setup_logging(self):
         """Configure logging based on configuration settings."""
-        log_config = self.config.logging
+        log_config = self.config['logging']
 
         # Create log directory if it doesn't exist
-        if log_config.handlers.file.enabled:
-            log_path = Path(log_config.handlers.file.path)
+        if log_config['handlers']['file']['enabled']:
+            log_path = Path(log_config['handlers']['file']['path'])
             log_path.parent.mkdir(parents=True, exist_ok=True)
 
         # Configure structlog for structured logging
@@ -60,7 +60,7 @@ class RiskManagementLogger:
                 structlog.processors.StackInfoRenderer(),
                 structlog.processors.format_exc_info,
                 structlog.processors.UnicodeDecoder(),
-                structlog.processors.JSONRenderer() if log_config.format == "json" else structlog.dev.ConsoleRenderer()
+                structlog.processors.JSONRenderer() if log_config['format'] == "json" else structlog.dev.ConsoleRenderer()
             ],
             context_class=dict,
             logger_factory=structlog.stdlib.LoggerFactory(),
@@ -69,13 +69,13 @@ class RiskManagementLogger:
 
         # Configure standard logging
         root_logger = logging.getLogger()
-        root_logger.setLevel(getattr(logging, log_config.level))
+        root_logger.setLevel(getattr(logging, log_config['level']))
 
         # Remove existing handlers
         root_logger.handlers = []
 
         # Setup formatters
-        if log_config.format == "json":
+        if log_config['format'] == "json":
             formatter = jsonlogger.JsonFormatter(
                 '%(timestamp)s %(level)s %(name)s %(message)s',
                 timestamp=True
@@ -87,21 +87,21 @@ class RiskManagementLogger:
             )
 
         # Console handler
-        if log_config.handlers.console.enabled:
+        if log_config['handlers']['console']['enabled']:
             console_handler = logging.StreamHandler(sys.stdout)
             console_handler.setFormatter(formatter)
-            console_handler.setLevel(getattr(logging, log_config.level))
+            console_handler.setLevel(getattr(logging, log_config['level']))
             root_logger.addHandler(console_handler)
 
         # File handler with rotation
-        if log_config.handlers.file.enabled:
+        if log_config['handlers']['file']['enabled']:
             file_handler = logging.handlers.RotatingFileHandler(
-                filename=log_config.handlers.file.path,
-                maxBytes=log_config.handlers.file.max_bytes,
-                backupCount=log_config.handlers.file.backup_count
+                filename=log_config['handlers']['file']['path'],
+                maxBytes=log_config['handlers']['file']['max_bytes'],
+                backupCount=log_config['handlers']['file']['backup_count']
             )
             file_handler.setFormatter(formatter)
-            file_handler.setLevel(getattr(logging, log_config.level))
+            file_handler.setLevel(getattr(logging, log_config['level']))
             root_logger.addHandler(file_handler)
 
     @staticmethod

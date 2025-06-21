@@ -55,29 +55,45 @@ def extract_individual_trader_data():
                     'baseline_sharpe': trader_data.get('baseline_sharpe', 0),
                     'strategy_sharpe': trader_data.get('strategy_sharpe', 0),
                     'total_observations': trader_data.get('total_days', trader_data.get('total_observations', 0)),
-                    'baseline_win_rate': trader_data.get('baseline_win_rate', 0),
-                    'strategy_win_rate': trader_data.get('strategy_win_rate', 0),
-                    'baseline_loss_rate': trader_data.get('baseline_loss_rate', 0),
-                    'strategy_loss_rate': trader_data.get('strategy_loss_rate', 0),
-                    'baseline_avg_trade': trader_data.get('baseline_avg_trade', 0),
-                    'strategy_avg_trade': trader_data.get('strategy_avg_trade', 0),
-                    'high_risk_days': trader_data.get('high_risk_days', 0),
-                    'low_risk_days': trader_data.get('low_risk_days', 0),
                 }
+
+                # Handle different risk day fields by strategy
+                if strategy_name == 'trade_filtering':
+                    # Trade filtering tracks filtered_days (days avoided)
+                    record['high_risk_days'] = trader_data.get('filtered_days', 0)
+                    record['low_risk_days'] = 0  # Not tracked for trade filtering
+                    record['filtered_days'] = trader_data.get('filtered_days', 0)
+                else:
+                    # Position sizing and combined track high/low risk days
+                    record['high_risk_days'] = trader_data.get('high_risk_days', 0)
+                    record['low_risk_days'] = trader_data.get('low_risk_days', 0)
+                    record['filtered_days'] = 0
 
                 # Use pre-calculated improvements or calculate if not available
                 record['pnl_improvement'] = trader_data.get('pnl_improvement', record['strategy_pnl'] - record['baseline_pnl'])
                 record['sharpe_improvement'] = trader_data.get('sharpe_improvement', record['strategy_sharpe'] - record['baseline_sharpe'])
-                record['win_rate_improvement'] = record['strategy_win_rate'] - record['baseline_win_rate']
-                record['avg_trade_improvement'] = record['strategy_avg_trade'] - record['baseline_avg_trade']
                 record['has_positive_impact'] = record['pnl_improvement'] > 0
 
-                # For trade filtering, check if avoided losses are tracked separately
+                # Calculate risk day ratios
+                total_days = record['total_observations']
+                record['high_risk_ratio'] = record['high_risk_days'] / total_days if total_days > 0 else 0
+                record['low_risk_ratio'] = record['low_risk_days'] / total_days if total_days > 0 else 0
+
+                # For trade filtering, handle the different PnL calculation
                 if strategy_name == 'trade_filtering':
+                    # Trade filtering uses avoided_pnl which represents losses avoided
                     avoided_pnl = trader_data.get('avoided_pnl', 0)
-                    if avoided_pnl != 0:
-                        record['avoided_losses'] = avoided_pnl
-                        record['pnl_improvement'] = avoided_pnl  # For trade filtering, improvement is avoided losses
+                    record['avoided_losses'] = avoided_pnl
+                    # The pnl_improvement in the data is already calculated correctly
+                    # It can be positive (avoided losses) or negative (missed gains)
+                    actual_improvement = trader_data.get('pnl_improvement', 0)
+                    # For display purposes, we want to show the absolute avoided losses as positive
+                    if avoided_pnl > 0:  # Positive avoided_pnl means we avoided losses
+                        record['pnl_improvement'] = abs(avoided_pnl)
+                    elif avoided_pnl < 0:  # Negative avoided_pnl means we missed gains
+                        record['pnl_improvement'] = avoided_pnl
+                    else:
+                        record['pnl_improvement'] = actual_improvement
 
                 all_trader_data.append(record)
 
@@ -217,11 +233,28 @@ def create_trader_level_visualizations(trader_df, summary_df):
                ax=axes[0,0], cbar_kws={'label': 'Sharpe Ratio Improvement'})
     axes[0,0].set_title('Sharpe Ratio Improvement by Trader and Strategy')
 
-    # Win rate improvements
-    win_rate_pivot = trader_df.pivot(index='trader_id', columns='strategy', values='win_rate_improvement')
-    sns.heatmap(win_rate_pivot, annot=True, fmt='.3f', cmap='RdYlGn', center=0,
-               ax=axes[0,1], cbar_kws={'label': 'Win Rate Improvement'})
-    axes[0,1].set_title('Win Rate Improvement by Trader and Strategy')
+    # Risk exposure analysis - show risk/filtered days by strategy
+    # Create a custom metric that shows high risk days for position sizing and filtered days for trade filtering
+    risk_data = []
+    for _, row in trader_df.iterrows():
+        if row['strategy'] == 'trade_filtering':
+            # For trade filtering, show filtered days (days avoided)
+            risk_metric = row.get('filtered_days', 0)
+        else:
+            # For other strategies, show high risk days
+            risk_metric = row['high_risk_days']
+        risk_data.append({
+            'trader_id': row['trader_id'],
+            'strategy': row['strategy'],
+            'risk_metric': risk_metric
+        })
+
+    risk_df = pd.DataFrame(risk_data)
+    risk_pivot = risk_df.pivot(index='trader_id', columns='strategy', values='risk_metric')
+
+    sns.heatmap(risk_pivot, annot=True, fmt=',.0f', cmap='YlOrRd',
+               ax=axes[0,1], cbar_kws={'label': 'Risk/Filtered Days'})
+    axes[0,1].set_title('Risk Exposure by Strategy\n(High Risk Days for Sizing, Filtered Days for Trade Filtering)')
 
     # Baseline vs Strategy PnL scatter
     for strategy in strategies:

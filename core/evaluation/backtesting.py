@@ -13,7 +13,8 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class RigorousBacktesting:
-    def __init__(self):
+    def __init__(self, data_dir='data'):
+        self.data_dir = data_dir
         self.load_models_and_data()
         self.backtest_results = {}
 
@@ -22,15 +23,15 @@ class RigorousBacktesting:
         print("=== RIGOROUS BACKTESTING & VALIDATION ===")
 
         # Load trained models
-        with open('data/trained_models.pkl', 'rb') as f:
+        with open(f'{self.data_dir}/trained_models.pkl', 'rb') as f:
             self.trained_models = pickle.load(f)
 
         # Load feature data
-        self.feature_df = pd.read_pickle('data/target_prepared.pkl')
+        self.feature_df = pd.read_pickle(f'{self.data_dir}/target_prepared.pkl')
         self.feature_df = self.feature_df.sort_values(['account_id', 'trade_date'])
 
         # Load feature names
-        with open('data/model_feature_names.json', 'r') as f:
+        with open(f'{self.data_dir}/model_feature_names.json', 'r') as f:
             self.feature_names = json.load(f)
 
         print(f"✓ Loaded {len(self.trained_models)} trained models")
@@ -44,7 +45,7 @@ class RigorousBacktesting:
 
         # Load target column from strategy file
         try:
-            with open('data/target_strategy.json', 'r') as f:
+            with open(f'{self.data_dir}/target_strategy.json', 'r') as f:
                 target_strategy = json.load(f)
                 target_col = target_strategy['target_column']
         except:
@@ -282,7 +283,7 @@ class RigorousBacktesting:
             if feature in sample_data.columns:
                 # Load target column
                 try:
-                    with open('data/target_strategy.json', 'r') as f:
+                    with open(f'{self.data_dir}/target_strategy.json', 'r') as f:
                         target_strategy = json.load(f)
                         target_col = target_strategy['target_column']
                 except:
