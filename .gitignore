@@ -111,4 +111,5 @@ Desktop.ini
 # Project specific
 trader_models/
 model_outputs/
+results/*
 *.pickle

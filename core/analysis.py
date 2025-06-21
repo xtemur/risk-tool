@@ -22,7 +22,7 @@ def extract_individual_trader_data():
     print("=== EXTRACTING INDIVIDUAL TRADER DATA ===")
 
     # Load strategy results
-    strategy_results = pd.read_pickle('data/strategy_results.pkl')
+    strategy_results = pd.read_pickle('results/data/strategy_results.pkl')
 
     all_trader_data = []
 
@@ -129,7 +129,7 @@ def create_trader_level_visualizations(trader_df, summary_df):
     """Create comprehensive trader-level visualizations"""
     print("\n=== CREATING TRADER-LEVEL VISUALIZATIONS ===")
 
-    Path("outputs/reports").mkdir(parents=True, exist_ok=True)
+    Path("results/reports").mkdir(parents=True, exist_ok=True)
 
     # 1. Individual Trader Impact Heatmap
     fig, axes = plt.subplots(2, 2, figsize=(16, 12))
@@ -203,7 +203,7 @@ def create_trader_level_visualizations(trader_df, summary_df):
                       f'{rate*100:.1f}%', ha='center', va='bottom', fontsize=9)
 
     plt.tight_layout()
-    plt.savefig('outputs/reports/individual_trader_impact_analysis.png', dpi=300, bbox_inches='tight')
+    plt.savefig('results/reports/individual_trader_impact_analysis.png', dpi=300, bbox_inches='tight')
     plt.close()
     print("✓ Saved individual trader impact analysis")
 
@@ -250,7 +250,7 @@ def create_trader_level_visualizations(trader_df, summary_df):
     axes[1,1].grid(True, alpha=0.3)
 
     plt.tight_layout()
-    plt.savefig('outputs/reports/detailed_performance_comparison.png', dpi=300, bbox_inches='tight')
+    plt.savefig('results/reports/detailed_performance_comparison.png', dpi=300, bbox_inches='tight')
     plt.close()
     print("✓ Saved detailed performance comparison")
 
@@ -393,7 +393,7 @@ Current impact: ${best_total_impact:,.0f}
     ax6.text(0.1, 0.2, details, transform=ax6.transAxes,
             fontsize=10, verticalalignment='top')
 
-    plt.savefig('outputs/reports/executive_dashboard.png', dpi=300, bbox_inches='tight')
+    plt.savefig('results/reports/executive_dashboard.png', dpi=300, bbox_inches='tight')
     plt.close()
     print("✓ Saved executive dashboard")
 
@@ -401,7 +401,7 @@ def create_comprehensive_report(trader_df, summary_df):
     """Create comprehensive text report"""
     print("\n=== CREATING COMPREHENSIVE REPORT ===")
 
-    report_path = Path("outputs/reports/final_trader_analysis_report.txt")
+    report_path = Path("results/reports/final_trader_analysis_report.txt")
 
     with open(report_path, 'w') as f:
         f.write("=" * 120 + "\n")
@@ -546,10 +546,10 @@ def main():
         print(f"• ❌ SYSTEM RECOMMENDATION: DO NOT DEPLOY")
 
     print(f"\nGenerated Reports:")
-    print(f"• outputs/reports/individual_trader_impact_analysis.png")
-    print(f"• outputs/reports/detailed_performance_comparison.png")
-    print(f"• outputs/reports/executive_dashboard.png")
-    print(f"• outputs/reports/final_trader_analysis_report.txt")
+    print(f"• results/reports/individual_trader_impact_analysis.png")
+    print(f"• results/reports/detailed_performance_comparison.png")
+    print(f"• results/reports/executive_dashboard.png")
+    print(f"• results/reports/final_trader_analysis_report.txt")
 
 if __name__ == "__main__":
     main()

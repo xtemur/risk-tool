@@ -203,7 +203,7 @@ class RiskManagementPipeline:
                 final_df, target_col = strategy.prepare_final_target_data()
 
                 # Save results
-                final_df.to_pickle('data/target_prepared.pkl')
+                final_df.to_pickle('results/data/target_prepared.pkl')
 
                 # Save target strategy info
                 import json
@@ -214,11 +214,11 @@ class RiskManagementPipeline:
                     'predictability_score': best_strategy['predictability']['predictability_score']
                 }
 
-                with open('data/target_strategy.json', 'w') as f:
+                with open('results/data/target_strategy.json', 'w') as f:
                     json.dump(strategy_info, f, indent=2)
 
-                print(f"✓ Saved target data to data/target_prepared.pkl")
-                print(f"✓ Saved strategy info to data/target_strategy.json")
+                print(f"✓ Saved target data to results/data/target_prepared.pkl")
+                print(f"✓ Saved strategy info to results/data/target_strategy.json")
 
             self.checkpoint_results['step3'] = checkpoint_pass
             return checkpoint_pass
@@ -378,7 +378,7 @@ class RiskManagementPipeline:
             # Load final results
             try:
                 import json
-                with open('data/causal_impact_results.json', 'r') as f:
+                with open('results/data/causal_impact_results.json', 'r') as f:
                     causal_results = json.load(f)
 
                 print(f"\\n📈 CAUSAL IMPACT RESULTS:")
