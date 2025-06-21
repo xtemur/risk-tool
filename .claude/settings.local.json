@@ -32,7 +32,14 @@
       "Bash(conda install:*)",
       "Bash(streamlit run:*)",
       "Bash(conda:*)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(PYTHONPATH=. python -c \"from core.config import get_config; print('Import successful')\")",
+      "Bash(PYTHONPATH=. python -c \"from core.config import get_config; print('Import successful')\")",
+      "Bash(PYTHONPATH=. python -c \"from core.config import get_config; print(''Import successful'')\")",
+      "Bash(PYTHONPATH=. python -m pytest tests/ --collect-only)",
+      "Bash(PYTHONPATH=. python -c \"import core.config; print(dir(core.config))\")",
+      "Bash(timeout:*)",
+      "Bash(PYTHONPATH=. python -m pytest tests/test_feature_engineer.py::TestFeatureEngineer::test_create_basic_features -v)"
     ],
     "deny": []
   }

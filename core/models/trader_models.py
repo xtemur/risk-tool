@@ -14,14 +14,14 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class TraderModelTraining:
-    def __init__(self, features_path='data/target_prepared.pkl'):
+    def __init__(self, features_path='outputs/signals/target_prepared.pkl'):
         self.feature_df = pd.read_pickle(features_path)
         self.trained_models = {}
         self.training_results = {}
 
         # Load target strategy info from file (created in step 3)
         try:
-            with open('data/target_strategy.json', 'r') as f:
+            with open('outputs/signals/target_strategy.json', 'r') as f:
                 self.target_strategy_info = json.load(f)
         except:
             # Fallback hardcoded strategy
@@ -63,7 +63,7 @@ class TraderModelTraining:
         # Remove rows with missing targets
         trader_data = trader_data.dropna(subset=[target_col])
 
-        if len(trader_data) < 60:
+        if len(trader_data) < 30:
             return None
 
         # Prepare features and target
@@ -83,7 +83,7 @@ class TraderModelTraining:
         y_train = y_train.values
         y_val = y_val.values
 
-        if len(X_train) < 30 or len(X_val) < 10:
+        if len(X_train) < 20 or len(X_val) < 5:
             return None
 
         try:
@@ -201,7 +201,7 @@ class TraderModelTraining:
 
         # Get traders with sufficient data
         trader_counts = self.feature_df.groupby('account_id').size()
-        viable_traders = trader_counts[trader_counts >= 60].index
+        viable_traders = trader_counts[trader_counts >= 30].index
 
         print(f"✓ Training models for {len(viable_traders)} viable traders")
 
@@ -256,7 +256,7 @@ class TraderModelTraining:
         # Aggregate feature importance across all models
         all_feature_importance = {}
 
-        for trader_id, model_info in self.trained_models.items():
+        for _, model_info in self.trained_models.items():
             for feature, importance in model_info['feature_importance'].items():
                 if feature not in all_feature_importance:
                     all_feature_importance[feature] = []
@@ -312,11 +312,11 @@ class TraderModelTraining:
             return False
 
         # Save models
-        with open('data/trained_models.pkl', 'wb') as f:
+        with open('outputs/signals/trained_models.pkl', 'wb') as f:
             pickle.dump(self.trained_models, f)
 
         # Save training results
-        with open('data/training_results.json', 'w') as f:
+        with open('outputs/signals/training_results.json', 'w') as f:
             # Convert numpy types for JSON serialization
             json_results = {}
             for trader_id, results in self.training_results.items():
@@ -332,12 +332,12 @@ class TraderModelTraining:
 
         # Save feature names for later use
         feature_cols, _ = self.prepare_for_training()
-        with open('data/model_feature_names.json', 'w') as f:
+        with open('outputs/signals/model_feature_names.json', 'w') as f:
             json.dump(feature_cols, f, indent=2)
 
-        print(f"✓ Saved {len(self.trained_models)} models to data/trained_models.pkl")
-        print(f"✓ Saved training results to data/training_results.json")
-        print(f"✓ Saved feature names to data/model_feature_names.json")
+        print(f"✓ Saved {len(self.trained_models)} models to outputs/signals/trained_models.pkl")
+        print(f"✓ Saved training results to outputs/signals/training_results.json")
+        print(f"✓ Saved feature names to outputs/signals/model_feature_names.json")
 
         return True
 

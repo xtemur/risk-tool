@@ -13,7 +13,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 class TargetVariableStrategy:
-    def __init__(self, features_path='data/features_engineered.pkl'):
+    def __init__(self, features_path='../outputs/signals/features_engineered.pkl'):
         self.feature_df = pd.read_pickle(features_path)
         self.target_results = {}
         self.best_target_strategy = None
@@ -176,13 +176,13 @@ class TargetVariableStrategy:
 
         # Test on a sample of traders with sufficient data
         trader_counts = target_df.groupby('account_id').size()
-        viable_traders = trader_counts[trader_counts >= 100].index[:10]  # Top 10 traders
+        viable_traders = trader_counts[trader_counts >= 30].index[:10]  # Top 10 traders with at least 30 observations
 
         for trader_id in viable_traders:
             trader_data = target_df[target_df['account_id'] == trader_id].copy()
             trader_data = trader_data.sort_values('trade_date')
 
-            if len(trader_data) < 100:
+            if len(trader_data) < 30:
                 continue
 
             # Prepare features and target
@@ -193,8 +193,8 @@ class TargetVariableStrategy:
             X = X.select_dtypes(include=[np.number]).values
             y = y.values
 
-            # Time series split for validation
-            tscv = TimeSeriesSplit(n_splits=3)
+            # Time series split for validation - reduce splits for small datasets
+            tscv = TimeSeriesSplit(n_splits=2)
             trader_scores = []
 
             for train_idx, val_idx in tscv.split(X):
@@ -282,7 +282,7 @@ class TargetVariableStrategy:
             trader_data = target_df[target_df['account_id'] == trader_id].copy()
             trader_data = trader_data.sort_values('trade_date')
 
-            if len(trader_data) < 50:
+            if len(trader_data) < 20:
                 continue
 
             target_series = trader_data[target_col]

@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 
-from src.features.feature_engineer import FeatureEngineer
+from core.features.feature_engineer import FeatureEngineer
 
 
 class TestFeatureEngineer(unittest.TestCase):

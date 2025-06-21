@@ -6,7 +6,7 @@ import unittest
 from pathlib import Path
 import yaml
 
-from src.config import ConfigurationManager, Config, get_config, set_config_override
+from core.config import ConfigurationManager, Config, get_config, set_config_override
 
 
 class TestConfigurationManager(unittest.TestCase):

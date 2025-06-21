@@ -8,7 +8,7 @@ import tempfile
 import sqlite3
 import os
 
-from src.data.data_validator import DataValidator
+from core.data.data_validator import DataValidator
 
 
 class TestDataValidator(unittest.TestCase):
