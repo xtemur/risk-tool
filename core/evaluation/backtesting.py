@@ -360,10 +360,10 @@ class RigorousBacktesting:
                 if key.startswith('class_') and key.endswith('_accuracy'):
                     json_results[str(trader_id)][key] = float(value)
 
-        with open('data/backtest_results.pkl', 'wb') as f:
+        with open(f'{self.data_dir}/backtest_results.pkl', 'wb') as f:
             pickle.dump(self.backtest_results, f)
 
-        with open('data/backtest_summary.json', 'w') as f:
+        with open(f'{self.data_dir}/backtest_summary.json', 'w') as f:
             json.dump(json_results, f, indent=2)
 
         print(f"✓ Saved backtest results for {len(self.backtest_results)} traders")

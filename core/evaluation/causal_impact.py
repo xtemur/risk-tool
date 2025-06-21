@@ -23,22 +23,22 @@ class CausalImpactAnalysis:
         print("=== CAUSAL IMPACT ANALYSIS ===")
 
         # Load trained models
-        with open('data/trained_models.pkl', 'rb') as f:
+        with open('outputs/signals/trained_models.pkl', 'rb') as f:
             self.trained_models = pickle.load(f)
 
         # Load backtest results
-        with open('data/backtest_results.pkl', 'rb') as f:
+        with open('outputs/signals/backtest_results.pkl', 'rb') as f:
             self.backtest_results = pickle.load(f)
 
         # Load feature data
-        self.feature_df = pd.read_pickle('data/target_prepared.pkl')
+        self.feature_df = pd.read_pickle('outputs/signals/target_prepared.pkl')
         self.feature_df = self.feature_df.sort_values(['account_id', 'trade_date'])
 
         # Recreate classification target and get actual PnL
         self.create_targets_and_pnl()
 
         # Load feature names
-        with open('data/model_feature_names.json', 'r') as f:
+        with open('outputs/signals/model_feature_names.json', 'r') as f:
             self.feature_names = json.load(f)
 
         print(f"✓ Loaded {len(self.trained_models)} models")
@@ -589,13 +589,13 @@ class CausalImpactAnalysis:
             causal_impact_summary[f'{strategy_name}_success_rate'] = float(results['success_rate'])
 
         # Save to file
-        with open('data/causal_impact_results.json', 'w') as f:
+        with open('outputs/signals/causal_impact_results.json', 'w') as f:
             json.dump(causal_impact_summary, f, indent=2)
 
-        with open('data/strategy_results.pkl', 'wb') as f:
+        with open('outputs/signals/strategy_results.pkl', 'wb') as f:
             pickle.dump(self.strategy_results, f)
 
-        print(f"\\n✓ Saved causal impact results to data/causal_impact_results.json")
+        print(f"\\n✓ Saved causal impact results to outputs/signals/causal_impact_results.json")
 
         return deployment_viable
 

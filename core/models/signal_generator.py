@@ -29,20 +29,20 @@ class DeploymentReadySignals:
         print("=== SIGNAL GENERATION & DEPLOYMENT READINESS ===")
 
         # Load trained models
-        with open('data/trained_models.pkl', 'rb') as f:
+        with open('outputs/signals/trained_models.pkl', 'rb') as f:
             self.trained_models = pickle.load(f)
             # Also populate the models dict for API compatibility
             self.models = self.trained_models
 
         # Load causal impact results
-        with open('data/causal_impact_results.json', 'r') as f:
+        with open('outputs/signals/causal_impact_results.json', 'r') as f:
             self.causal_impact_results = json.load(f)
 
         # Load feature data for signal generation
-        self.feature_df = pd.read_pickle('data/target_prepared.pkl')
+        self.feature_df = pd.read_pickle('outputs/signals/target_prepared.pkl')
 
         # Load feature names
-        with open('data/model_feature_names.json', 'r') as f:
+        with open('outputs/signals/model_feature_names.json', 'r') as f:
             self.feature_names = json.load(f)
 
         print(f"✓ Loaded {len(self.trained_models)} trained models")
@@ -81,7 +81,7 @@ class DeploymentReadySignals:
         }
 
         # Save signal definitions
-        with open('data/signal_definitions.json', 'w') as f:
+        with open('outputs/signals/signal_definitions.json', 'w') as f:
             json.dump(signal_definitions, f, indent=2)
 
         print("✓ Created 3-tier signal system:")
@@ -229,10 +229,10 @@ class DeploymentReadySignals:
         }
 
         # Save deployment configuration
-        with open('data/deployment_config.json', 'w') as f:
+        with open('outputs/signals/deployment_config.json', 'w') as f:
             json.dump(deployment_config, f, indent=2)
 
-        with open('data/api_interface.json', 'w') as f:
+        with open('outputs/signals/api_interface.json', 'w') as f:
             json.dump(api_interface, f, indent=2)
 
         print("✓ Created deployment configuration with safeguards")
@@ -285,10 +285,10 @@ class DeploymentReadySignals:
         }
 
         # Save safeguards configuration
-        with open('data/safeguards_config.json', 'w') as f:
+        with open('outputs/signals/safeguards_config.json', 'w') as f:
             json.dump(safeguards, f, indent=2)
 
-        with open('data/performance_tracking.json', 'w') as f:
+        with open('outputs/signals/performance_tracking.json', 'w') as f:
             json.dump(performance_tracking, f, indent=2)
 
         print("✓ Implemented comprehensive safeguards")
@@ -368,10 +368,10 @@ class DeploymentReadySignals:
         }
 
         # Save documentation
-        with open('data/deployment_documentation.json', 'w') as f:
+        with open('outputs/signals/deployment_documentation.json', 'w') as f:
             json.dump(documentation, f, indent=2)
 
-        with open('data/operational_playbook.json', 'w') as f:
+        with open('outputs/signals/operational_playbook.json', 'w') as f:
             json.dump(operational_playbook, f, indent=2)
 
         print("✓ Created comprehensive deployment documentation")
@@ -445,7 +445,7 @@ class DeploymentReadySignals:
         }
 
         # Save deployment status
-        with open('data/deployment_status.json', 'w') as f:
+        with open('outputs/signals/deployment_status.json', 'w') as f:
             json.dump(deployment_status, f, indent=2)
 
         print("\\nDeployment Readiness Checklist:")
