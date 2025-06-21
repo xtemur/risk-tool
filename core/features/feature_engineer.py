@@ -46,7 +46,6 @@ class FeatureEngineer:
             # Calculate cumulative wins/losses for profit factor
             trader_df['cum_wins'] = trader_df['daily_wins'].cumsum()
             trader_df['cum_losses'] = trader_df['daily_losses'].cumsum()
-            trader_df['profit_factor'] = trader_df['cum_wins'] / np.maximum(trader_df['cum_losses'], 1)
 
             # Consecutive wins/losses
             trader_df['is_win_day'] = (trader_df['realized_pnl'] > 0).astype(int)

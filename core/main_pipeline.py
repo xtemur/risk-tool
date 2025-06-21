@@ -109,9 +109,6 @@ class RiskManagementPipeline:
             # Validate data quality
             validator.validate_data_quality()
 
-            # Analyze predictability
-            validator.analyze_predictability()
-
             # Generate summary
             checkpoint_pass = validator.generate_summary_report()
 

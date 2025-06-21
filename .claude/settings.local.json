@@ -39,7 +39,8 @@
       "Bash(PYTHONPATH=. python -m pytest tests/ --collect-only)",
       "Bash(PYTHONPATH=. python -c \"import core.config; print(dir(core.config))\")",
       "Bash(timeout:*)",
-      "Bash(PYTHONPATH=. python -m pytest tests/test_feature_engineer.py::TestFeatureEngineer::test_create_basic_features -v)"
+      "Bash(PYTHONPATH=. python -m pytest tests/test_feature_engineer.py::TestFeatureEngineer::test_create_basic_features -v)",
+      "Bash(echo $TERM_PROGRAM)"
     ],
     "deny": []
   }
