@@ -1,0 +1,23 @@
+Feature Drift Report
+================================================================================
+Training data period: 2023-05-02 00:00:00 to 2025-05-19 00:00:00
+Recent data period: 2025-05-20 00:00:00 to 2025-06-19 00:00:00
+Training samples: 5885
+Recent samples: 253
+
+Top 10 Features with Highest Drift:
+--------------------------------------------------------------------------------
+date_idx                       | Mean Drift:   1.81 | Std Ratio:   0.04 | Train Mean:     267.00 | Recent Mean:     546.00
+cumulative_pnl                 | Mean Drift:   0.33 | Std Ratio:   1.38 | Train Mean:   12611.55 | Recent Mean:   68917.78
+daily_fees                     | Mean Drift:   0.31 | Std Ratio:   0.39 | Train Mean:     200.74 | Recent Mean:      86.27
+rolling_vol_21                 | Mean Drift:   0.27 | Std Ratio:   0.36 | Train Mean:    6496.43 | Recent Mean:    3565.63
+win_rate_21d                   | Mean Drift:   0.26 | Std Ratio:   1.06 | Train Mean:       0.29 | Recent Mean:       0.34
+rolling_vol_7                  | Mean Drift:   0.24 | Std Ratio:   0.34 | Train Mean:    5820.41 | Recent Mean:    3146.52
+ewm_volume_7                   | Mean Drift:   0.24 | Std Ratio:   0.45 | Train Mean:   11714.89 | Recent Mean:    6359.04
+ewm_volume_3                   | Mean Drift:   0.23 | Std Ratio:   0.43 | Train Mean:   11608.26 | Recent Mean:    5981.97
+ewm_volume_21                  | Mean Drift:   0.23 | Std Ratio:   0.52 | Train Mean:   11861.11 | Recent Mean:    7138.88
+rolling_max_drawdown           | Mean Drift:   0.22 | Std Ratio:   0.44 | Train Mean:  -25995.32 | Recent Mean:  -15703.38
+
+Features with Significant Drift (mean_drift > 0.5):
+--------------------------------------------------------------------------------
+- date_idx: drift = 1.81

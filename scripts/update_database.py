@@ -88,11 +88,6 @@ def main():
         print("⚠️  Failed to update trades, but continuing...")
         all_success = False
 
-    # Step 4: Update open positions
-    print("\nStep 4: Updating open positions...")
-    if not run_script('save_open_positions.py', ['2023-04-01', tomorrow]):
-        print("⚠️  Failed to update open positions, but continuing...")
-        all_success = False
 
     # Summary
     print(f"\n{'='*60}")
@@ -123,19 +118,6 @@ def main():
             print(f"  - Total trades: {total_trades:,}")
             if date_range[0] and date_range[1]:
                 print(f"  - Trade date range: {date_range[0]} to {date_range[1]}")
-
-            # Count open positions (if table exists)
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='open_positions'")
-            if cursor.fetchone():
-                cursor.execute("SELECT COUNT(*) FROM open_positions")
-                total_positions = cursor.fetchone()[0]
-                print(f"  - Total open positions: {total_positions:,}")
-
-                cursor.execute("SELECT COUNT(*) FROM position_summaries")
-                total_summaries = cursor.fetchone()[0]
-                print(f"  - Total position summaries: {total_summaries:,}")
-
-            conn.close()
 
         except Exception as e:
             print(f"Could not retrieve database statistics: {e}")

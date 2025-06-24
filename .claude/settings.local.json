@@ -32,7 +32,10 @@
       "Bash(conda install:*)",
       "Bash(streamlit run:*)",
       "Bash(conda:*)",
-      "Bash(tree:*)"],
+      "Bash(tree:*)",
+      "Bash(echo $SHELL)",
+      "Bash(/opt/homebrew/anaconda3/bin/conda init zsh)"
+    ],
     "deny": []
   }
 }

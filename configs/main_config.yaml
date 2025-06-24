@@ -1,0 +1,55 @@
+# configs/main_config.yaml
+paths:
+  raw_data: "data/risk_tool.db"  # SQLite database path
+  processed_features: "data/processed/full_feature_set.parquet"
+  model_dir: "models/production_model_artifacts/"
+  report_dir: "reports/"
+
+# Active traders list based on filtering criteria
+active_traders: [3942, 3943, 3946, 3950, 3951, 3956, 4003, 4004, 4396, 5093, 5580]
+
+feature_params:
+  # Base EWMA and Rolling features
+  ewma_spans: [3, 7, 21]
+  rolling_vol_windows: [7, 21]
+  # Advanced Risk features
+  sortino_window: 21
+  drawdown_window: 21
+  profit_factor_window: 21
+  # Behavioral feature lookback
+  large_loss_lookback: 21  # days to look back for a 'large loss' to flag revenge trading
+
+target_variable_params:
+  large_loss_quantile: 0.15  # Defines a 'bad day'
+
+# Walk-Forward Backtesting Configuration
+backtesting:
+  n_splits: 5  # Number of folds for the backtest
+  train_days: 126  # Approx. 6 months of trading days (21*6)
+  test_days: 21  # Approx. 1 month of trading days
+  gap_days: 1  # Gap between train and test to prevent short-term leakage
+
+# Final Production Model parameters
+production_model:
+  var_model:
+    objective: "quantile"
+    alpha: 0.05
+    n_estimators: 100
+    learning_rate: 0.05
+    max_depth: 5
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
+  loss_model:
+    objective: "binary"
+    is_unbalance: true
+    n_estimators: 100
+    learning_rate: 0.05
+    max_depth: 5
+    num_leaves: 31
+    min_child_samples: 20
+    subsample: 0.8
+    colsample_bytree: 0.8
+    random_state: 42
