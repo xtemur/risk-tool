@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Risk Signals - {{ date }}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: #fafafa;
+            color: #2d3748;
+            padding: 20px;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #ffffff;
+            border-radius: 8px;
+            border: 1px solid #e2e8f0;
+            overflow: hidden;
+        }
+
+        .header {
+            background-color: #4a5568;
+            color: white;
+            padding: 25px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-bottom: 6px;
+        }
+
+        .header .date {
+            font-size: 14px;
+            opacity: 0.9;
+            font-weight: 400;
+        }
+
+        .content {
+            padding: 30px;
+        }
+
+        .summary-section {
+            background-color: #f7fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            padding: 20px;
+            margin-bottom: 25px;
+        }
+
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .metric {
+            text-align: center;
+            background: white;
+            padding: 16px;
+            border-radius: 6px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .metric-label {
+            font-size: 12px;
+            color: #718096;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            margin-bottom: 6px;
+        }
+
+        .metric-value {
+            font-size: 20px;
+            font-weight: 700;
+            margin-top: 4px;
+            color: #2d3748;
+        }
+
+        .alert { color: #e53e3e; }
+        .warning { color: #dd6b20; }
+        .normal { color: #38a169; }
+
+        .signals-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .signals-table th {
+            background-color: #edf2f7;
+            color: #4a5568;
+            padding: 12px;
+            text-align: left;
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .signals-table td {
+            padding: 12px;
+            border-bottom: 1px solid #f1f5f9;
+            font-size: 14px;
+            vertical-align: middle;
+        }
+
+        .signals-table tr:nth-child(even) {
+            background-color: #fafafa;
+        }
+
+        .signals-table tr:hover {
+            background-color: #f1f5f9;
+        }
+
+        .risk-high {
+            border-left: 3px solid #e53e3e;
+        }
+
+        .risk-medium {
+            border-left: 3px solid #dd6b20;
+        }
+
+        .risk-low {
+            border-left: 3px solid #38a169;
+        }
+
+        .footer {
+            margin-top: 30px;
+            padding: 20px 30px;
+            background-color: #f7fafc;
+            border-top: 1px solid #e2e8f0;
+            font-size: 11px;
+            color: #718096;
+            text-align: center;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: #2d3748;
+            margin: 25px 0 12px 0;
+            font-weight: 600;
+            padding-bottom: 6px;
+            border-bottom: 2px solid #e2e8f0;
+        }
+
+        .risk-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 6px;
+        }
+
+        .risk-indicator.high { background-color: #e53e3e; }
+        .risk-indicator.medium { background-color: #dd6b20; }
+        .risk-indicator.low { background-color: #38a169; }
+
+        .mono-number {
+            font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            text-align: right;
+            font-weight: 500;
+        }
+
+        .risk-badge {
+            display: inline-flex;
+            align-items: center;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .risk-badge.high {
+            background-color: #fed7d7;
+            color: #c53030;
+            border: 1px solid #feb2b2;
+        }
+
+        .risk-badge.medium {
+            background-color: #feebc8;
+            color: #c05621;
+            border: 1px solid #fbd38d;
+        }
+
+        .risk-badge.low {
+            background-color: #c6f6d5;
+            color: #2f855a;
+            border: 1px solid #9ae6b4;
+        }
+
+        .alerts-section {
+            background-color: #fef5e7;
+            border: 1px solid #f6e05e;
+            border-radius: 6px;
+            padding: 16px;
+            margin-bottom: 15px;
+        }
+
+        .alert-item {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            padding: 10px;
+            background: white;
+            border-radius: 4px;
+            border-left: 3px solid #e53e3e;
+        }
+
+        .alert-item:last-child {
+            margin-bottom: 0;
+        }
+
+        .alert-icon {
+            color: #e53e3e;
+            font-weight: bold;
+            margin-right: 6px;
+            font-size: 14px;
+        }
+
+        .warning-signals {
+            font-size: 12px;
+            color: #718096;
+        }
+
+        .warning-tag {
+            display: inline-block;
+            background-color: #edf2f7;
+            color: #4a5568;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 10px;
+            margin-right: 3px;
+            margin-bottom: 2px;
+            border: 1px solid #e2e8f0;
+        }
+
+        .no-alerts {
+            background-color: #f0fff4;
+            border: 1px solid #9ae6b4;
+            border-radius: 6px;
+            padding: 16px;
+            text-align: center;
+            color: #2f855a;
+        }
+
+        @media only screen and (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+
+            .header {
+                padding: 18px;
+            }
+
+            .content {
+                padding: 20px;
+            }
+
+            .summary-grid {
+                grid-template-columns: 1fr;
+                gap: 12px;
+            }
+
+            .signals-table {
+                font-size: 12px;
+            }
+
+            .signals-table th,
+            .signals-table td {
+                padding: 8px 6px;
+            }
+
+            .section-title {
+                font-size: 16px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Daily Risk Signals</h1>
+            <div class="date">{{ date }} | Generated: {{ generated_time }}</div>
+        </div>
+
+        <div class="content">
+            <div class="summary-section">
+                <div class="section-title">Market Risk Summary</div>
+                <div class="summary-grid">
+                    <div class="metric">
+                        <div class="metric-label">High Risk</div>
+                        <div class="metric-value alert">{{ high_risk_count }}</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Medium Risk</div>
+                        <div class="metric-value warning">{{ medium_risk_count }}</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Total Monitored</div>
+                        <div class="metric-value normal">{{ total_traders }}</div>
+                    </div>
+                    {% if summary_stats %}
+                    <div class="metric">
+                        <div class="metric-label">Max VaR</div>
+                        <div class="metric-value" style="color: #2d3748;">${{ summary_stats.max_var|round(0)|int|format_number }}</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Max Loss Prob</div>
+                        <div class="metric-value" style="color: #2d3748;">{{ "%.1f"|format(summary_stats.max_loss_prob * 100) }}%</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Total Warnings</div>
+                        <div class="metric-value" style="color: #2d3748;">{{ summary_stats.total_warning_signals }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="section-title">Trader Risk Signals</div>
+
+            <table class="signals-table">
+                <thead>
+                    <tr>
+                        <th style="width: 80px;">Trader</th>
+                        <th style="width: 120px;">Risk Level</th>
+                        <th style="width: 110px;">VaR (5%)</th>
+                        <th style="width: 100px;">Loss Prob</th>
+                        <th style="width: 110px;">Current PnL</th>
+                        <th style="width: 100px;">Volatility</th>
+                        <th>Warning Signals</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for signal in trader_signals %}
+                    <tr class="risk-{{ signal.risk_level }}">
+                        <td><strong>{{ signal.trader_id }}</strong></td>
+                        <td>
+                            <div class="risk-badge {{ signal.risk_level }}">
+                                <span class="risk-indicator {{ signal.risk_level }}"></span>
+                                {{ signal.risk_level|title }}
+                            </div>
+                        </td>
+                        <td class="mono-number">${{ signal.var_5pct|round(0)|int|format_number }}</td>
+                        <td class="mono-number">{{ "%.1f"|format(signal.loss_probability * 100) }}%</td>
+                        <td class="mono-number {% if signal.current_pnl < 0 %}alert{% else %}normal{% endif %}">
+                            ${{ signal.current_pnl|round(0)|int|format_number }}
+                        </td>
+                        <td class="mono-number">{{ "%.0f"|format(signal.volatility) }}</td>
+                        <td class="warning-signals">
+                            {% for warning in signal.warning_signals %}
+                                <span class="warning-tag">{{ warning }}</span>
+                            {% endfor %}
+                            {% if not signal.warning_signals %}
+                                <span style="color: #94a3b8; font-style: italic;">None</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+
+            <div class="section-title">Critical Alerts</div>
+            {% if alerts %}
+            <div class="alerts-section">
+                {% for alert in alerts %}
+                <div class="alert-item">
+                    <span class="alert-icon">⚠</span>
+                    <div>
+                        <strong>Trader {{ alert.trader_id }}:</strong> {{ alert.message }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-alerts">
+                <strong>✓ All Clear</strong><br>
+                <span style="font-size: 13px;">No critical alerts for today. All traders within acceptable risk parameters.</span>
+            </div>
+            {% endif %}
+        </div>
+
+        <div class="footer">
+            <p><strong>Quantitative Risk Management System</strong> | Automated Daily Report</p>
+            <p>This report is generated automatically using machine learning models. For questions, contact the risk management team.</p>
+        </div>
+    </div>
+</body>
+</html>

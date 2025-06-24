@@ -113,3 +113,8 @@ trader_models/
 model_outputs/
 results/*
 *.pickle
+
+# Email service outputs
+inference/outputs/*.html
+inference/outputs/*.txt
+!inference/outputs/.gitkeep
