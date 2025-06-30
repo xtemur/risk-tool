@@ -118,3 +118,5 @@ results/*
 inference/outputs/*.html
 inference/outputs/*.txt
 !inference/outputs/.gitkeep
+.claude/settings.local.json
+*.csv

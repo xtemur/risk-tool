@@ -92,5 +92,6 @@ def create_trader_day_panel(config: Dict) -> pd.DataFrame:
 
     logger.info(f"Created panel with shape: {panel_df.shape}")
     logger.info(f"Panel contains {panel_df['account_id'].nunique()} traders")
+    logger.info(f"Panel contains {panel_df.columns} columns")
 
     return panel_df
