@@ -118,14 +118,14 @@ ssh "$REMOTE_USER@$REMOTE_HOST" "
 echo -e "${YELLOW}Step 8: Stopping existing containers...${NC}"
 ssh "$REMOTE_USER@$REMOTE_HOST" "
     cd $REMOTE_DIR
-    docker-compose down || true
+    docker compose down || true
 "
 
 # Step 9: Start new containers
 echo -e "${YELLOW}Step 9: Starting new containers...${NC}"
 ssh "$REMOTE_USER@$REMOTE_HOST" "
     cd $REMOTE_DIR
-    docker-compose up -d
+    docker compose up -d
 "
 
 # Step 10: Verify deployment
@@ -134,10 +134,10 @@ sleep 5
 ssh "$REMOTE_USER@$REMOTE_HOST" "
     cd $REMOTE_DIR
     echo 'Container status:'
-    docker-compose ps
+    docker compose ps
     echo ''
     echo 'Recent logs:'
-    docker-compose logs --tail=20
+    docker compose logs --tail=20
 "
 
 # Cleanup local files
@@ -148,7 +148,7 @@ echo ""
 echo "To check logs on remote server:"
 echo "  ssh $REMOTE_USER@$REMOTE_HOST"
 echo "  cd $REMOTE_DIR"
-echo "  docker-compose logs -f"
+echo "  docker compose logs -f"
 echo ""
 echo "To run manual signal generation:"
-echo "  docker-compose exec risk-tool python send_daily_signals.py"
+echo "  docker compose exec risk-tool python send_daily_signals.py"

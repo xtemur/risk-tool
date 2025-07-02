@@ -1,6 +1,7 @@
 # configs/main_config.yaml
 paths:
-  raw_data: "data/risk_tool.db"  # SQLite database path
+  db_path: "data/risk_tool.db"  # SQLite database path
+  raw_data: "data/risk_tool.db"  # Alias for backwards compatibility
   processed_features: "data/processed/full_feature_set.parquet"
   model_dir: "models/production_model_artifacts/"
   report_dir: "reports/"

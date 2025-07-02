@@ -35,9 +35,16 @@ cd risk-tool
 2. Create and activate the conda environment:
 ```bash
 conda env create -f environment.yml
+conda activate risk-tool
 ```
 
-3. Ensure your SQLite database is in place at `data/risk_tool.db`
+3. Set up environment variables:
+```bash
+cp .env.example .env
+# Edit .env with your actual credentials and settings
+```
+
+4. Ensure your SQLite database is in place at `data/risk_tool.db`
 
 ### Basic Usage
 
@@ -68,10 +75,14 @@ risk-tool/
 │   ├── monitoring.py          # Drift detection and stability checks
 │   ├── causal_impact.py       # Economic impact analysis
 │   └── utils.py               # Utility functions
-├── notebooks/                  # Exploration notebooks
+├── scripts/                    # Database and automation scripts
+├── inference/                  # Signal generation and email service
+├── docker/                     # Docker deployment files
 ├── main.py                    # Main orchestrator
 ├── environment.yml            # Conda environment specification
-└── CLAUDE.md                  # Detailed project instructions
+├── requirements.txt           # Pip requirements for Docker
+├── DEPLOYMENT.md              # Docker deployment instructions
+└── README.md                  # This file
 ```
 
 ## 🔧 Configuration
@@ -304,28 +315,35 @@ python scripts/daily_automation.py --skip-db --email test@company.com
 
 ### Deployment Options
 
-#### **Option 1: VPS Deployment (Recommended)**
-- **Cost**: $5-20/month for professional setup
-- **Reliability**: Always-on server with monitoring
-- **Setup**: Complete deployment guide in `DEPLOYMENT.md`
+#### **Option 1: Docker Deployment (Recommended)**
+- **Benefits**: Containerized, consistent environment, easy deployment
+- **Requirements**: Docker and Docker Compose
+- **Setup**: Complete guide in `DEPLOYMENT.md`
 
 ```bash
-# Cron job for daily automation (6 AM weekdays)
-0 6 * * 1-5 /path/to/python scripts/daily_automation.py --email team@company.com
+# Quick Docker deployment
+cp .env.docker.template .env.docker
+# Edit .env.docker with your credentials
+docker compose up -d
 
-# Weekly backup (Sunday 3 AM)
-0 3 * * 0 /path/to/python scripts/backup_database.py --remote-sync
+# Or deploy to remote server
+./deploy.sh
 ```
 
-#### **Option 2: Local Automation**
-- **Cost**: Free (uses your machine)
-- **Setup**: Simple cron job on development machine
-- **Limitation**: Requires machine to stay on 24/7
+#### **Option 2: VPS/Server Deployment**
+- **Cost**: $5-20/month for professional setup
+- **Reliability**: Always-on server with monitoring
+- **Setup**: Manual Python environment setup
 
-#### **Option 3: Cloud Functions (Advanced)**
-- **Platforms**: AWS Lambda, Google Cloud Functions, Azure Functions
-- **Benefits**: Serverless, pay-per-execution
-- **Considerations**: 15-minute execution limits, cold starts
+```bash
+# Cron job for daily automation (8 AM Tashkent time)
+0 8 * * * /path/to/python scripts/daily_automation.py --email team@company.com
+```
+
+#### **Option 3: Local Development**
+- **Cost**: Free (uses your machine)
+- **Setup**: Conda environment for development
+- **Limitation**: Manual execution or local cron jobs
 
 ### Monitoring & Alerting
 

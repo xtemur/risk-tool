@@ -81,14 +81,17 @@ tmp/
 config/local.yaml
 config/*.local.yaml
 
-# Secrets
+# Secrets and Environment Files
+.env
 .env.local
 .env.*.local
 .env.docker
+.env.production
 secrets/
 credentials/
 *.pem
 *.key
+*.crt
 
 # Data files (except the main database)
 data/*.csv
@@ -124,5 +127,6 @@ inference/outputs/*.txt
 
 # Docker deployment
 risk-tool-latest.tar.gz
-!README.md
-*.md
+
+# Temporary deployment files
+deploy-*.sh.tmp

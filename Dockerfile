@@ -44,20 +44,42 @@ COPY --chown=riskuser:riskuser . .
 RUN mkdir -p /app/logs /app/data /app/inference/outputs && \
     chown -R riskuser:riskuser /app
 
-# Setup cron job for daily automation
-COPY --chown=root:root docker/crontab /etc/cron.d/risk-tool-cron
-RUN chmod 0644 /etc/cron.d/risk-tool-cron && \
-    crontab -u riskuser /etc/cron.d/risk-tool-cron
+# Setup cron job for daily automation (run as riskuser)
+RUN echo "0 8 * * * riskuser cd /app && /home/riskuser/.local/bin/python scripts/daily_automation.py --email >> /app/logs/cron.log 2>&1" > /etc/cron.d/risk-tool-cron && \
+    chmod 0644 /etc/cron.d/risk-tool-cron
 
-# Switch to non-root user
-USER riskuser
+# Create directories with correct permissions before switching user
+RUN mkdir -p /app/logs /app/data /app/inference/outputs && \
+    chown -R riskuser:riskuser /app/logs /app/data /app/inference/outputs && \
+    chmod 775 /app/logs /app/data /app/inference/outputs
 
-# Update PATH
+# Update PATH for all users
 ENV PATH=/home/riskuser/.local/bin:$PATH
 
-# Create entrypoint script
-COPY --chown=riskuser:riskuser docker/entrypoint.sh /app/entrypoint.sh
-RUN chmod +x /app/entrypoint.sh
+# Create entrypoint script (as root)
+RUN echo '#!/bin/bash\n\
+set -e\n\
+\n\
+# Fix permissions if needed\n\
+chown -R riskuser:riskuser /app/logs /app/data /app/inference/outputs\n\
+\n\
+# Test database connection as riskuser\n\
+echo "Testing database connection..."\n\
+su - riskuser -c "cd /app && python -c \"import sqlite3; import os; os.makedirs('\''/app/data'\'', exist_ok=True); conn = sqlite3.connect('\''/app/data/risk_tool.db'\''); print('\''Database connection successful'\''); conn.close()\""\n\
+\n\
+# If running cron (default), start cron daemon as root\n\
+if [ "$1" = "cron" ]; then\n\
+    echo "Starting cron daemon for daily automation..."\n\
+    # Initialize cron log\n\
+    touch /app/logs/cron.log\n\
+    chown riskuser:riskuser /app/logs/cron.log\n\
+    # Start cron in foreground\n\
+    exec cron -f\n\
+else\n\
+    # Otherwise, execute the command\n\
+    exec "$@"\n\
+fi' > /app/entrypoint.sh && \
+    chmod +x /app/entrypoint.sh
 
 # Expose Streamlit port (if needed for dashboard)
 EXPOSE 8501
