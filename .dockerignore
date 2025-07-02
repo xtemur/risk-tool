@@ -14,7 +14,6 @@ ENV/
 # Environment files
 .env
 .env.local
-.env.docker
 
 # Data and logs
 data/

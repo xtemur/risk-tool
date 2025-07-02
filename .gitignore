@@ -130,3 +130,4 @@ risk-tool-latest.tar.gz
 
 # Temporary deployment files
 deploy-*.sh.tmp
+!.env.docker.template

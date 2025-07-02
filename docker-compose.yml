@@ -1,50 +1,38 @@
+version: '3.8'
+
 services:
   risk-tool:
     build: .
-    container_name: risk-tool-app
+    container_name: risk-tool
     restart: unless-stopped
     volumes:
-      # Mount database directory
       - ./data:/app/data
-      # Mount logs directory
       - ./logs:/app/logs
-      # Mount outputs directory
       - ./inference/outputs:/app/inference/outputs
-      # Mount config files (read-only)
-      - ./configs:/app/configs:ro
-    env_file:
-      - .env.docker
     environment:
-      - TZ=UTC  # Change to your timezone
-    healthcheck:
-      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+      - PYTHONPATH=/app/src
     networks:
-      - risk-tool-network
+      - risk-network
 
-  # Optional: Streamlit dashboard service
+  # Optional: Web dashboard service
   dashboard:
     build: .
-    container_name: risk-tool-dashboard
+    container_name: risk-dashboard
     restart: unless-stopped
-    command: ["streamlit", "run", "scripts/trader_dashboard.py", "--server.port=8501", "--server.address=0.0.0.0"]
     ports:
       - "8501:8501"
     volumes:
-      - ./data:/app/data:ro
-      - ./configs:/app/configs:ro
-    env_file:
-      - .env.docker
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./inference/outputs:/app/inference/outputs
+    environment:
+      - PYTHONPATH=/app/src
+    command: ["streamlit", "run", "scripts/trader_dashboard.py", "--server.address=0.0.0.0"]
+    networks:
+      - risk-network
     depends_on:
       - risk-tool
-    networks:
-      - risk-tool-network
-    profiles:
-      - dashboard  # Only start when explicitly requested
 
 networks:
-  risk-tool-network:
+  risk-network:
     driver: bridge
