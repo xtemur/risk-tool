@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+*.egg-info/
+.pytest_cache/
+
+# Environment files
+.env
+.env.local
+.env.docker
+
+# Data and logs
+data/
+logs/
+inference/outputs/
+backups/
+
+# Development
+.git/
+.gitignore
+*.md
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Conda
+environment.yml
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore
+docker/
+
+# Deployment
+deploy.sh
+risk-tool-latest.tar.gz

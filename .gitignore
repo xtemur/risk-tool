@@ -84,6 +84,7 @@ config/*.local.yaml
 # Secrets
 .env.local
 .env.*.local
+.env.docker
 secrets/
 credentials/
 *.pem
@@ -120,3 +121,8 @@ inference/outputs/*.txt
 !inference/outputs/.gitkeep
 .claude/settings.local.json
 *.csv
+
+# Docker deployment
+risk-tool-latest.tar.gz
+!README.md
+*.md

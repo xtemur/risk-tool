@@ -1,0 +1,5 @@
+# Risk Tool Daily Automation Cron Schedule
+# Format: minute hour day month weekday command
+# Default: Run at 8:00 AM UTC every day
+
+0 8 * * * cd /app && /home/riskuser/.local/bin/python scripts/daily_automation.py --email >> /app/logs/cron.log 2>&1

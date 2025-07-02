@@ -275,6 +275,179 @@ The daily email includes:
 - **Critical Alerts**: Items requiring immediate attention
 - **Historical Context**: Comparison to recent performance trends
 
+## 🤖 Production Automation
+
+The system includes complete automation for production deployment with monitoring, backup, and alerting capabilities.
+
+### Automated Pipeline
+
+The master automation script orchestrates the entire daily workflow:
+
+```bash
+# Full automated pipeline
+python scripts/daily_automation.py --email risk-team@company.com
+
+# Test run without executing changes
+python scripts/daily_automation.py --dry-run --email test@company.com
+
+# Skip database update (for testing)
+python scripts/daily_automation.py --skip-db --email test@company.com
+```
+
+### Key Automation Features
+
+1. **Database Updates**: Automatically fetches and processes latest trading data
+2. **Signal Generation**: Creates and sends daily risk reports
+3. **Health Monitoring**: Validates database integrity and system performance
+4. **Error Handling**: Comprehensive logging and failure notifications
+5. **Backup Management**: Automated database backups with compression and retention
+
+### Deployment Options
+
+#### **Option 1: VPS Deployment (Recommended)**
+- **Cost**: $5-20/month for professional setup
+- **Reliability**: Always-on server with monitoring
+- **Setup**: Complete deployment guide in `DEPLOYMENT.md`
+
+```bash
+# Cron job for daily automation (6 AM weekdays)
+0 6 * * 1-5 /path/to/python scripts/daily_automation.py --email team@company.com
+
+# Weekly backup (Sunday 3 AM)
+0 3 * * 0 /path/to/python scripts/backup_database.py --remote-sync
+```
+
+#### **Option 2: Local Automation**
+- **Cost**: Free (uses your machine)
+- **Setup**: Simple cron job on development machine
+- **Limitation**: Requires machine to stay on 24/7
+
+#### **Option 3: Cloud Functions (Advanced)**
+- **Platforms**: AWS Lambda, Google Cloud Functions, Azure Functions
+- **Benefits**: Serverless, pay-per-execution
+- **Considerations**: 15-minute execution limits, cold starts
+
+### Monitoring & Alerting
+
+The automation system provides comprehensive monitoring:
+
+#### **Success Notifications**
+- Daily execution summaries
+- Performance metrics and timing
+- Database health statistics
+- Risk signal delivery confirmation
+
+#### **Failure Alerts**
+- Immediate email notifications on errors
+- Detailed error logs with stack traces
+- System health check failures
+- Database integrity issues
+
+#### **Health Checks**
+- Database connectivity and integrity
+- Active trader validation
+- Recent trading data verification
+- Model file availability
+- Email service connectivity
+
+### Configuration
+
+#### **Environment Setup**
+```bash
+# Copy and configure environment variables
+cp .env.example .env
+# Edit .env with your credentials and settings
+```
+
+#### **Key Configuration Variables**
+```bash
+# Email settings
+EMAIL_FROM=alerts@yourcompany.com
+EMAIL_PASSWORD=your-app-password
+EMAIL_RECIPIENTS=team@company.com,management@company.com
+
+# Database path
+DATABASE_PATH=data/risk_tool.db
+
+# Logging level
+LOG_LEVEL=INFO
+
+# Environment
+ENVIRONMENT=production
+```
+
+### Backup Strategy
+
+#### **Automated Backups**
+- **Daily**: Compressed database backups with integrity verification
+- **Weekly**: Long-term backup retention (4 weeks)
+- **Monthly**: Archive backups (12 months)
+- **Cleanup**: Automatic old backup removal
+
+```bash
+# Manual backup
+python scripts/backup_database.py
+
+# Backup with remote sync
+python scripts/backup_database.py --remote-sync
+
+# Verify existing backups
+python scripts/backup_database.py --verify-only
+```
+
+#### **Backup Features**
+- SQLite integrity verification before backup
+- File compression (typically 70-80% size reduction)
+- SHA256 checksums for verification
+- Optional remote sync via rsync
+- Automatic cleanup of old backups
+
+### Security & Maintenance
+
+#### **Security Measures**
+- Environment variable management for credentials
+- File permission restrictions
+- Secure SMTP authentication
+- API key rotation support
+- Access logging and monitoring
+
+#### **Maintenance Tasks**
+- **Daily**: Monitor automation logs and email delivery
+- **Weekly**: Review system performance and backup integrity
+- **Monthly**: Update dependencies and security patches
+- **Quarterly**: Review and update risk thresholds
+
+### Troubleshooting
+
+#### **Common Issues**
+```bash
+# Check automation logs
+tail -f logs/daily_automation_*.log
+
+# Test database connectivity
+python -c "import sqlite3; print('DB OK' if sqlite3.connect('data/risk_tool.db') else 'DB ERROR')"
+
+# Test email configuration
+python send_daily_signals.py --save-only
+
+# Verify cron jobs
+crontab -l
+```
+
+#### **Log Analysis**
+```bash
+# Search for errors in logs
+grep -i error logs/*.log
+
+# Check execution times
+grep "Total Duration" logs/daily_automation_*.log
+
+# Monitor resource usage
+grep "Database health" logs/daily_automation_*.log
+```
+
+For detailed deployment instructions, see `DEPLOYMENT.md`.
+
 ## ⚠️ Important Considerations
 
 1. **Data Quality**: The system assumes clean trade data in the SQLite database
@@ -282,3 +455,5 @@ The daily email includes:
 3. **Model Retraining**: Consider retraining when drift scores exceed thresholds
 4. **Risk Limits**: VaR predictions should inform, not replace, risk management judgment
 5. **Signal Interpretation**: Daily signals are predictive tools - combine with market context and trader communication
+6. **Automation Monitoring**: Regularly check automation logs and failure notifications
+7. **Backup Verification**: Periodically verify backup integrity and recovery procedures
