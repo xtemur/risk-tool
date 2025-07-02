@@ -38,7 +38,6 @@ environment.yml
 Dockerfile
 docker-compose.yml
 .dockerignore
-docker/
 
 # Deployment
 deploy.sh
