@@ -8,7 +8,7 @@ set -e
 REMOTE_USER="risk-tool"
 REMOTE_HOST="195.158.30.167"
 REMOTE_DIR="/home/risk-tool/risk-tool"
-REPO_URL="https://github.com/your-username/risk-tool.git"  # Update this
+REPO_URL="git@github.com:xtemur/risk-tool.git"
 
 # Colors for output
 RED='\033[0;31m'
