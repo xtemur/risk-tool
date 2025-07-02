@@ -42,6 +42,8 @@ production_model:
     min_child_samples: 20
     subsample: 0.8
     colsample_bytree: 0.8
+    reg_alpha: 0.0  # L1 regularization
+    reg_lambda: 0.0  # L2 regularization
     random_state: 42
   loss_model:
     objective: "binary"
@@ -53,4 +55,33 @@ production_model:
     min_child_samples: 20
     subsample: 0.8
     colsample_bytree: 0.8
+    reg_alpha: 0.0  # L1 regularization
+    reg_lambda: 0.0  # L2 regularization
     random_state: 42
+
+# Model Quality and Validation Settings
+model_quality:
+  max_features: 15  # Maximum features to prevent overfitting
+  enable_feature_selection: true
+  early_stopping_rounds: 20
+  validation_split: 0.2  # 20% for validation
+
+  # Cross-validation settings (strict CV recommended)
+  use_strict_cv: true   # Enable STRICT walk-forward CV with in-fold feature selection
+  purge_days: 2         # Days to purge after training set (for purged CV)
+  embargo_days: 1       # Additional embargo period (for purged CV)
+  use_purged_cv: false  # Disable purged CV in favor of strict CV
+
+  # Statistical validation thresholds
+  thresholds:
+    var_kupiec_p_value: 0.05  # Minimum p-value for VaR coverage test
+    auc_stability_cv: 0.15    # Maximum coefficient of variation for AUC across folds
+    feature_importance_concentration: 0.8  # Maximum concentration in top 5 features
+    max_correlation: 0.8      # Maximum feature-target correlation to flag leakage
+
+# Advanced Risk Metrics Configuration
+advanced_metrics:
+  enable_cvar: true
+  cvar_alpha: 0.05  # Conditional VaR at 5% level
+  multi_horizon: [1, 5, 21]  # Prediction horizons in days
+  regime_detection: true

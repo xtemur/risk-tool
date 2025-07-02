@@ -79,13 +79,33 @@ class SignalGenerator:
         if self.var_model is None or self.loss_model is None:
             self.load_models()
 
-        # Prepare features
-        feature_cols = [col for col in trader_data.columns if col not in [
-            'account_id', 'trade_date', 'target_pnl', 'target_large_loss',
-            'daily_pnl', 'large_loss_threshold'
-        ]]
+        # Load selected features from model metadata
+        model_dir = self.config['paths']['model_dir']
+        metadata_path = os.path.join(model_dir, 'model_metadata.json')
 
-        X = trader_data[feature_cols]
+        if os.path.exists(metadata_path):
+            import json
+            with open(metadata_path, 'r') as f:
+                metadata = json.load(f)
+            selected_features = metadata.get('selected_features', [])
+            logger.info(f"Using {len(selected_features)} selected features from model training")
+        else:
+            # Fallback to all features if metadata not available
+            logger.warning("Model metadata not found, using all available features")
+            selected_features = [col for col in trader_data.columns if col not in [
+                'account_id', 'trade_date', 'target_pnl', 'target_large_loss',
+                'daily_pnl', 'large_loss_threshold'
+            ]]
+
+        # Check if all selected features are available
+        missing_features = [f for f in selected_features if f not in trader_data.columns]
+        if missing_features:
+            logger.error(f"Missing required features: {missing_features}")
+            raise ValueError(f"Missing features required for prediction: {missing_features}")
+
+        # Use only the selected features for prediction
+        X = trader_data[selected_features]
+        logger.info(f"Making predictions with {len(selected_features)} features: {selected_features}")
 
         # Generate predictions
         var_predictions = self.var_model.predict(X)
