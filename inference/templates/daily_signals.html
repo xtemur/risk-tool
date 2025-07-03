@@ -353,7 +353,7 @@
                 <tbody>
                     {% for signal in trader_signals %}
                     <tr class="risk-{{ signal.risk_level }}">
-                        <td><strong>{{ signal.trader_id }}</strong></td>
+                        <td><strong>{{ signal.trader_id }} ({{ signal.trader_name }})</strong></td>
                         <td>
                             <div class="risk-badge {{ signal.risk_level }}">
                                 <span class="risk-indicator {{ signal.risk_level }}"></span>
@@ -386,7 +386,7 @@
                 <div class="alert-item">
                     <span class="alert-icon">⚠</span>
                     <div>
-                        <strong>Trader {{ alert.trader_id }}:</strong> {{ alert.message }}
+                        <strong>{{ alert.trader_label|default("Trader " + alert.trader_id) }}:</strong> {{ alert.message }}
                     </div>
                 </div>
                 {% endfor %}

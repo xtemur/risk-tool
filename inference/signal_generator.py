@@ -49,6 +49,24 @@ class SignalGenerator:
         else:
             self.feature_data = pd.read_parquet(self.config['paths']['processed_features'])
 
+    def get_trader_names(self) -> Dict[int, str]:
+        """Get trader account names from database."""
+        import sqlite3
+        db_path = self.config['paths']['database']
+
+        trader_names = {}
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute('SELECT account_id, account_name FROM accounts WHERE is_active = 1')
+            for row in cursor.fetchall():
+                trader_names[row[0]] = row[1]
+            conn.close()
+        except Exception as e:
+            logger.warning(f"Could not load trader names: {e}")
+
+        return trader_names
+
         # Add date_idx if not present
         if 'date_idx' not in self.feature_data.columns:
             unique_dates = self.feature_data['trade_date'].unique()
@@ -176,18 +194,26 @@ class SignalGenerator:
 
         return signals
 
-    def generate_alerts(self, predictions_df: pd.DataFrame) -> List[Dict]:
+    def generate_alerts(self, predictions_df: pd.DataFrame, trader_names: Dict[int, str] = None) -> List[Dict]:
         """Generate critical alerts for high-risk situations."""
         alerts = []
+
+        if trader_names is None:
+            trader_names = self.get_trader_names()
 
         for idx, row in predictions_df.iterrows():
             trader_id = idx if isinstance(idx, (int, str)) else row.get('account_id', idx)
             var_amount = abs(row['var_prediction'])
 
+            # Get trader name
+            trader_name = trader_names.get(int(trader_id), f"ID {trader_id}")
+            trader_label = f"Trader {trader_id} ({trader_name})"
+
             # Extreme VaR levels (>$10K)
             if var_amount >= 10000:
                 alerts.append({
                     'trader_id': str(trader_id),
+                    'trader_label': trader_label,
                     'message': f"Extreme VaR level (${var_amount:,.0f}). Consider immediate position size reduction."
                 })
 
@@ -195,6 +221,7 @@ class SignalGenerator:
             elif row['loss_probability'] >= 0.15:
                 alerts.append({
                     'trader_id': str(trader_id),
+                    'trader_label': trader_label,
                     'message': f"High loss probability ({row['loss_probability']:.1%}). Monitor closely."
                 })
 
@@ -203,6 +230,7 @@ class SignalGenerator:
             if warning_count >= 3 and var_amount >= 4000:
                 alerts.append({
                     'trader_id': str(trader_id),
+                    'trader_label': trader_label,
                     'message': f"Multiple risk factors detected ({warning_count} warnings) with significant VaR exposure."
                 })
 
@@ -210,6 +238,7 @@ class SignalGenerator:
             if row.get('revenge_trading_proxy', 0) == 1 and row['loss_probability'] > 0.05:
                 alerts.append({
                     'trader_id': str(trader_id),
+                    'trader_label': trader_label,
                     'message': "Revenge trading pattern detected. Behavioral intervention recommended."
                 })
 
@@ -233,13 +262,19 @@ class SignalGenerator:
         # Generate predictions
         predictions = self.generate_predictions(latest_data)
 
+        # Get trader names
+        trader_names = self.get_trader_names()
+
         # Prepare trader signals
         trader_signals = []
         for idx, row in predictions.iterrows():
             trader_id = idx if isinstance(idx, (int, str)) else row.get('account_id', idx)
+            trader_name = trader_names.get(int(trader_id), f"ID {trader_id}")
 
             signal = {
                 'trader_id': str(trader_id),
+                'trader_name': trader_name,
+                'trader_label': f"{trader_id} ({trader_name})",
                 'risk_level': self.classify_risk_level(
                     row['var_prediction'],
                     row['loss_probability'],
@@ -258,7 +293,7 @@ class SignalGenerator:
         trader_signals.sort(key=lambda x: (risk_order[x['risk_level']], -x['loss_probability']))
 
         # Generate alerts
-        alerts = self.generate_alerts(predictions)
+        alerts = self.generate_alerts(predictions, trader_names)
 
         # Calculate summary statistics
         var_amounts = [abs(s['var_5pct']) for s in trader_signals]
