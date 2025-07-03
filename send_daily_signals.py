@@ -136,7 +136,9 @@ def main():
         if signal_data['alerts']:
             print("\nCRITICAL ALERTS:")
             for alert in signal_data['alerts']:
-                trader_label = alert.get('trader_label', f"Trader {alert['trader_id']}")
+                trader_label = alert.get('trader_label')
+                if not trader_label:
+                    trader_label = f"Trader {alert['trader_id']}"
                 print(f"  - {trader_label}: {alert['message']}")
 
         print("="*60)
