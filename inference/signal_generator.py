@@ -52,7 +52,7 @@ class SignalGenerator:
     def get_trader_names(self) -> Dict[int, str]:
         """Get trader account names from database."""
         import sqlite3
-        db_path = self.config['paths']['database']
+        db_path = self.config['paths']['db_path']
 
         trader_names = {}
         try:
