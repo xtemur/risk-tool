@@ -1,5 +1,15 @@
-# Risk Tool Daily Automation Cron Schedule
+# Risk Tool Quantitative Automation Cron Schedule
 # Format: minute hour day month weekday command
-# Default: Run at 8:00 AM UTC every day
+# Tashkent time is UTC+5, so 9:00 AM Tashkent = 4:00 AM UTC
 
-0 8 * * * cd /app && python scripts/daily_automation.py --email >> /app/logs/cron.log 2>&1
+# Daily automation: Monday-Friday at 9:00 AM Tashkent (4:00 AM UTC)
+# - Update database (last 3 days for efficiency)
+# - Generate and send risk signals
+0 4 * * 1-5 cd /app && python scripts/quant_automation.py --mode daily --email >> /app/logs/cron.log 2>&1
+
+# Weekly automation: Sunday at 9:00 AM Tashkent (4:00 AM UTC)
+# - Update database (last 7 days for fresh training data)
+# - Retrain models with full backtesting
+# - Validate models
+# - NO SIGNALS (weekend - markets closed)
+0 4 * * 0 cd /app && python scripts/quant_automation.py --mode weekly >> /app/logs/cron.log 2>&1
