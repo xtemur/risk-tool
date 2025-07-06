@@ -1,0 +1,46 @@
+{
+  "timestamp": "2025-07-06T22:10:23.284576",
+  "performance_summary": {
+    "period": "Last 7 days",
+    "n_observations": 1,
+    "date_range": [
+      "2025-07-06T22:10:23.284386",
+      "2025-07-06T22:10:23.284386"
+    ],
+    "var_trends": {
+      "avg_violation_rate": 0.04,
+      "violation_rate_trend": "insufficient_data",
+      "violation_rate_stability": 0.0
+    },
+    "loss_trends": {
+      "avg_auc": 0.9869791666666667,
+      "auc_trend": "insufficient_data",
+      "auc_stability": 0.0
+    },
+    "alert_summary": {
+      "total_alerts": 2,
+      "unique_alert_types": 2,
+      "most_common_alerts": [
+        [
+          "Poor model calibration",
+          1
+        ],
+        [
+          "Stale data",
+          1
+        ]
+      ]
+    }
+  },
+  "active_experiments": [],
+  "recent_alerts": [
+    {
+      "timestamp": "2025-07-06T22:10:23.284386",
+      "alert": "Poor model calibration: 0.443 error"
+    },
+    {
+      "timestamp": "2025-07-06T22:10:23.284386",
+      "alert": "Stale data: 166.2 hours old"
+    }
+  ]
+}

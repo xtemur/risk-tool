@@ -59,7 +59,7 @@ def run_backtest_mode(config):
     # Create performance summary
     performance_summary = create_performance_summary(backtest_results, config)
     performance_summary.to_csv(
-        f"{config['paths']['report_dir']}/performance_summary.csv",
+        os.path.join(config['paths']['report_dir'], 'performance_summary.csv'),
         index=False
     )
     logger.info("Performance summary:")
@@ -79,8 +79,8 @@ def run_monitor_mode(config):
     logger.info("Starting monitor mode...")
 
     # Load models
-    var_model_path = f"{config['paths']['model_dir']}/lgbm_var_model.joblib"
-    loss_model_path = f"{config['paths']['model_dir']}/lgbm_loss_model.joblib"
+    var_model_path = os.path.join(config['paths']['model_dir'], 'lgbm_var_model.joblib')
+    loss_model_path = os.path.join(config['paths']['model_dir'], 'lgbm_loss_model.joblib')
 
     logger.info("Loading models...")
     var_model = load_model(var_model_path)
@@ -161,8 +161,8 @@ def run_validation_mode(config):
     ab_framework = ABTestingFramework(config)
 
     # Load existing models and data
-    var_model_path = f"{config['paths']['model_dir']}/lgbm_var_model.joblib"
-    loss_model_path = f"{config['paths']['model_dir']}/lgbm_loss_model.joblib"
+    var_model_path = os.path.join(config['paths']['model_dir'], 'lgbm_var_model.joblib')
+    loss_model_path = os.path.join(config['paths']['model_dir'], 'lgbm_loss_model.joblib')
 
     logger.info("Loading models and data...")
     var_model = load_model(var_model_path)
@@ -185,21 +185,26 @@ def run_validation_mode(config):
         feature_df['date_idx'] = feature_df['trade_date'].map(date_to_idx)
 
     # Load recent backtest results for validation
-    backtest_path = config['paths']['model_dir'] + '/purged_backtest_results.csv'
-    if os.path.exists(backtest_path):
-        backtest_results = pd.read_csv(backtest_path)
-        backtest_results['trade_date'] = pd.to_datetime(backtest_results['trade_date'])
+    # Check which CV method was used and load the appropriate results file
+    if config['model_quality'].get('use_strict_cv', False):
+        backtest_path = os.path.join(config['paths']['model_dir'], 'strict_walk_forward_results.csv')
+    elif config['model_quality'].get('use_purged_cv', False):
+        backtest_path = os.path.join(config['paths']['model_dir'], 'purged_backtest_results.csv')
     else:
-        logger.warning("No purged backtest results found. Using standard backtest results...")
-        backtest_path = config['paths']['model_dir'] + '/backtest_results.csv'
-        backtest_results = pd.read_csv(backtest_path)
-        backtest_results['trade_date'] = pd.to_datetime(backtest_results['trade_date'])
+        backtest_path = os.path.join(config['paths']['model_dir'], 'backtest_results.csv')
+
+    if not os.path.exists(backtest_path):
+        raise FileNotFoundError(f"Backtest results not found at {backtest_path}. "
+                               f"Make sure the model was trained with the same CV settings.")
+
+    backtest_results = pd.read_csv(backtest_path)
+    backtest_results['trade_date'] = pd.to_datetime(backtest_results['trade_date'])
 
     # Comprehensive model validation
     logger.info("Performing comprehensive model validation...")
 
     # 1. Load and validate model metadata
-    metadata_path = config['paths']['model_dir'] + '/model_metadata.json'
+    metadata_path = os.path.join(config['paths']['model_dir'], 'model_metadata.json')
     if os.path.exists(metadata_path):
         import json
         with open(metadata_path, 'r') as f:
@@ -301,11 +306,11 @@ def run_validation_mode(config):
     # 5. Save comprehensive validation report
     ensure_directory_exists(config['paths']['report_dir'])
 
-    validation_report_path = f"{config['paths']['report_dir']}/comprehensive_validation_report.json"
+    validation_report_path = os.path.join(config['paths']['report_dir'], 'comprehensive_validation_report.json')
     with open(validation_report_path, 'w') as f:
         json.dump(validation_report, f, indent=2, default=str)
 
-    dashboard_path = f"{config['paths']['report_dir']}/monitoring_dashboard_data.json"
+    dashboard_path = os.path.join(config['paths']['report_dir'], 'monitoring_dashboard_data.json')
     with open(dashboard_path, 'w') as f:
         json.dump(dashboard_data, f, indent=2, default=str)
 

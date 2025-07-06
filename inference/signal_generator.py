@@ -116,10 +116,10 @@ class SignalGenerator:
                     COUNT(*) as trading_days,
                     CASE
                         WHEN COUNT(*) > 1 THEN
-                            (AVG(daily_pnl) / NULLIF(
-                                SQRT(SUM((daily_pnl - (SELECT AVG(daily_pnl) FROM daily_pnl d2 WHERE d2.account_id = daily_pnl.account_id)) *
+                            COALESCE((AVG(daily_pnl) / NULLIF(
+                                SQRT(ABS(SUM((daily_pnl - (SELECT AVG(daily_pnl) FROM daily_pnl d2 WHERE d2.account_id = daily_pnl.account_id)) *
                                         (daily_pnl - (SELECT AVG(daily_pnl) FROM daily_pnl d2 WHERE d2.account_id = daily_pnl.account_id))) /
-                                     (COUNT(*) - 1)), 0)) * SQRT(30)
+                                     (COUNT(*) - 1))), 0)) * SQRT(30), 0)
                         ELSE 0
                     END as sharpe_30d,
                     AVG(CASE WHEN winning_trades > 0 THEN winning_pnl / winning_trades END) as avg_winning_trade,
@@ -150,8 +150,8 @@ class SignalGenerator:
                     AVG(daily_pnl) as all_time_avg_daily_pnl,
                     CASE
                         WHEN COUNT(*) > 1 THEN
-                            AVG(daily_pnl) / NULLIF(
-                                SQRT((SUM(daily_pnl * daily_pnl) - SUM(daily_pnl) * SUM(daily_pnl) / COUNT(*)) / (COUNT(*) - 1)), 0) * SQRT(30)
+                            COALESCE(AVG(daily_pnl) / NULLIF(
+                                SQRT(ABS((SUM(daily_pnl * daily_pnl) - SUM(daily_pnl) * SUM(daily_pnl) / COUNT(*)) / (COUNT(*) - 1))), 0) * SQRT(30), 0)
                         ELSE 0
                     END as all_time_sharpe,
                     AVG(CASE WHEN winning_trades > 0 THEN winning_pnl / winning_trades END) as all_time_avg_winning_trade,
@@ -236,14 +236,24 @@ class SignalGenerator:
         Returns:
             Tuple of (background_color, text_color, intensity_class)
         """
-        if all_time_value == 0 or current_value is None or all_time_value is None:
+        # Handle invalid values (NaN, infinity, None, zero)
+        if (all_time_value == 0 or current_value is None or all_time_value is None or
+            not np.isfinite(current_value) or not np.isfinite(all_time_value)):
             return '#F5F5F5', '#000000', 'neutral'
 
-        # Calculate performance ratio
-        if metric_type == 'higher_better':
-            ratio = current_value / all_time_value if all_time_value != 0 else 1
-        else:  # lower_better (for losses)
-            ratio = all_time_value / current_value if current_value != 0 else 1
+        # Calculate performance ratio with additional safety checks
+        try:
+            if metric_type == 'higher_better':
+                ratio = current_value / all_time_value if all_time_value != 0 else 1
+            else:  # lower_better (for losses)
+                ratio = all_time_value / current_value if current_value != 0 else 1
+
+            # Additional safety check for the ratio itself
+            if not np.isfinite(ratio):
+                return '#F5F5F5', '#000000', 'neutral'
+
+        except (ZeroDivisionError, TypeError, ValueError):
+            return '#F5F5F5', '#000000', 'neutral'
 
         # Convert ratio to percentage for smooth gradient
         # Map ratio to a scale from -100 to +100

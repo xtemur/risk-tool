@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from scipy import stats
 import logging
+import os
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -32,11 +33,16 @@ def analyze_causal_impact(model, df: pd.DataFrame, config: Dict, model_type: str
     """
     logger.info(f"Starting causal impact analysis for {model_type} model...")
 
-    # Get feature columns
-    feature_cols = [col for col in df.columns if col not in [
-        'account_id', 'trade_date', 'target_pnl', 'target_large_loss',
-        'daily_pnl', 'large_loss_threshold'
-    ]]
+    # Load selected features from model metadata
+    import json
+    import os
+    metadata_path = os.path.join(config['paths']['model_dir'], 'model_metadata.json')
+    with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+
+    # Use only the features the model was trained on
+    feature_cols = metadata['selected_features']
+    logger.info(f"Using {len(feature_cols)} selected features for causal impact analysis")
 
     X = df[feature_cols]
 
@@ -411,7 +417,7 @@ def generate_causal_impact_report(var_impact: Dict, loss_impact: Dict, config: D
     plt.tight_layout()
 
     # Save plot
-    plot_path = f"{config['paths']['report_dir']}/causal_impact_analysis.png"
+    plot_path = os.path.join(config['paths']['report_dir'], 'causal_impact_analysis.png')
     plt.savefig(plot_path, dpi=300, bbox_inches='tight')
     plt.close()
 
@@ -441,7 +447,7 @@ def generate_causal_impact_report(var_impact: Dict, loss_impact: Dict, config: D
         )
 
     # Save text report
-    text_path = f"{config['paths']['report_dir']}/causal_impact_summary.txt"
+    text_path = os.path.join(config['paths']['report_dir'], 'causal_impact_summary.txt')
     with open(text_path, 'w') as f:
         f.write('\n'.join(report_lines))
 

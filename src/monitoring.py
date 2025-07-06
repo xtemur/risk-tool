@@ -141,11 +141,16 @@ def generate_model_stability_report(model, training_df: pd.DataFrame, recent_df:
     """
     logger.info(f"Generating model stability report for {model_type} model...")
 
-    # Get feature columns
-    feature_cols = [col for col in training_df.columns if col not in [
-        'account_id', 'trade_date', 'target_pnl', 'target_large_loss',
-        'daily_pnl', 'large_loss_threshold'
-    ]]
+    # Load selected features from model metadata
+    import json
+    import os
+    metadata_path = os.path.join(config['paths']['model_dir'], 'model_metadata.json')
+    with open(metadata_path, 'r') as f:
+        metadata = json.load(f)
+
+    # Use only the features the model was trained on
+    feature_cols = metadata['selected_features']
+    logger.info(f"Using {len(feature_cols)} selected features for {model_type} model")
 
     # Sample data for SHAP analysis (to avoid memory issues)
     n_samples = min(1000, len(training_df), len(recent_df))
