@@ -20,7 +20,7 @@ The system is designed with the realities of financial data in mind:
 
 ### Prerequisites
 
-- Conda (Miniconda or Anaconda) or uv
+- uv (modern Python package manager)
 - Python 3.9+
 - SQLite database with trading data
 
@@ -32,19 +32,16 @@ git clone <repository-url>
 cd risk-tool
 ```
 
-2. Create and activate the environment:
+2. Create and activate the environment using uv:
 
-**Option A: Using conda + uv (recommended):**
 ```bash
-conda env create -f environment.yml
-conda activate risk-tool
-uv pip install -e .
-```
-
-**Option B: Using uv directly:**
-```bash
+# Create virtual environment with Python 3.9+
 uv venv --python 3.9
+
+# Activate environment
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Install dependencies
 uv pip install -e .
 ```
 
@@ -97,7 +94,7 @@ risk-tool/
 ├── inference/                  # Signal generation and email service
 ├── docker/                     # Docker deployment files
 ├── main.py                    # Main orchestrator
-├── environment.yml            # Conda environment specification
+├── pyproject.toml             # uv/pip project configuration and dependencies
 ├── requirements.txt           # Pip requirements for Docker
 ├── DEPLOYMENT.md              # Docker deployment instructions
 └── README.md                  # This file
@@ -471,7 +468,7 @@ docker compose up -d
 
 #### **Option 3: Local Development**
 - **Cost**: Free (uses your machine)
-- **Setup**: Conda environment for development
+- **Setup**: uv environment for development
 - **Limitation**: Manual execution or local cron jobs
 
 ### Monitoring & Alerting

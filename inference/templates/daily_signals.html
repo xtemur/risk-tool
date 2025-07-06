@@ -20,7 +20,7 @@
         }
 
         .container {
-            max-width: 1000px;
+            max-width: 1400px;
             margin: 0 auto;
             background-color: #ffffff;
             border-radius: 8px;
@@ -94,40 +94,60 @@
         .warning { color: #dd6b20; }
         .normal { color: #38a169; }
 
-        .signals-table {
-            width: 100%;
-            border-collapse: collapse;
+        .table-container {
+            overflow-x: auto;
             margin-top: 15px;
             border: 1px solid #e2e8f0;
             border-radius: 6px;
-            overflow: hidden;
+        }
+
+        .signals-table {
+            width: 100%;
+            min-width: 1400px;
+            border-collapse: collapse;
+            background: white;
+            table-layout: fixed;
         }
 
         .signals-table th {
-            background-color: #edf2f7;
-            color: #4a5568;
-            padding: 12px;
-            text-align: left;
-            font-size: 12px;
+            background-color: #1E1E1E;
+            color: #FFFFFF;
+            padding: 10px 8px;
+            text-align: center;
+            font-size: 11px;
             text-transform: uppercase;
-            font-weight: 600;
-            letter-spacing: 0.5px;
-            border-bottom: 1px solid #e2e8f0;
+            font-weight: 700;
+            letter-spacing: 0.3px;
+            border: 1px solid #333333;
+            font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', Consolas, 'Courier New', monospace;
         }
 
         .signals-table td {
-            padding: 12px;
-            border-bottom: 1px solid #f1f5f9;
-            font-size: 14px;
+            padding: 6px 4px;
+            border: 1px solid #E0E0E0;
+            font-size: 11px;
             vertical-align: middle;
+            text-align: center;
+            font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-weight: 500;
+            height: 45px;
+            max-height: 45px;
+            overflow: hidden;
+            line-height: 1.1;
+            box-sizing: border-box;
+        }
+
+        .signals-table tr {
+            height: 45px;
+            max-height: 45px;
         }
 
         .signals-table tr:nth-child(even) {
-            background-color: #fafafa;
+            background-color: #FAFAFA;
         }
 
         .signals-table tr:hover {
-            background-color: #f1f5f9;
+            background-color: #F0F8FF;
         }
 
         .risk-high {
@@ -304,6 +324,100 @@
         </div>
 
         <div class="content">
+            <div class="section-title">Trader Risk Signals</div>
+
+            <div class="table-container">
+                <table class="signals-table">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Trader</th>
+                        <th rowspan="2">Risk Level</th>
+                        <th rowspan="2">VaR (5%)</th>
+                        <th rowspan="2">Loss Prob</th>
+                        <th rowspan="2">Last Day PnL</th>
+                        <th colspan="6" style="background-color: #2A2A2A; border-bottom: 2px solid #00D4AA;">30D Performance Window</th>
+                        <th rowspan="2">Last Trade</th>
+                        <th rowspan="2">Warnings</th>
+                    </tr>
+                    <tr>
+                        <th>Sharpe</th>
+                        <th>Avg Daily PnL</th>
+                        <th>Avg Win</th>
+                        <th>Avg Loss</th>
+                        <th>Max PnL</th>
+                        <th>Min PnL</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for signal in trader_signals %}
+                    <tr class="risk-{{ signal.risk_level }}">
+                        <td><span style="font-size: 8px; color: #888; font-weight: normal;">{{ signal.trader_id }}</span><br><strong style="font-size: 12px; color: #000;">{{ signal.trader_name }}</strong></td>
+                        <td>
+                            <div class="risk-badge {{ signal.risk_level }}">
+                                {{ signal.risk_level|title }}
+                            </div>
+                        </td>
+                        <td style="background-color: {{ signal.var_heatmap.bg }}; color: {{ signal.var_heatmap.text }};">
+                            ${{ signal.var_5pct|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.loss_prob_heatmap.bg }}; color: {{ signal.loss_prob_heatmap.text }};">
+                            {{ "%.1f"|format(signal.loss_probability * 100) }}%
+                        </td>
+                        <td style="background-color: {{ signal.last_day_pnl_heatmap.bg }}; color: {{ signal.last_day_pnl_heatmap.text }};">
+                            ${{ signal.last_trading_day_pnl|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.sharpe_heatmap.bg }}; color: {{ signal.sharpe_heatmap.text }};">
+                            {{ "%.2f"|format(signal.sharpe_30d) }}
+                        </td>
+                        <td style="background-color: {{ signal.avg_daily_pnl_heatmap.bg }}; color: {{ signal.avg_daily_pnl_heatmap.text }};">
+                            ${{ signal.avg_daily_pnl|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.avg_winning_heatmap.bg }}; color: {{ signal.avg_winning_heatmap.text }};">
+                            ${{ signal.avg_winning_trade|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.avg_losing_heatmap.bg }}; color: {{ signal.avg_losing_heatmap.text }};">
+                            ${{ signal.avg_losing_trade|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.highest_pnl_heatmap.bg }}; color: {{ signal.highest_pnl_heatmap.text }};">
+                            ${{ signal.highest_pnl|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.lowest_pnl_heatmap.bg }}; color: {{ signal.lowest_pnl_heatmap.text }};">
+                            ${{ signal.lowest_pnl|round(0)|int|format_number }}
+                        </td>
+                        <td>{{ signal.last_trade_date }}</td>
+                        <td class="warning-signals">
+                            {% for warning in signal.warning_signals %}
+                                <span class="warning-tag">{{ warning }}</span>
+                            {% endfor %}
+                            {% if not signal.warning_signals %}
+                                <span style="color: #94a3b8; font-style: italic;">None</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                </table>
+            </div>
+
+            <div class="section-title">Critical Alerts</div>
+            {% if alerts %}
+            <div class="alerts-section">
+                {% for alert in alerts %}
+                <div class="alert-item">
+                    <span class="alert-icon">⚠</span>
+                    <div>
+                        <strong>{{ alert.trader_label|default("Trader " + alert.trader_id) }}:</strong> {{ alert.message }}
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            <div class="no-alerts">
+                <strong>✓ All Clear</strong><br>
+                <span style="font-size: 13px;">No critical alerts for today. All traders within acceptable risk parameters.</span>
+            </div>
+            {% endif %}
+
             <div class="summary-section">
                 <div class="section-title">Market Risk Summary</div>
                 <div class="summary-grid">
@@ -335,68 +449,6 @@
                     {% endif %}
                 </div>
             </div>
-
-            <div class="section-title">Trader Risk Signals</div>
-
-            <table class="signals-table">
-                <thead>
-                    <tr>
-                        <th style="width: 80px;">Trader</th>
-                        <th style="width: 120px;">Risk Level</th>
-                        <th style="width: 110px;">VaR (5%)</th>
-                        <th style="width: 100px;">Loss Prob</th>
-                        <th style="width: 110px;">Current PnL</th>
-                        <th style="width: 100px;">Volatility</th>
-                        <th>Warning Signals</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for signal in trader_signals %}
-                    <tr class="risk-{{ signal.risk_level }}">
-                        <td><strong>{{ signal.trader_id }} ({{ signal.trader_name }})</strong></td>
-                        <td>
-                            <div class="risk-badge {{ signal.risk_level }}">
-                                <span class="risk-indicator {{ signal.risk_level }}"></span>
-                                {{ signal.risk_level|title }}
-                            </div>
-                        </td>
-                        <td class="mono-number">${{ signal.var_5pct|round(0)|int|format_number }}</td>
-                        <td class="mono-number">{{ "%.1f"|format(signal.loss_probability * 100) }}%</td>
-                        <td class="mono-number {% if signal.current_pnl < 0 %}alert{% else %}normal{% endif %}">
-                            ${{ signal.current_pnl|round(0)|int|format_number }}
-                        </td>
-                        <td class="mono-number">{{ "%.0f"|format(signal.volatility) }}</td>
-                        <td class="warning-signals">
-                            {% for warning in signal.warning_signals %}
-                                <span class="warning-tag">{{ warning }}</span>
-                            {% endfor %}
-                            {% if not signal.warning_signals %}
-                                <span style="color: #94a3b8; font-style: italic;">None</span>
-                            {% endif %}
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-
-            <div class="section-title">Critical Alerts</div>
-            {% if alerts %}
-            <div class="alerts-section">
-                {% for alert in alerts %}
-                <div class="alert-item">
-                    <span class="alert-icon">⚠</span>
-                    <div>
-                        <strong>{{ alert.trader_label|default("Trader " + alert.trader_id) }}:</strong> {{ alert.message }}
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-            {% else %}
-            <div class="no-alerts">
-                <strong>✓ All Clear</strong><br>
-                <span style="font-size: 13px;">No critical alerts for today. All traders within acceptable risk parameters.</span>
-            </div>
-            {% endif %}
         </div>
 
         <div class="footer">
