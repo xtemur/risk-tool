@@ -10,7 +10,7 @@ services:
       - ./logs:/app/logs
       - ./inference/outputs:/app/inference/outputs
     env_file:
-      - .env.docker
+      - .env
     environment:
       - PYTHONPATH=/app/src
     networks:
@@ -28,7 +28,7 @@ services:
       - ./logs:/app/logs
       - ./inference/outputs:/app/inference/outputs
     env_file:
-      - .env.docker
+      - .env
     environment:
       - PYTHONPATH=/app/src
     command: ["streamlit", "run", "scripts/trader_dashboard.py", "--server.address=0.0.0.0"]

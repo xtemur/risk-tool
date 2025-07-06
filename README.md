@@ -20,7 +20,7 @@ The system is designed with the realities of financial data in mind:
 
 ### Prerequisites
 
-- Conda (Miniconda or Anaconda)
+- Conda (Miniconda or Anaconda) or uv
 - Python 3.9+
 - SQLite database with trading data
 
@@ -32,10 +32,20 @@ git clone <repository-url>
 cd risk-tool
 ```
 
-2. Create and activate the conda environment:
+2. Create and activate the environment:
+
+**Option A: Using conda + uv (recommended):**
 ```bash
 conda env create -f environment.yml
 conda activate risk-tool
+uv pip install -e .
+```
+
+**Option B: Using uv directly:**
+```bash
+uv venv --python 3.9
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e .
 ```
 
 3. Set up environment variables:

@@ -9,9 +9,13 @@ RUN apt-get update && apt-get install -y \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements and install Python dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Install uv
+RUN pip install uv
+
+# Copy project files and install dependencies with uv
+COPY pyproject.toml .
+COPY src/ ./src/
+RUN uv pip install --system .
 
 # Copy application code
 COPY . .
