@@ -1,0 +1,55 @@
+metadata:
+  intervention_method: position_reduction_50pct
+  model_version: trader_specific_80pct
+  optimization_date: '2025-07-07T17:25:25.477837'
+trader_thresholds:
+  '3942':
+    expected_improvement: 8630.6982421875
+    intervention_rate: 0.3829787234042553
+    loss_prob_threshold: 0.7300292633943501
+    var_threshold: -3440.71290688807
+  '3943':
+    expected_improvement: 4.296875
+    intervention_rate: 0.0851063829787234
+    loss_prob_threshold: 0.00957369542534974
+    var_threshold: -30972.57229281377
+  '3946':
+    expected_improvement: -995.345703125
+    intervention_rate: 0.40425531914893614
+    loss_prob_threshold: 0.005097161158691875
+    var_threshold: -2367.758922129675
+  '3950':
+    expected_improvement: 35270.2109375
+    intervention_rate: 0.22340425531914893
+    loss_prob_threshold: 0.9185465136279711
+    var_threshold: -18362.1534293431
+  '3951':
+    expected_improvement: 29880.109375
+    intervention_rate: 0.4787234042553192
+    loss_prob_threshold: 0.17326974168880493
+    var_threshold: -3697.84010947952
+  '3956':
+    expected_improvement: 25646.9296875
+    intervention_rate: 0.39361702127659576
+    loss_prob_threshold: 0.0040233945356284995
+    var_threshold: -5840.883573280143
+  '4003':
+    expected_improvement: 1713.72021484375
+    intervention_rate: 0.43617021276595747
+    loss_prob_threshold: 0.0041394215109232056
+    var_threshold: -2044.3407452562294
+  '4004':
+    expected_improvement: 6495.015625
+    intervention_rate: 0.2872340425531915
+    loss_prob_threshold: 0.020740676481274575
+    var_threshold: -37262.033197938275
+  '5093':
+    expected_improvement: 897.4783935546875
+    intervention_rate: 0.14893617021276595
+    loss_prob_threshold: 0.13266279037067086
+    var_threshold: -146.6703687810708
+  '5580':
+    expected_improvement: 18655.9375
+    intervention_rate: 0.2127659574468085
+    loss_prob_threshold: 0.06413588664953909
+    var_threshold: -2967.2169563523744

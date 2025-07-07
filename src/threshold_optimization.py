@@ -10,8 +10,9 @@ from scipy.optimize import minimize_scalar, differential_evolution
 import warnings
 warnings.filterwarnings('ignore')
 
-from src.data_processing import create_trader_day_panel
-from src.feature_engineering import build_features
+# Updated to use preprocessed data
+# from src.data_processing import create_trader_day_panel
+# from src.feature_engineering import build_features
 
 logger = logging.getLogger(__name__)
 
@@ -25,18 +26,16 @@ class ThresholdOptimizer:
     Then PnL is reduced by 50% to simulate risk management intervention.
     """
 
-    def __init__(self, models_dir: str = 'models/trader_specific_80pct'):
+    def __init__(self, models_dir: str = 'models/trader_specific_80pct', data_dir: str = 'data/processed/trader_splits'):
         self.models_dir = Path(models_dir)
+        self.data_dir = Path(data_dir)
         self.results_dir = Path('results/threshold_optimization')
         self.results_dir.mkdir(parents=True, exist_ok=True)
-
-        # Load configuration
-        with open('configs/main_config.yaml', 'r') as f:
-            self.config = yaml.safe_load(f)
 
         self.sequence_length = 7  # From training
 
         logger.info(f"ThresholdOptimizer initialized with models from {self.models_dir}")
+        logger.info(f"Using preprocessed data from {self.data_dir}")
 
     def load_trader_model(self, trader_id) -> Optional[Dict]:
         """Load trained models for a trader"""
@@ -50,117 +49,107 @@ class ThresholdOptimizer:
 
         return model_data
 
-    def prepare_trader_features(self, df: pd.DataFrame, trader_id,
-                              feature_names: List[str]) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
-        """Prepare features for a trader using the same logic as training"""
-        trader_data = df[df['trader_id'] == trader_id].sort_values('date').copy()
+    def load_trader_data(self, trader_id: str) -> Tuple[pd.DataFrame, pd.DataFrame, Dict]:
+        """Load preprocessed training and test data for a trader"""
+        trader_dir = self.data_dir / str(trader_id)
 
-        # Raw feature columns from training
-        raw_feature_cols = [
-            'daily_pnl', 'daily_gross', 'daily_fees', 'daily_volume',
-            'n_trades', 'gross_profit', 'gross_loss'
-        ]
+        if not trader_dir.exists():
+            logger.warning(f"No data directory found for trader {trader_id}")
+            return None, None, None
 
-        # Get engineered features (exclude metadata and targets)
+        # Load training and test data
+        train_path = trader_dir / 'train_data.parquet'
+        test_path = trader_dir / 'test_data.parquet'
+        metadata_path = trader_dir / 'metadata.json'
+
+        if not all(p.exists() for p in [train_path, test_path, metadata_path]):
+            logger.warning(f"Missing data files for trader {trader_id}")
+            return None, None, None
+
+        train_data = pd.read_parquet(train_path)
+        test_data = pd.read_parquet(test_path)
+
+        with open(metadata_path, 'r') as f:
+            import json
+            metadata = json.load(f)
+
+        # Convert date columns to datetime
+        train_data['date'] = pd.to_datetime(train_data['date'])
+        test_data['date'] = pd.to_datetime(test_data['date'])
+
+        return train_data, test_data, metadata
+
+    def prepare_trader_features(self, data: pd.DataFrame, trader_id: str, feature_names: List[str]) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray]:
+        """Prepare features from preprocessed data (same as training logic)"""
+        trader_data = data.sort_values('date').copy()
+
+        # Get all feature columns (exclude metadata and targets)
         exclude_cols = ['trader_id', 'date', 'target_pnl', 'target_large_loss']
-        engineered_cols = [col for col in trader_data.columns
-                          if col not in exclude_cols + raw_feature_cols]
+        available_feature_cols = [col for col in trader_data.columns if col not in exclude_cols]
 
-        # Filter out features that are all null for this trader
-        valid_engineered_cols = []
-        for col in engineered_cols:
+        # Remove features that are all null
+        valid_feature_cols = []
+        for col in available_feature_cols:
             if not trader_data[col].isnull().all():
-                valid_engineered_cols.append(col)
+                valid_feature_cols.append(col)
 
-        # Prepare sequential data and aligned engineered features
-        combined_features_list = []
-        aligned_targets = []
-        aligned_pnl = []
+        # Prepare data with sequence_length lookback
+        features_list = []
+        targets_cls = []
+        targets_pnl = []
         feature_dates = []
 
         for i in range(self.sequence_length, len(trader_data)):
-            # Raw sequence: last sequence_length days (flattened)
-            sequence_data = trader_data.iloc[i-self.sequence_length:i][raw_feature_cols].values
-            flattened_sequence = sequence_data.flatten()
-
-            # Current day's engineered features
-            current_engineered = trader_data.iloc[i][valid_engineered_cols]
-
-            # Target and PnL
-            target = trader_data.iloc[i]['target_large_loss']
-            pnl = trader_data.iloc[i]['daily_pnl']
+            # Get current row features
+            current_features = trader_data.iloc[i][valid_feature_cols]
+            target_cls = trader_data.iloc[i]['target_large_loss']
+            target_pnl = trader_data.iloc[i]['target_pnl'] if 'target_pnl' in trader_data.columns else trader_data.iloc[i]['daily_pnl']
             current_date = trader_data.iloc[i]['date']
 
-            # Only include if we have valid data
-            sequence_valid = not pd.isna(sequence_data).any()
-            engineered_valid = not pd.isna(current_engineered.values).any()
-            target_valid = not pd.isna(target)
-            pnl_valid = not pd.isna(pnl)
+            # Check for valid data
+            features_valid = not pd.isna(current_features.values).any()
+            targets_valid = not pd.isna(target_cls) and not pd.isna(target_pnl)
 
-            if sequence_valid and engineered_valid and target_valid and pnl_valid:
-                # Combine engineered features with flattened sequence
-                combined_row = np.concatenate([current_engineered.values, flattened_sequence])
-                combined_features_list.append(combined_row)
-                aligned_targets.append(target)
-                aligned_pnl.append(pnl)
+            if features_valid and targets_valid:
+                features_list.append(current_features.values)
+                targets_cls.append(target_cls)
+                targets_pnl.append(target_pnl)
                 feature_dates.append(current_date)
 
-        if len(combined_features_list) == 0:
+        if len(features_list) == 0:
             return None, None, None
 
-        # Create feature names (same order as training)
-        engineered_feature_names = valid_engineered_cols
-        sequence_feature_names = []
-        for day in range(self.sequence_length):
-            for feat in raw_feature_cols:
-                sequence_feature_names.append(f"{feat}_lag_{day+1}")
+        # Convert to arrays/DataFrame
+        features_df = pd.DataFrame(features_list, columns=valid_feature_cols)
+        features_df['date'] = feature_dates
+        targets_cls = np.array(targets_cls, dtype=np.float32)
+        targets_pnl = np.array(targets_pnl, dtype=np.float32)
 
-        all_feature_names = engineered_feature_names + sequence_feature_names
-
-        # Convert to DataFrame
-        combined_features = pd.DataFrame(combined_features_list, columns=all_feature_names)
-        combined_features['date'] = feature_dates
-
-        # Clean data (same as training)
-        feature_cols = [col for col in combined_features.columns if col != 'date']
-        combined_features[feature_cols] = combined_features[feature_cols].replace([np.inf, -np.inf], np.nan)
-        combined_features[feature_cols] = combined_features[feature_cols].fillna(
-            combined_features[feature_cols].median()
+        # Clean data
+        features_df[valid_feature_cols] = features_df[valid_feature_cols].replace([np.inf, -np.inf], np.nan)
+        features_df[valid_feature_cols] = features_df[valid_feature_cols].fillna(
+            features_df[valid_feature_cols].median()
         )
-        combined_features[feature_cols] = combined_features[feature_cols].clip(-1e6, 1e6)
+        features_df[valid_feature_cols] = features_df[valid_feature_cols].clip(-1e6, 1e6)
 
-        # Reorder columns to match training
-        try:
-            combined_features = combined_features[['date'] + feature_names]
-        except KeyError as e:
-            logger.warning(f"Feature mismatch for trader {trader_id}: {e}")
-            # Use available features
-            available_features = [f for f in feature_names if f in combined_features.columns]
-            combined_features = combined_features[['date'] + available_features]
+        # Align features with model's expected feature names
+        common_features = [f for f in feature_names if f in valid_feature_cols]
+        if len(common_features) != len(feature_names):
+            logger.warning(f"Feature mismatch for trader {trader_id}. Expected: {len(feature_names)}, Available: {len(common_features)}")
 
-        targets = np.array(aligned_targets, dtype=np.float32)
-        pnl_values = np.array(aligned_pnl, dtype=np.float32)
+        # Use only common features
+        features_df = features_df[['date'] + common_features]
 
-        return combined_features, targets, pnl_values
+        return features_df, targets_cls, targets_pnl
 
-    def generate_predictions(self, model_data: Dict, df: pd.DataFrame,
-                           trader_id, date_range: Tuple[str, str]) -> pd.DataFrame:
-        """Generate predictions for a trader in a specific date range"""
+    def generate_predictions(self, model_data: Dict, data: pd.DataFrame,
+                           trader_id: str, date_range: Tuple[str, str]) -> pd.DataFrame:
+        """Generate predictions for a trader in a specific date range using preprocessed data"""
         start_date, end_date = date_range
 
-        # Filter data to date range
-        trader_data = df[
-            (df['trader_id'] == trader_id) &
-            (df['date'] >= start_date) &
-            (df['date'] <= end_date)
-        ].copy()
-
-        if len(trader_data) == 0:
-            return pd.DataFrame()
-
-        # Prepare features
-        combined_features, targets, pnl_values = self.prepare_trader_features(
-            df, trader_id, model_data['feature_names']
+        # Prepare features from the data
+        combined_features, targets_cls, targets_pnl = self.prepare_trader_features(
+            data, trader_id, model_data['feature_names']
         )
 
         if combined_features is None:
@@ -169,8 +158,8 @@ class ThresholdOptimizer:
         # Filter to date range
         date_mask = (combined_features['date'] >= start_date) & (combined_features['date'] <= end_date)
         combined_features_filtered = combined_features[date_mask]
-        targets_filtered = targets[date_mask]
-        pnl_filtered = pnl_values[date_mask]
+        targets_cls_filtered = targets_cls[date_mask]
+        targets_pnl_filtered = targets_pnl[date_mask]
 
         if len(combined_features_filtered) == 0:
             return pd.DataFrame()
@@ -193,8 +182,8 @@ class ThresholdOptimizer:
             'date': combined_features_filtered['date'].values,
             'loss_prob': loss_prob,
             'var_pred': var_pred,
-            'actual_loss': targets_filtered,
-            'actual_pnl': pnl_filtered
+            'actual_loss': targets_cls_filtered,
+            'actual_pnl': targets_pnl_filtered
         })
 
         return results
@@ -231,7 +220,7 @@ class ThresholdOptimizer:
             'intervention_rate': n_interventions / len(predictions)
         }
 
-    def optimize_trader_thresholds(self, trader_id, df: pd.DataFrame,
+    def optimize_trader_thresholds(self, trader_id: str, data: pd.DataFrame,
                                  validation_range: Tuple[str, str]) -> Dict:
         """Optimize thresholds for a single trader using validation data"""
         logger.info(f"Optimizing thresholds for trader {trader_id}")
@@ -242,7 +231,7 @@ class ThresholdOptimizer:
             return None
 
         # Generate predictions on validation set
-        predictions = self.generate_predictions(model_data, df, trader_id, validation_range)
+        predictions = self.generate_predictions(model_data, data, trader_id, validation_range)
         if len(predictions) == 0:
             logger.warning(f"No predictions generated for trader {trader_id}")
             return None
@@ -316,7 +305,7 @@ class ThresholdOptimizer:
                 'error': result.message
             }
 
-    def evaluate_on_test_set(self, trader_id, df: pd.DataFrame,
+    def evaluate_on_test_set(self, trader_id: str, data: pd.DataFrame,
                            test_range: Tuple[str, str], thresholds: Dict) -> Dict:
         """Evaluate optimized thresholds on unseen test data"""
         logger.info(f"Evaluating trader {trader_id} on test set")
@@ -327,7 +316,7 @@ class ThresholdOptimizer:
             return None
 
         # Generate predictions on test set
-        predictions = self.generate_predictions(model_data, df, trader_id, test_range)
+        predictions = self.generate_predictions(model_data, data, trader_id, test_range)
         if len(predictions) == 0:
             return None
 
@@ -360,26 +349,21 @@ class ThresholdOptimizer:
 
         return evaluation_result
 
-    def run_threshold_optimization(self) -> Dict:
-        """Run threshold optimization for all traders"""
-        logger.info("Starting threshold optimization for all traders")
-
-        # Load data
-        df = create_trader_day_panel(self.config)
-        df = df.rename(columns={'account_id': 'trader_id', 'trade_date': 'date'})
-
-        # Apply feature engineering
-        df_for_features = df.rename(columns={'trader_id': 'account_id', 'date': 'trade_date'})
-        df_for_features = build_features(df_for_features, self.config)
-        df = df_for_features.rename(columns={'account_id': 'trader_id', 'trade_date': 'date'})
-
-        # Get available traders from saved models
+    def get_available_traders(self) -> List[str]:
+        """Get list of available trader IDs from saved models"""
         available_traders = []
         for model_file in self.models_dir.glob("*_tuned_validated.pkl"):
             trader_id = model_file.stem.split('_')[0]
             if trader_id != 'training':
-                available_traders.append(int(trader_id))  # Convert to int to match data
+                available_traders.append(trader_id)
+        return sorted(available_traders)
 
+    def run_threshold_optimization(self) -> Dict:
+        """Run threshold optimization for all traders using preprocessed data"""
+        logger.info("Starting threshold optimization for all traders")
+
+        # Get available traders from saved models
+        available_traders = self.get_available_traders()
         logger.info(f"Found {len(available_traders)} trained models: {available_traders}")
 
         results = {
@@ -390,28 +374,41 @@ class ThresholdOptimizer:
 
         for trader_id in available_traders:
             try:
-                # Load model to get boundaries
+                # Load preprocessed data for this trader
+                train_data, test_data, metadata = self.load_trader_data(trader_id)
+                if train_data is None:
+                    logger.warning(f"Could not load data for trader {trader_id}")
+                    continue
+
+                # Load model
                 model_data = self.load_trader_model(trader_id)
                 if model_data is None:
                     continue
 
-                boundaries = model_data['boundaries']
+                # For validation, we'll use a portion of training data (last 20%)
+                # This simulates the validation split used during training
+                train_dates = sorted(train_data['date'].unique())
+                validation_split_idx = int(len(train_dates) * 0.8)
+                validation_start = train_dates[validation_split_idx]
+                validation_end = train_dates[-1]
 
-                # Define validation and test ranges from boundaries
                 validation_range = (
-                    boundaries['validation_start'].strftime('%Y-%m-%d'),
-                    boundaries['validation_end'].strftime('%Y-%m-%d')
+                    validation_start.strftime('%Y-%m-%d'),
+                    validation_end.strftime('%Y-%m-%d')
                 )
+
+                # Test range from test data
+                test_dates = sorted(test_data['date'].unique())
                 test_range = (
-                    boundaries['test_start'].strftime('%Y-%m-%d'),
-                    boundaries['test_end'].strftime('%Y-%m-%d')
+                    test_dates[0].strftime('%Y-%m-%d'),
+                    test_dates[-1].strftime('%Y-%m-%d')
                 )
 
                 logger.info(f"Trader {trader_id} - Validation: {validation_range}, Test: {test_range}")
 
-                # Optimize thresholds on validation set
+                # Optimize thresholds on validation portion of training data
                 optimization_result = self.optimize_trader_thresholds(
-                    trader_id, df, validation_range
+                    trader_id, train_data, validation_range
                 )
 
                 if optimization_result and optimization_result.get('optimization_success'):
@@ -419,7 +416,7 @@ class ThresholdOptimizer:
 
                     # Evaluate on test set
                     test_evaluation = self.evaluate_on_test_set(
-                        trader_id, df, test_range, optimization_result
+                        trader_id, test_data, test_range, optimization_result
                     )
 
                     if test_evaluation:
@@ -456,11 +453,11 @@ class ThresholdOptimizer:
         return results
 
 
-def run_threshold_optimization():
-    """Main function to run threshold optimization"""
+def run_threshold_optimization(data_dir: str = 'data/processed/trader_splits', models_dir: str = 'models/trader_specific_80pct'):
+    """Main function to run threshold optimization using preprocessed data"""
     logging.basicConfig(level=logging.INFO)
 
-    optimizer = ThresholdOptimizer()
+    optimizer = ThresholdOptimizer(models_dir=models_dir, data_dir=data_dir)
     results = optimizer.run_threshold_optimization()
 
     return results
