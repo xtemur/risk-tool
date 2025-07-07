@@ -20,11 +20,12 @@ class AdjustedPnLCausalImpactEvaluator:
     is used for all subsequent feature calculations and predictions.
     """
 
-    def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool"):
+    def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool", pnl_reduction_pct: float = 50.0):
         self.base_path = Path(base_path)
         self.models_path = self.base_path / "models" / "trader_specific_80pct"
         self.data_path = self.base_path / "data" / "processed" / "trader_splits"
         self.thresholds_path = self.base_path / "configs" / "optimal_thresholds" / "optimal_thresholds.json"
+        self.pnl_reduction_pct = pnl_reduction_pct  # Percentage reduction when intervening
 
         # Load optimal thresholds
         with open(self.thresholds_path, 'r') as f:
@@ -165,7 +166,8 @@ class AdjustedPnLCausalImpactEvaluator:
             # Calculate adjusted PnL
             actual_pnl = current_day['daily_pnl']
             if should_intervene:
-                adjusted_pnl = actual_pnl * 0.5  # Reduce impact by 50%
+                reduction_factor = (100 - self.pnl_reduction_pct) / 100  # Convert percentage to multiplier
+                adjusted_pnl = actual_pnl * reduction_factor
                 # Update the adjusted data for future calculations
                 adjusted_data.iloc[current_idx, adjusted_data.columns.get_loc('daily_pnl')] = adjusted_pnl
             else:
@@ -477,7 +479,7 @@ class AdjustedPnLCausalImpactEvaluator:
         report.append("="*80)
         report.append("")
         report.append("METHODOLOGY:")
-        report.append("- When model indicates 'don't trade', actual PnL is adjusted by 50%")
+        report.append(f"- When model indicates 'don't trade', actual PnL is reduced by {self.pnl_reduction_pct}%")
         report.append("- Adjusted PnL values are used for subsequent feature calculations")
         report.append("- Each prediction considers the cumulative effect of prior adjustments")
         report.append("")
@@ -517,47 +519,165 @@ class AdjustedPnLCausalImpactEvaluator:
         return "\n".join(report)
 
 
+def run_multiple_evaluations(reduction_percentages: List[float] = [25, 50, 70, 90]):
+    """Run evaluations for multiple PnL reduction percentages and create comparison table."""
+
+    all_results = {}
+    comparison_data = []
+
+    base_output_dir = Path("/Users/temurbekkhujaev/Repos/risk-tool/results/causal_impact_comparison")
+    base_output_dir.mkdir(parents=True, exist_ok=True)
+
+    for reduction_pct in reduction_percentages:
+        print(f"\n{'='*60}")
+        print(f"Running evaluation with {reduction_pct}% PnL reduction...")
+        print(f"{'='*60}")
+
+        # Initialize evaluator with specific reduction percentage
+        evaluator = AdjustedPnLCausalImpactEvaluator(pnl_reduction_pct=reduction_pct)
+
+        # Run evaluation
+        results = evaluator.evaluate_all_traders()
+        all_results[reduction_pct] = results
+
+        # Create output directory for this reduction percentage
+        output_dir = base_output_dir / f"reduction_{reduction_pct}pct"
+        output_dir.mkdir(exist_ok=True)
+
+        # Save detailed results
+        with open(output_dir / "detailed_results.pkl", 'wb') as f:
+            pickle.dump(results, f)
+
+        # Generate report
+        report = evaluator.generate_comprehensive_report()
+        with open(output_dir / "evaluation_report.txt", 'w') as f:
+            f.write(report)
+
+        # Extract aggregate metrics for comparison
+        aggregate = results['aggregate_results']
+        comparison_data.append({
+            'Reduction %': f"{reduction_pct}%",
+            'Total Original PnL': aggregate['total_actual_pnl'],
+            'Total Adjusted PnL': aggregate['total_adjusted_pnl'],
+            'Net Benefit': aggregate['total_net_benefit'],
+            'Overall Improvement %': aggregate['overall_improvement_pct'],
+            'Avoided Losses': aggregate['total_avoided_losses'],
+            'Missed Gains': aggregate['total_missed_gains'],
+            'Mean Intervention Rate %': aggregate['mean_intervention_rate'] * 100,
+            'Mean Volatility Reduction %': aggregate['mean_volatility_reduction'],
+            'Positive Improvements': f"{aggregate['positive_improvements']}/{aggregate['total_traders']}"
+        })
+
+    # Create comparison table
+    comparison_df = pd.DataFrame(comparison_data)
+
+    # Save comparison table
+    comparison_df.to_csv(base_output_dir / "comparison_table.csv", index=False)
+
+    # Create comparison table with nice formatting
+    create_formatted_comparison_table(comparison_df, base_output_dir)
+
+    # Create comparison plots
+    create_comparison_plots(comparison_df, base_output_dir)
+
+    print(f"\n{'='*60}")
+    print("COMPARISON TABLE - PnL Reduction Sensitivity Analysis")
+    print(f"{'='*60}")
+    print(comparison_df.to_string(index=False, float_format='%.2f'))
+    print(f"\nAll results saved to: {base_output_dir}")
+
+    return all_results, comparison_df
+
+def create_formatted_comparison_table(comparison_df: pd.DataFrame, output_dir: Path):
+    """Create a nicely formatted comparison table."""
+
+    # Create formatted table text
+    formatted_table = []
+    formatted_table.append("="*120)
+    formatted_table.append("PnL REDUCTION SENSITIVITY ANALYSIS - COMPARISON TABLE")
+    formatted_table.append("="*120)
+    formatted_table.append("")
+
+    # Header
+    header = f"{'Reduction %':<12} {'Net Benefit':<15} {'Improvement %':<15} {'Avoided Losses':<18} {'Missed Gains':<15} {'Intervention %':<15} {'Vol Reduction %':<15} {'Positive':<10}"
+    formatted_table.append(header)
+    formatted_table.append("-" * 120)
+
+    # Data rows
+    for _, row in comparison_df.iterrows():
+        data_row = f"{row['Reduction %']:<12} ${row['Net Benefit']:<14,.0f} {row['Overall Improvement %']:<15.1f} ${row['Avoided Losses']:<17,.0f} ${row['Missed Gains']:<14,.0f} {row['Mean Intervention Rate %']:<15.1f} {row['Mean Volatility Reduction %']:<15.1f} {row['Positive Improvements']:<10}"
+        formatted_table.append(data_row)
+
+    formatted_table.append("")
+    formatted_table.append("KEY INSIGHTS:")
+    formatted_table.append("- Higher reduction % = More conservative intervention (lower PnL when intervening)")
+    formatted_table.append("- Net Benefit shows total $ improvement vs original strategy")
+    formatted_table.append("- Intervention Rate shows how often model triggers 'don't trade' signal")
+    formatted_table.append("- Positive Improvements shows how many traders benefit from strategy")
+
+    # Save formatted table
+    with open(output_dir / "formatted_comparison_table.txt", 'w') as f:
+        f.write("\n".join(formatted_table))
+
+def create_comparison_plots(comparison_df: pd.DataFrame, output_dir: Path):
+    """Create comparison plots for different reduction percentages."""
+
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+
+    # Convert reduction % to numeric for plotting
+    reduction_pcts = [float(x.rstrip('%')) for x in comparison_df['Reduction %']]
+
+    # Plot 1: Net Benefit vs Reduction %
+    axes[0, 0].plot(reduction_pcts, comparison_df['Net Benefit'], 'bo-', linewidth=2, markersize=8)
+    axes[0, 0].set_xlabel('PnL Reduction Percentage (%)')
+    axes[0, 0].set_ylabel('Net Benefit ($)')
+    axes[0, 0].set_title('Net Benefit vs PnL Reduction Percentage')
+    axes[0, 0].grid(True, alpha=0.3)
+    axes[0, 0].axhline(y=0, color='red', linestyle='--', alpha=0.5)
+
+    # Plot 2: Overall Improvement % vs Reduction %
+    axes[0, 1].plot(reduction_pcts, comparison_df['Overall Improvement %'], 'go-', linewidth=2, markersize=8)
+    axes[0, 1].set_xlabel('PnL Reduction Percentage (%)')
+    axes[0, 1].set_ylabel('Overall Improvement (%)')
+    axes[0, 1].set_title('Performance Improvement vs PnL Reduction')
+    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].axhline(y=0, color='red', linestyle='--', alpha=0.5)
+
+    # Plot 3: Avoided Losses vs Missed Gains
+    x = np.arange(len(reduction_pcts))
+    width = 0.35
+    axes[1, 0].bar(x - width/2, comparison_df['Avoided Losses'], width,
+                   label='Avoided Losses', color='green', alpha=0.7)
+    axes[1, 0].bar(x + width/2, comparison_df['Missed Gains'], width,
+                   label='Missed Gains', color='red', alpha=0.7)
+    axes[1, 0].set_xlabel('PnL Reduction Percentage')
+    axes[1, 0].set_ylabel('Amount ($)')
+    axes[1, 0].set_title('Avoided Losses vs Missed Gains')
+    axes[1, 0].set_xticks(x)
+    axes[1, 0].set_xticklabels([f"{pct}%" for pct in reduction_pcts])
+    axes[1, 0].legend()
+
+    # Plot 4: Intervention Rate vs Volatility Reduction
+    axes[1, 1].scatter(comparison_df['Mean Intervention Rate %'],
+                      comparison_df['Mean Volatility Reduction %'],
+                      s=100, alpha=0.7, c=reduction_pcts, cmap='viridis')
+    axes[1, 1].set_xlabel('Mean Intervention Rate (%)')
+    axes[1, 1].set_ylabel('Mean Volatility Reduction (%)')
+    axes[1, 1].set_title('Intervention Rate vs Volatility Reduction')
+    axes[1, 1].grid(True, alpha=0.3)
+
+    # Add colorbar for the scatter plot
+    cbar = plt.colorbar(axes[1, 1].collections[0], ax=axes[1, 1], label='Reduction %')
+
+    plt.tight_layout()
+    plt.savefig(output_dir / "comparison_plots.png", dpi=300, bbox_inches='tight')
+    plt.close()
+
 def main():
     """Main execution function."""
-    # Initialize evaluator
-    evaluator = AdjustedPnLCausalImpactEvaluator()
-
-    # Run evaluation
-    print("Starting sequential PnL adjustment causal impact evaluation...")
-    results = evaluator.evaluate_all_traders()
-
-    # Create output directory
-    output_dir = Path("/Users/temurbekkhujaev/Repos/risk-tool/results/causal_impact_adjusted_pnl")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    # Generate and save comprehensive report
-    report = evaluator.generate_comprehensive_report()
-    with open(output_dir / "evaluation_report.txt", 'w') as f:
-        f.write(report)
-
-    # Create comprehensive dashboard
-    dashboard_fig = evaluator.create_comprehensive_dashboard(str(output_dir / "comprehensive_dashboard.png"))
-    plt.close(dashboard_fig)
-
-    # Create individual trader plots
-    trader_plots_dir = output_dir / "trader_plots"
-    trader_plots_dir.mkdir(exist_ok=True)
-
-    for trader_id in evaluator.results.keys():
-        plot_fig = evaluator.create_sequential_comparison_plot(
-            trader_id, str(trader_plots_dir / f"trader_{trader_id}_sequential_comparison.png")
-        )
-        plt.close(plot_fig)
-
-    # Save detailed results
-    with open(output_dir / "detailed_results.pkl", 'wb') as f:
-        pickle.dump(results, f)
-
-    print(f"\nEvaluation complete! Results saved to: {output_dir}")
-    print("\nSUMMARY:")
-    print(report.split("INDIVIDUAL TRADER RESULTS")[0])
-
-    return results
+    # Run multiple evaluations with different reduction percentages
+    all_results, comparison_df = run_multiple_evaluations([25, 50, 70, 90])
+    return all_results, comparison_df
 
 
 if __name__ == "__main__":
