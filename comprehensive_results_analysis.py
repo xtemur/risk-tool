@@ -274,8 +274,8 @@ class RiskAnalysisReport:
             print(f"\nRISK-RETURN ANALYSIS:")
             for _, row in stats.iterrows():
                 reduction = str(row['Reduction %'])
-                sharpe_proxy = row['Overall Improvement %'] / row['Mean Intervention Rate %']
-                print(f"Risk Reduction {reduction:<8} Sharpe Proxy: {sharpe_proxy:>6.2f}")
+                efficiency_ratio = row['Overall Improvement %'] / row['Mean Intervention Rate %']
+                print(f"Risk Reduction {reduction:<8} Efficiency Ratio: {efficiency_ratio:>6.2f}")
 
             print(f"\nSUCCESS RATE ANALYSIS:")
             for _, row in stats.iterrows():
