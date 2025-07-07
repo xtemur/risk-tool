@@ -6,6 +6,7 @@ from pathlib import Path
 import logging
 import yaml
 import pickle
+import json
 from collections import defaultdict
 import warnings
 from sklearn.model_selection import TimeSeriesSplit, ParameterGrid
@@ -15,8 +16,9 @@ from datetime import datetime
 
 warnings.filterwarnings('ignore')
 
-from src.data_processing import create_trader_day_panel
-from src.feature_engineering import build_features
+# Removed data processing imports - using preprocessed parquet files
+# from src.data_processing import create_trader_day_panel
+# from src.feature_engineering import build_features
 
 logger = logging.getLogger(__name__)
 
@@ -27,10 +29,8 @@ class TraderSpecificTrainer:
     using exactly 80% of their data for training/validation.
     """
 
-    def __init__(self, config_path: str = 'configs/main_config.yaml', sequence_length: int = 7):
-        with open(config_path, 'r') as f:
-            self.config = yaml.safe_load(f)
-
+    def __init__(self, data_dir: str = 'data/processed/trader_splits', sequence_length: int = 7):
+        self.data_dir = Path(data_dir)
         self.sequence_length = sequence_length
         self.models_dir = Path('models/trader_specific_80pct')
         self.models_dir.mkdir(parents=True, exist_ok=True)
@@ -61,121 +61,97 @@ class TraderSpecificTrainer:
             'force_row_wise': True
         }
 
-        logger.info(f"TraderSpecificTrainer initialized: sequence_length={sequence_length}")
+        logger.info(f"TraderSpecificTrainer initialized: data_dir={data_dir}, sequence_length={sequence_length}")
 
-    def calculate_trader_boundaries(self, df: pd.DataFrame, trader_id: str) -> Dict:
-        """Calculate 80%/20% data boundaries for a specific trader"""
-        trader_data = df[df['trader_id'] == trader_id].sort_values('date')
-        dates = trader_data['date'].unique()
+    def load_trader_data(self, trader_id: str) -> Tuple[pd.DataFrame, pd.DataFrame, Dict]:
+        """Load preprocessed training and test data for a trader"""
+        trader_dir = self.data_dir / str(trader_id)
 
-        if len(dates) < 100:  # Minimum data requirement
-            logger.warning(f"Trader {trader_id} has only {len(dates)} days - insufficient data")
-            return None
+        if not trader_dir.exists():
+            logger.warning(f"No data directory found for trader {trader_id}")
+            return None, None, None
 
-        # 80% for training/validation, 20% for final holdout test
-        split_idx = int(len(dates) * 0.8)
-        train_end_date = dates[split_idx - 1]
-        test_start_date = dates[split_idx]
+        # Load training and test data
+        train_path = trader_dir / 'train_data.parquet'
+        test_path = trader_dir / 'test_data.parquet'
+        metadata_path = trader_dir / 'metadata.json'
 
-        # Within training data, use 80% for training, 20% for validation
-        train_dates = dates[:split_idx]
-        train_split_idx = int(len(train_dates) * 0.8)
-        validation_start_date = train_dates[train_split_idx]
+        if not all(p.exists() for p in [train_path, test_path, metadata_path]):
+            logger.warning(f"Missing data files for trader {trader_id}")
+            return None, None, None
 
-        boundaries = {
-            'train_start': dates[0],
-            'train_end': train_dates[train_split_idx - 1],
-            'validation_start': validation_start_date,
-            'validation_end': train_end_date,
-            'test_start': test_start_date,
-            'test_end': dates[-1],
-            'total_days': len(dates),
-            'train_days': train_split_idx,
-            'validation_days': split_idx - train_split_idx,
-            'test_days': len(dates) - split_idx
-        }
+        train_data = pd.read_parquet(train_path)
+        test_data = pd.read_parquet(test_path)
 
-        logger.info(f"Trader {trader_id} boundaries: "
-                   f"Train: {boundaries['train_days']} days, "
-                   f"Val: {boundaries['validation_days']} days, "
-                   f"Test: {boundaries['test_days']} days")
+        with open(metadata_path, 'r') as f:
+            metadata = json.load(f)
 
-        return boundaries
+        # Convert date columns to datetime
+        train_data['date'] = pd.to_datetime(train_data['date'])
+        test_data['date'] = pd.to_datetime(test_data['date'])
 
-    def prepare_trader_features(self, df: pd.DataFrame, trader_id: str) -> Tuple[pd.DataFrame, np.ndarray, List[str]]:
-        """Prepare combined features for a specific trader"""
-        trader_data = df[df['trader_id'] == trader_id].sort_values('date').copy()
+        logger.info(f"Loaded trader {trader_id}: Train={len(train_data)} days, Test={len(test_data)} days")
 
-        # Get engineered features (exclude metadata and targets)
+        return train_data, test_data, metadata
+
+    def prepare_trader_features(self, train_data: pd.DataFrame, trader_id: str) -> Tuple[pd.DataFrame, np.ndarray, np.ndarray, List[str]]:
+        """Prepare features from preprocessed training data"""
+        trader_data = train_data.sort_values('date').copy()
+
+        # Get all feature columns (exclude metadata and targets)
         exclude_cols = ['trader_id', 'date', 'target_pnl', 'target_large_loss']
-        engineered_cols = [col for col in trader_data.columns
-                          if col not in exclude_cols + self.raw_feature_cols]
+        feature_cols = [col for col in trader_data.columns if col not in exclude_cols]
 
-        # Filter out features that are all null for this trader
-        valid_engineered_cols = []
-        for col in engineered_cols:
+        # Remove features that are all null
+        valid_feature_cols = []
+        for col in feature_cols:
             if not trader_data[col].isnull().all():
-                valid_engineered_cols.append(col)
+                valid_feature_cols.append(col)
 
-        logger.info(f"Trader {trader_id}: Using {len(valid_engineered_cols)} engineered features")
+        logger.info(f"Trader {trader_id}: Using {len(valid_feature_cols)} features")
 
-        # Prepare sequential data and aligned engineered features
-        combined_features_list = []
-        aligned_targets = []
+        # Prepare data with sequence_length lookback
+        features_list = []
+        targets_cls = []
+        targets_pnl = []
         feature_dates = []
 
         for i in range(self.sequence_length, len(trader_data)):
-            # Raw sequence: last sequence_length days (flattened)
-            sequence_data = trader_data.iloc[i-self.sequence_length:i][self.raw_feature_cols].values
-            flattened_sequence = sequence_data.flatten()
-
-            # Current day's engineered features
-            current_engineered = trader_data.iloc[i][valid_engineered_cols]
-
-            # Target (next day's risk)
-            target = trader_data.iloc[i]['target_large_loss']
+            # Get current row features
+            current_features = trader_data.iloc[i][valid_feature_cols]
+            target_cls = trader_data.iloc[i]['target_large_loss']
+            target_pnl = trader_data.iloc[i]['target_pnl'] if 'target_pnl' in trader_data.columns else trader_data.iloc[i]['daily_pnl']
             current_date = trader_data.iloc[i]['date']
 
-            # Only include if we have valid data
-            sequence_valid = not pd.isna(sequence_data).any()
-            engineered_valid = not pd.isna(current_engineered.values).any()
-            target_valid = not pd.isna(target)
+            # Check for valid data
+            features_valid = not pd.isna(current_features.values).any()
+            targets_valid = not pd.isna(target_cls) and not pd.isna(target_pnl)
 
-            if sequence_valid and engineered_valid and target_valid:
-                # Combine engineered features with flattened sequence
-                combined_row = np.concatenate([current_engineered.values, flattened_sequence])
-                combined_features_list.append(combined_row)
-                aligned_targets.append(target)
+            if features_valid and targets_valid:
+                features_list.append(current_features.values)
+                targets_cls.append(target_cls)
+                targets_pnl.append(target_pnl)
                 feature_dates.append(current_date)
 
-        if len(combined_features_list) == 0:
-            return None, None, None
+        if len(features_list) == 0:
+            return None, None, None, None
 
-        # Create feature names
-        engineered_feature_names = valid_engineered_cols
-        sequence_feature_names = []
-        for day in range(self.sequence_length):
-            for feat in self.raw_feature_cols:
-                sequence_feature_names.append(f"{feat}_lag_{day+1}")
-
-        all_feature_names = engineered_feature_names + sequence_feature_names
-
-        # Convert to DataFrame
-        combined_features = pd.DataFrame(combined_features_list, columns=all_feature_names)
-        combined_features['date'] = feature_dates
-        targets = np.array(aligned_targets, dtype=np.float32)
+        # Convert to arrays/DataFrame
+        features_df = pd.DataFrame(features_list, columns=valid_feature_cols)
+        features_df['date'] = feature_dates
+        targets_cls = np.array(targets_cls, dtype=np.float32)
+        targets_pnl = np.array(targets_pnl, dtype=np.float32)
 
         # Clean data
-        feature_cols = [col for col in combined_features.columns if col != 'date']
-        combined_features[feature_cols] = combined_features[feature_cols].replace([np.inf, -np.inf], np.nan)
-        combined_features[feature_cols] = combined_features[feature_cols].fillna(
-            combined_features[feature_cols].median()
+        features_df[valid_feature_cols] = features_df[valid_feature_cols].replace([np.inf, -np.inf], np.nan)
+        features_df[valid_feature_cols] = features_df[valid_feature_cols].fillna(
+            features_df[valid_feature_cols].median()
         )
-        combined_features[feature_cols] = combined_features[feature_cols].clip(-1e6, 1e6)
+        features_df[valid_feature_cols] = features_df[valid_feature_cols].clip(-1e6, 1e6)
 
-        logger.info(f"Trader {trader_id}: Prepared {len(combined_features)} samples with {len(all_feature_names)} features")
+        logger.info(f"Trader {trader_id}: Prepared {len(features_df)} samples with {len(valid_feature_cols)} features")
 
-        return combined_features, targets, all_feature_names
+        return features_df, targets_cls, targets_pnl, valid_feature_cols
 
     def hyperparameter_tuning(self, X_train: pd.DataFrame, y_train: np.ndarray,
                             X_val: pd.DataFrame, y_val: np.ndarray,
@@ -245,21 +221,23 @@ class TraderSpecificTrainer:
 
         return metrics
 
-    def _prepare_pnl_targets(self, trader_data: pd.DataFrame, combined_features: pd.DataFrame) -> np.ndarray:
-        """Prepare PnL targets aligned with feature data"""
-        # Align PnL data with feature dates
-        pnl_targets = []
+    def split_train_validation(self, features_df: pd.DataFrame, targets_cls: np.ndarray, targets_pnl: np.ndarray, validation_split: float = 0.8) -> Tuple:
+        """Split training data into train/validation sets"""
+        split_idx = int(len(features_df) * validation_split)
 
-        for _, row in combined_features.iterrows():
-            date = row['date']
-            # Find corresponding PnL for this date
-            pnl_row = trader_data[trader_data['date'] == date]
-            if len(pnl_row) > 0:
-                pnl_targets.append(pnl_row['daily_pnl'].iloc[0])
-            else:
-                pnl_targets.append(0.0)  # Default for missing data
+        feature_cols = [col for col in features_df.columns if col != 'date']
 
-        return np.array(pnl_targets, dtype=np.float32)
+        # Training set
+        X_train = features_df.iloc[:split_idx][feature_cols]
+        y_train_cls = targets_cls[:split_idx]
+        y_train_pnl = targets_pnl[:split_idx]
+
+        # Validation set
+        X_val = features_df.iloc[split_idx:][feature_cols]
+        y_val_cls = targets_cls[split_idx:]
+        y_val_pnl = targets_pnl[split_idx:]
+
+        return X_train, y_train_cls, y_train_pnl, X_val, y_val_cls, y_val_pnl
 
     def hyperparameter_tuning_var(self, X_train: pd.DataFrame, y_train: np.ndarray,
                                 X_val: pd.DataFrame, y_val: np.ndarray,
@@ -344,68 +322,55 @@ class TraderSpecificTrainer:
 
         return metrics
 
-    def train_trader_model(self, df: pd.DataFrame, trader_id: str) -> Optional[Dict]:
-        """Train, tune, validate and save both classification and VaR models for a specific trader"""
+    def train_trader_model(self, trader_id: str) -> Optional[Dict]:
+        """Train, tune, validate and save both classification and VaR models for a specific trader using preprocessed data"""
 
-        # Calculate data boundaries
-        boundaries = self.calculate_trader_boundaries(df, trader_id)
-        if boundaries is None:
+        # Load preprocessed data
+        train_data, test_data, metadata = self.load_trader_data(trader_id)
+        if train_data is None:
             return None
 
         # Prepare features
-        combined_features, targets, feature_names = self.prepare_trader_features(df, trader_id)
-        if combined_features is None:
+        features_df, targets_cls, targets_pnl, feature_names = self.prepare_trader_features(train_data, trader_id)
+        if features_df is None:
             logger.warning(f"No valid features for trader {trader_id}")
             return None
 
-        # Prepare PnL targets for VaR model
-        trader_data = df[df['trader_id'] == trader_id].sort_values('date').copy()
-        pnl_targets = self._prepare_pnl_targets(trader_data, combined_features)
-
-        # Split data according to boundaries
-        train_mask = combined_features['date'] <= boundaries['train_end']
-        val_mask = (combined_features['date'] >= boundaries['validation_start']) & \
-                   (combined_features['date'] <= boundaries['validation_end'])
-
-        feature_cols = [col for col in combined_features.columns if col != 'date']
-        X_train = combined_features[train_mask][feature_cols]
-        y_train = targets[train_mask]
-        X_val = combined_features[val_mask][feature_cols]
-        y_val = targets[val_mask]
-
-        # PnL data for VaR model
-        pnl_train = pnl_targets[train_mask]
-        pnl_val = pnl_targets[val_mask]
+        # Split training data into train/validation (80/20)
+        X_train, y_train_cls, y_train_pnl, X_val, y_val_cls, y_val_pnl = self.split_train_validation(
+            features_df, targets_cls, targets_pnl
+        )
 
         logger.info(f"Trader {trader_id}: Train samples={len(X_train)}, Val samples={len(X_val)}")
 
         # Check if we have both classes in training data
-        if len(np.unique(y_train)) < 2:
+        if len(np.unique(y_train_cls)) < 2:
             logger.warning(f"Trader {trader_id}: Training data has only one class")
             return None
 
         # Train Classification Model
         logger.info(f"Training classification model for trader {trader_id}")
-        best_params_cls = self.hyperparameter_tuning(X_train, y_train, X_val, y_val, trader_id)
+        best_params_cls = self.hyperparameter_tuning(X_train, y_train_cls, X_val, y_val_cls, trader_id)
 
-        all_train_mask = combined_features['date'] <= boundaries['validation_end']
-        X_all_train = combined_features[all_train_mask][feature_cols]
-        y_all_train = targets[all_train_mask]
+        # Train final classification model on full training data
+        feature_cols = [col for col in features_df.columns if col != 'date']
+        X_full_train = features_df[feature_cols]
+        y_full_train_cls = targets_cls
 
         final_cls_model = lgb.LGBMClassifier(**best_params_cls)
-        final_cls_model.fit(X_all_train, y_all_train)
+        final_cls_model.fit(X_full_train, y_full_train_cls)
 
-        cls_validation_metrics = self.validate_model(final_cls_model, X_val, y_val, trader_id)
+        cls_validation_metrics = self.validate_model(final_cls_model, X_val, y_val_cls, trader_id)
 
         # Train VaR Model
         logger.info(f"Training VaR model for trader {trader_id}")
-        best_params_var = self.hyperparameter_tuning_var(X_train, pnl_train, X_val, pnl_val, trader_id)
+        best_params_var = self.hyperparameter_tuning_var(X_train, y_train_pnl, X_val, y_val_pnl, trader_id)
 
-        pnl_all_train = pnl_targets[all_train_mask]
+        y_full_train_pnl = targets_pnl
         final_var_model = lgb.LGBMRegressor(**best_params_var)
-        final_var_model.fit(X_all_train, pnl_all_train)
+        final_var_model.fit(X_full_train, y_full_train_pnl)
 
-        var_validation_metrics = self.validate_var_model(final_var_model, X_val, pnl_val, trader_id)
+        var_validation_metrics = self.validate_var_model(final_var_model, X_val, y_val_pnl, trader_id)
 
         # Save both models and metadata
         model_data = {
@@ -413,12 +378,12 @@ class TraderSpecificTrainer:
             'var_model': final_var_model,
             'feature_names': feature_cols,
             'sequence_length': self.sequence_length,
-            'boundaries': boundaries,
+            'metadata': metadata,
             'best_params_cls': best_params_cls,
             'best_params_var': best_params_var,
             'cls_validation_metrics': cls_validation_metrics,
             'var_validation_metrics': var_validation_metrics,
-            'training_samples': len(X_all_train),
+            'training_samples': len(X_full_train),
             'trader_id': trader_id,
             'trained_date': datetime.now().isoformat()
         }
@@ -430,6 +395,137 @@ class TraderSpecificTrainer:
         logger.info(f"Saved classification and VaR models for trader {trader_id} to {model_path}")
 
         return model_data
+
+    def evaluate_on_test_data(self, trader_id: str) -> Optional[Dict]:
+        """Evaluate trained models on unseen test data"""
+        # Load trained model
+        model_data = self.load_trader_model(trader_id)
+        if model_data is None:
+            logger.warning(f"No trained model found for trader {trader_id}")
+            return None
+
+        # Load test data
+        train_data, test_data, metadata = self.load_trader_data(trader_id)
+        if test_data is None:
+            logger.warning(f"No test data found for trader {trader_id}")
+            return None
+
+        # Prepare test features (same way as training features)
+        test_features_df, test_targets_cls, test_targets_pnl, test_feature_names = self.prepare_trader_features(test_data, trader_id)
+        if test_features_df is None:
+            logger.warning(f"Could not prepare test features for trader {trader_id}")
+            return None
+
+        # Get models and feature names
+        cls_model = model_data['classification_model']
+        var_model = model_data['var_model']
+        feature_names = model_data['feature_names']
+
+        # Ensure feature alignment
+        test_feature_cols = [col for col in test_features_df.columns if col != 'date']
+        if set(test_feature_cols) != set(feature_names):
+            logger.warning(f"Feature mismatch for trader {trader_id}. Expected: {len(feature_names)}, Got: {len(test_feature_cols)}")
+            # Align features
+            common_features = [f for f in feature_names if f in test_feature_cols]
+            X_test = test_features_df[common_features]
+            logger.info(f"Using {len(common_features)} common features for evaluation")
+        else:
+            X_test = test_features_df[feature_names]
+
+        # Classification predictions
+        cls_test_metrics = {}
+        if len(np.unique(test_targets_cls)) >= 2:
+            y_pred_proba_cls = cls_model.predict_proba(X_test)[:, 1]
+            y_pred_cls = cls_model.predict(X_test)
+
+            cls_test_metrics = {
+                'auc': roc_auc_score(test_targets_cls, y_pred_proba_cls),
+                'ap': average_precision_score(test_targets_cls, y_pred_proba_cls),
+                'pos_rate': np.mean(test_targets_cls),
+                'pred_pos_rate': np.mean(y_pred_cls),
+                'test_samples': len(test_targets_cls)
+            }
+        else:
+            logger.warning(f"Test set for trader {trader_id} has only one class for classification")
+            cls_test_metrics = {'test_samples': len(test_targets_cls), 'note': 'only_one_class'}
+
+        # VaR predictions
+        y_pred_var = var_model.predict(X_test)
+
+        var_test_metrics = {
+            'mae': mean_absolute_error(test_targets_pnl, y_pred_var),
+            'actual_var_5pct': np.percentile(test_targets_pnl, 5),
+            'predicted_var_5pct': np.percentile(y_pred_var, 5),
+            'test_samples': len(test_targets_pnl),
+            'pnl_mean': np.mean(test_targets_pnl),
+            'pnl_std': np.std(test_targets_pnl)
+        }
+
+        # Calculate VaR violations
+        violations = np.sum(test_targets_pnl < y_pred_var)
+        var_test_metrics['violation_rate'] = violations / len(test_targets_pnl)
+        var_test_metrics['expected_violation_rate'] = 0.05
+        var_test_metrics['violation_difference'] = abs(var_test_metrics['violation_rate'] - 0.05)
+
+        test_results = {
+            'trader_id': trader_id,
+            'cls_test_metrics': cls_test_metrics,
+            'var_test_metrics': var_test_metrics,
+            'test_date_range': {
+                'start': test_features_df['date'].min().isoformat(),
+                'end': test_features_df['date'].max().isoformat()
+            },
+            'evaluation_date': datetime.now().isoformat()
+        }
+
+        logger.info(f"Trader {trader_id} test evaluation:")
+        if 'auc' in cls_test_metrics:
+            logger.info(f"  Classification - AUC: {cls_test_metrics['auc']:.4f}, AP: {cls_test_metrics['ap']:.4f}")
+        logger.info(f"  VaR - MAE: {var_test_metrics['mae']:.2f}, Violation Rate: {var_test_metrics['violation_rate']:.4f}")
+
+        return test_results
+
+    def evaluate_all_traders_on_test(self, trader_ids: Optional[List] = None) -> Dict:
+        """Evaluate all trained models on test data"""
+        if trader_ids is None:
+            trader_ids = self.get_available_traders()
+
+        test_results = {}
+        successful_evals = 0
+
+        logger.info(f"Evaluating {len(trader_ids)} traders on test data")
+
+        for trader_id in trader_ids:
+            logger.info(f"\n=== Evaluating trader {trader_id} on test data ===")
+
+            try:
+                result = self.evaluate_on_test_data(trader_id)
+                if result is not None:
+                    test_results[trader_id] = result
+                    successful_evals += 1
+                else:
+                    logger.warning(f"Failed to evaluate trader {trader_id}")
+            except Exception as e:
+                logger.error(f"Error evaluating trader {trader_id}: {str(e)}")
+                continue
+
+        logger.info(f"\nTest evaluation completed: {successful_evals}/{len(trader_ids)} traders successful")
+
+        # Save test results
+        test_summary = {
+            'total_traders': len(trader_ids),
+            'successful_evaluations': successful_evals,
+            'evaluated_traders': list(test_results.keys()),
+            'evaluation_date': datetime.now().isoformat()
+        }
+
+        results_path = self.models_dir / 'test_evaluation_results.pkl'
+        with open(results_path, 'wb') as f:
+            pickle.dump({'summary': test_summary, 'results': test_results}, f)
+
+        logger.info(f"Test results saved to {results_path}")
+
+        return test_results
 
     def load_trader_model(self, trader_id: str) -> Optional[Dict]:
         """Load a saved trader model"""
@@ -443,19 +539,32 @@ class TraderSpecificTrainer:
 
         return model_data
 
-    def train_all_traders(self, df: pd.DataFrame, trader_ids: Optional[List] = None) -> Dict:
-        """Train models for all specified traders"""
+    def get_available_traders(self) -> List[str]:
+        """Get list of available trader IDs from data directory"""
+        trader_ids = []
+        for trader_dir in self.data_dir.iterdir():
+            if trader_dir.is_dir() and trader_dir.name.isdigit():
+                # Check if required files exist
+                required_files = ['train_data.parquet', 'test_data.parquet', 'metadata.json']
+                if all((trader_dir / f).exists() for f in required_files):
+                    trader_ids.append(trader_dir.name)
+        return sorted(trader_ids)
+
+    def train_all_traders(self, trader_ids: Optional[List] = None) -> Dict:
+        """Train models for all specified traders using preprocessed data"""
         if trader_ids is None:
-            trader_ids = df['trader_id'].unique()
+            trader_ids = self.get_available_traders()
 
         results = {}
         successful_trains = 0
+
+        logger.info(f"Found {len(trader_ids)} traders to train: {trader_ids}")
 
         for trader_id in trader_ids:
             logger.info(f"\n=== Training model for trader {trader_id} ===")
 
             try:
-                model_data = self.train_trader_model(df, trader_id)
+                model_data = self.train_trader_model(trader_id)
                 if model_data is not None:
                     results[trader_id] = model_data
                     successful_trains += 1
@@ -484,47 +593,49 @@ class TraderSpecificTrainer:
         return results
 
 
-def run_trader_specific_training(sequence_length: int = 7, trader_ids: Optional[List] = None):
-    """Main function to run trader-specific training with both classification and VaR models"""
+def run_trader_specific_training(data_dir: str = 'data/processed/trader_splits', sequence_length: int = 7, trader_ids: Optional[List] = None):
+    """Main function to run trader-specific training with both classification and VaR models using preprocessed data"""
 
     logging.basicConfig(level=logging.INFO)
     logger.info(f"Starting trader-specific training (Classification + VaR) with sequence_length={sequence_length}")
+    logger.info(f"Using preprocessed data from: {data_dir}")
 
-    # Load and prepare data
-    with open('configs/main_config.yaml', 'r') as f:
-        config = yaml.safe_load(f)
-
-    df = create_trader_day_panel(config)
-    df = df.rename(columns={'account_id': 'trader_id', 'trade_date': 'date'})
-
-    # Feature engineering
-    df_for_features = df.rename(columns={'trader_id': 'account_id', 'date': 'trade_date'})
-    df_for_features = build_features(df_for_features, config)
-    df = df_for_features.rename(columns={'account_id': 'trader_id', 'trade_date': 'date'})
-
-    # Use active traders from config if not specified
-    if trader_ids is None:
-        trader_ids = config['active_traders']
-
-    # Initialize trainer
-    trainer = TraderSpecificTrainer(sequence_length=sequence_length)
+    # Initialize trainer with data directory
+    trainer = TraderSpecificTrainer(data_dir=data_dir, sequence_length=sequence_length)
 
     # Train all models (both classification and VaR)
-    results = trainer.train_all_traders(df, trader_ids)
+    results = trainer.train_all_traders(trader_ids)
 
     logger.info(f"Training completed for {len(results)} traders (Classification + VaR models)")
 
     return results
 
 
-def run_classification_only_training(sequence_length: int = 7, trader_ids: Optional[List] = None):
+def run_classification_only_training(data_dir: str = 'data/processed/trader_splits', sequence_length: int = 7, trader_ids: Optional[List] = None):
     """Run training with classification models only (backward compatibility)"""
 
     # For backward compatibility, create a version that only trains classification models
     # This can be done by modifying the trainer to skip VaR training
     logger.warning("Classification-only training mode - consider using full training with both models")
 
-    return run_trader_specific_training(sequence_length, trader_ids)
+    return run_trader_specific_training(data_dir, sequence_length, trader_ids)
+
+
+def evaluate_models_on_test_data(data_dir: str = 'data/processed/trader_splits', trader_ids: Optional[List] = None):
+    """Evaluate trained models on test data"""
+
+    logging.basicConfig(level=logging.INFO)
+    logger.info("Starting test data evaluation")
+
+    # Initialize trainer
+    trainer = TraderSpecificTrainer(data_dir=data_dir)
+
+    # Evaluate all models on test data
+    test_results = trainer.evaluate_all_traders_on_test(trader_ids)
+
+    logger.info(f"Test evaluation completed for {len(test_results)} traders")
+
+    return test_results
 
 
 if __name__ == "__main__":
