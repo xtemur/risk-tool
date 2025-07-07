@@ -13,6 +13,7 @@ import pickle
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.utils import load_config, load_model
+from .email_service import EmailService
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,6 +28,7 @@ class SignalGenerator:
         self.var_model = None
         self.loss_model = None
         self.feature_data = None
+        self.email_service = None
 
     def load_models(self):
         """Load trained VaR and loss models."""
@@ -649,6 +651,44 @@ class SignalGenerator:
 
         return signal_data
 
+    def send_email_signal(self, signal_data: Dict, to_emails: List[str] = None) -> bool:
+        """
+        Send the generated signals via email.
+
+        Args:
+            signal_data: Dictionary containing signal data
+            to_emails: List of recipient email addresses (optional, uses default if not provided)
+
+        Returns:
+            True if email sent successfully, False otherwise
+        """
+        try:
+            # Initialize email service if not already done
+            if self.email_service is None:
+                self.email_service = EmailService()
+
+            # Use default recipients if none provided
+            if to_emails is None:
+                to_emails = self.email_service.default_recipients
+
+            if not to_emails:
+                logger.warning("No email recipients configured. Set EMAIL_RECIPIENTS in environment or pass to_emails parameter.")
+                return False
+
+            # Send the email
+            success = self.email_service.send_daily_signals(signal_data, to_emails)
+
+            if success:
+                logger.info(f"Risk signals email sent successfully to {', '.join(to_emails)}")
+            else:
+                logger.error("Failed to send risk signals email")
+
+            return success
+
+        except Exception as e:
+            logger.error(f"Error sending email: {e}")
+            return False
+
 
 def test_signal_generator():
     """Test the signal generator."""
@@ -663,6 +703,13 @@ def test_signal_generator():
     print(f"Medium risk: {sum(1 for s in signals['trader_signals'] if s['risk_level'] == 'medium')}")
     print(f"Low risk: {sum(1 for s in signals['trader_signals'] if s['risk_level'] == 'low')}")
     print(f"\nAlerts: {len(signals['alerts'])}")
+
+    # Send email
+    email_success = generator.send_email_signal(signals)
+    if email_success:
+        print("Email sent successfully!")
+    else:
+        print("Failed to send email (check configuration)")
 
     return signals
 
