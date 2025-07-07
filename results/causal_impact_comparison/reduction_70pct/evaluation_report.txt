@@ -1,0 +1,145 @@
+================================================================================
+SEQUENTIAL PnL ADJUSTMENT CAUSAL IMPACT EVALUATION
+================================================================================
+
+METHODOLOGY:
+- When model indicates 'don't trade', actual PnL is reduced by 70%
+- Adjusted PnL values are used for subsequent feature calculations
+- Each prediction considers the cumulative effect of prior adjustments
+
+AGGREGATE SUMMARY
+--------------------------------------------------
+Total Traders Evaluated: 11
+Total Original PnL: $159,993.19
+Total Adjusted PnL: $504,595.62
+Total Net Benefit: $344,602.42
+Overall Improvement: 215.39%
+Total Avoided Losses: $790,364.54
+Total Missed Gains: $445,762.12
+Mean Intervention Rate: 18.5%
+Mean Volatility Reduction: 26.8%
+Positive Improvements: 8/11
+
+INDIVIDUAL TRADER RESULTS
+--------------------------------------------------
+
+Trader 4004:
+  Original PnL: $192,899.15
+  Adjusted PnL: $262,036.96
+  Net Benefit: $69,137.82
+  Improvement: 35.84%
+  Avoided Losses: $394,740.94
+  Missed Gains: $325,603.13
+  Intervention Rate: 31.0%
+  Volatility Reduction: 47.3%
+  Days Evaluated: 84
+
+Trader 4003:
+  Original PnL: $-15,788.54
+  Adjusted PnL: $-334.33
+  Net Benefit: $15,454.20
+  Improvement: 97.88%
+  Avoided Losses: $28,009.33
+  Missed Gains: $12,555.13
+  Intervention Rate: 46.8%
+  Volatility Reduction: 56.2%
+  Days Evaluated: 79
+
+Trader 5580:
+  Original PnL: $26,630.15
+  Adjusted PnL: $38,586.92
+  Net Benefit: $11,956.77
+  Improvement: 44.90%
+  Avoided Losses: $11,956.77
+  Missed Gains: $0.00
+  Intervention Rate: 7.3%
+  Volatility Reduction: 20.6%
+  Days Evaluated: 41
+
+Trader 4396:
+  Original PnL: $-20,367.43
+  Adjusted PnL: $68,313.05
+  Net Benefit: $88,680.47
+  Improvement: 435.40%
+  Avoided Losses: $113,752.05
+  Missed Gains: $25,071.58
+  Intervention Rate: 35.3%
+  Volatility Reduction: 31.2%
+  Days Evaluated: 51
+
+Trader 3956:
+  Original PnL: $-10,556.97
+  Adjusted PnL: $36,950.28
+  Net Benefit: $47,507.24
+  Improvement: 450.01%
+  Avoided Losses: $47,507.24
+  Missed Gains: $0.00
+  Intervention Rate: 14.9%
+  Volatility Reduction: 11.6%
+  Days Evaluated: 74
+
+Trader 3950:
+  Original PnL: $-8,777.06
+  Adjusted PnL: $81,953.01
+  Net Benefit: $90,730.06
+  Improvement: 1033.72%
+  Avoided Losses: $109,837.94
+  Missed Gains: $19,107.88
+  Intervention Rate: 6.0%
+  Volatility Reduction: 16.7%
+  Days Evaluated: 100
+
+Trader 3951:
+  Original PnL: $9,993.26
+  Adjusted PnL: $4,892.64
+  Net Benefit: $-5,100.62
+  Improvement: -51.04%
+  Avoided Losses: $29,892.52
+  Missed Gains: $34,993.14
+  Intervention Rate: 30.7%
+  Volatility Reduction: 24.5%
+  Days Evaluated: 75
+
+Trader 5093:
+  Original PnL: $-67.70
+  Adjusted PnL: $-67.70
+  Net Benefit: $0.00
+  Improvement: 0.00%
+  Avoided Losses: $0.00
+  Missed Gains: $0.00
+  Intervention Rate: 0.0%
+  Volatility Reduction: 0.0%
+  Days Evaluated: 56
+
+Trader 3946:
+  Original PnL: $14,251.05
+  Adjusted PnL: $-5,528.15
+  Net Benefit: $-19,779.20
+  Improvement: -138.79%
+  Avoided Losses: $8,652.06
+  Missed Gains: $28,431.26
+  Intervention Rate: 15.8%
+  Volatility Reduction: 32.5%
+  Days Evaluated: 95
+
+Trader 3942:
+  Original PnL: $16,208.71
+  Adjusted PnL: $41,552.06
+  Net Benefit: $25,343.35
+  Improvement: 156.36%
+  Avoided Losses: $25,343.35
+  Missed Gains: $0.00
+  Intervention Rate: 11.4%
+  Volatility Reduction: 13.8%
+  Days Evaluated: 88
+
+Trader 3943:
+  Original PnL: $-44,431.43
+  Adjusted PnL: $-23,759.10
+  Net Benefit: $20,672.33
+  Improvement: 46.53%
+  Avoided Losses: $20,672.33
+  Missed Gains: $0.00
+  Intervention Rate: 4.7%
+  Volatility Reduction: 40.0%
+  Days Evaluated: 43
