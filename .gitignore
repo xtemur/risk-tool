@@ -132,5 +132,4 @@ risk-tool-latest.tar.gz
 deploy-*.sh.tmp
 !.env.docker.template
 
-*.png
 *.csv
