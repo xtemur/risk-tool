@@ -239,38 +239,41 @@ class ThresholdOptimizer:
         logger.info(f"Generated {len(predictions)} predictions for trader {trader_id}")
 
         # Define search ranges based on data distribution
-        var_percentiles = np.percentile(predictions['var_pred'], [5, 10, 20, 30, 50])
-        loss_prob_percentiles = np.percentile(predictions['loss_prob'], [50, 70, 80, 90, 95])
+        # Expand ranges to ensure we can find solutions with ≤30% intervention rate
+        var_percentiles = np.percentile(predictions['var_pred'], [1, 5, 10, 20, 30, 50, 70, 90])
+        loss_prob_percentiles = np.percentile(predictions['loss_prob'], [30, 50, 70, 80, 90, 95, 99])
 
-        # Objective function to maximize PnL improvement
+        # Objective function to maximize PnL improvement with intervention rate constraint
         def objective(params):
             var_thresh, loss_prob_thresh = params
             impact_result = self.calculate_causal_impact(predictions, var_thresh, loss_prob_thresh)
 
-            # We want to maximize impact (PnL improvement) while not intervening too frequently
+            # We want to maximize impact (PnL improvement) while keeping intervention rate ≤ 30%
             impact = impact_result['impact']
             intervention_rate = impact_result['intervention_rate']
 
-            # Penalize very high intervention rates (>50%)
-            if intervention_rate > 0.5:
-                penalty = (intervention_rate - 0.5) * abs(impact_result['total_pnl']) * 0.1
-                impact -= penalty
+            # Hard constraint: intervention rate must be ≤ 30%
+            if intervention_rate > 0.30:
+                # Return a large penalty to make this solution infeasible
+                return 1e10
 
             return -impact  # Minimize negative impact (maximize positive impact)
 
-        # Search bounds
+        # Search bounds - use wider ranges to ensure feasible solutions
         bounds = [
             (var_percentiles[0], var_percentiles[-1]),  # VaR threshold range
             (loss_prob_percentiles[0], loss_prob_percentiles[-1])  # Loss prob threshold range
         ]
 
-        # Optimize using differential evolution
+        # Optimize using differential evolution with increased iterations for constraint handling
         result = differential_evolution(
             objective,
             bounds,
             seed=42,
-            maxiter=100,
-            popsize=15
+            maxiter=200,  # Increased iterations to handle constraint
+            popsize=20,   # Increased population size
+            atol=1e-6,
+            tol=1e-6
         )
 
         if result.success:
