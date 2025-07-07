@@ -110,7 +110,7 @@
     {
       "trader_id": "4004",
       "var_threshold": -37262.033197938275,
-      "loss_prob_threshold": 0.020740676481274575,
+      "loss_prob_threshold": 0.50740676481274575,
       "intervention_rate": 0.2872340425531915,
       "validation_impact": 230570.890625,
       "test_impact": 6495.015625,
