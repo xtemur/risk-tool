@@ -26,7 +26,7 @@ class ThresholdOptimizer:
     Then PnL is reduced by 50% to simulate risk management intervention.
     """
 
-    def __init__(self, models_dir: str = 'models/trader_specific_80pct', data_dir: str = 'data/processed/trader_splits'):
+    def __init__(self, models_dir: str = 'models/trader_specific', data_dir: str = 'data/processed/trader_splits'):
         self.models_dir = Path(models_dir)
         self.data_dir = Path(data_dir)
         self.results_dir = Path('results/threshold_optimization')
@@ -457,7 +457,7 @@ class ThresholdOptimizer:
         return results
 
 
-def run_threshold_optimization(data_dir: str = 'data/processed/trader_splits', models_dir: str = 'models/trader_specific_80pct'):
+def run_threshold_optimization(data_dir: str = 'data/processed/trader_splits', models_dir: str = 'models/trader_specific'):
     """Main function to run threshold optimization using preprocessed data"""
     logging.basicConfig(level=logging.INFO)
 

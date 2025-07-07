@@ -22,7 +22,7 @@ class AdjustedPnLCausalImpactEvaluator:
 
     def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool", pnl_reduction_pct: float = 50.0):
         self.base_path = Path(base_path)
-        self.models_path = self.base_path / "models" / "trader_specific_80pct"
+        self.models_path = self.base_path / "models" / "trader_specific"
         self.data_path = self.base_path / "data" / "processed" / "trader_splits"
         self.thresholds_path = self.base_path / "configs" / "optimal_thresholds" / "optimal_thresholds.json"
         self.pnl_reduction_pct = pnl_reduction_pct  # Percentage reduction when intervening

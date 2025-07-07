@@ -32,7 +32,7 @@ class TraderSpecificTrainer:
     def __init__(self, data_dir: str = 'data/processed/trader_splits', sequence_length: int = 7):
         self.data_dir = Path(data_dir)
         self.sequence_length = sequence_length
-        self.models_dir = Path('models/trader_specific_80pct')
+        self.models_dir = Path('models/trader_specific')
         self.models_dir.mkdir(parents=True, exist_ok=True)
 
         self.raw_feature_cols = [
