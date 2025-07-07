@@ -248,12 +248,12 @@ class ThresholdOptimizer:
             var_thresh, loss_prob_thresh = params
             impact_result = self.calculate_causal_impact(predictions, var_thresh, loss_prob_thresh)
 
-            # We want to maximize impact (PnL improvement) while keeping intervention rate ≤ 30%
+            # We want to maximize impact (PnL improvement) while keeping intervention rate ≤ 25% (with buffer)
             impact = impact_result['impact']
             intervention_rate = impact_result['intervention_rate']
 
-            # Hard constraint: intervention rate must be ≤ 30%
-            if intervention_rate > 0.30:
+            # Hard constraint: intervention rate must be ≤ 25% (conservative buffer for distribution shift)
+            if intervention_rate > 0.25:
                 # Return a large penalty to make this solution infeasible
                 return 1e10
 
@@ -297,7 +297,8 @@ class ThresholdOptimizer:
             }
 
             logger.info(f"Trader {trader_id} optimal thresholds: VaR={optimal_var_thresh:.2f}, "
-                       f"Loss_Prob={optimal_loss_prob_thresh:.4f}, Impact={optimal_impact['impact']:.2f}")
+                       f"Loss_Prob={optimal_loss_prob_thresh:.4f}, Impact={optimal_impact['impact']:.2f}, "
+                       f"Validation_Rate={optimal_impact['intervention_rate']*100:.1f}%")
 
             return optimization_result
         else:
@@ -388,10 +389,10 @@ class ThresholdOptimizer:
                 if model_data is None:
                     continue
 
-                # For validation, we'll use a portion of training data (last 20%)
+                # For validation, we'll use a portion of training data (last 25% for more robust validation)
                 # This simulates the validation split used during training
                 train_dates = sorted(train_data['date'].unique())
-                validation_split_idx = int(len(train_dates) * 0.8)
+                validation_split_idx = int(len(train_dates) * 0.75)  # Use last 25% for validation
                 validation_start = train_dates[validation_split_idx]
                 validation_end = train_dates[-1]
 
