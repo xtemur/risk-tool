@@ -553,6 +553,26 @@ def run_multiple_evaluations(reduction_percentages: List[float] = [25, 50, 70, 9
         with open(output_dir / "evaluation_report.txt", 'w') as f:
             f.write(report)
 
+        # Create comprehensive dashboard
+        dashboard_path = output_dir / f"comprehensive_dashboard_{reduction_pct}pct.png"
+        try:
+            dashboard_fig = evaluator.create_comprehensive_dashboard(save_path=str(dashboard_path))
+            plt.close(dashboard_fig)
+        except Exception as e:
+            print(f"Error creating dashboard for {reduction_pct}%: {e}")
+
+        # Create individual trader plots
+        trader_plots_dir = output_dir / "trader_plots"
+        trader_plots_dir.mkdir(exist_ok=True)
+
+        for trader_id in evaluator.results.keys():
+            try:
+                plot_path = trader_plots_dir / f"trader_{trader_id}_sequential_comparison.png"
+                plot_fig = evaluator.create_sequential_comparison_plot(trader_id, save_path=str(plot_path))
+                plt.close(plot_fig)
+            except Exception as e:
+                print(f"Error creating plot for trader {trader_id} at {reduction_pct}%: {e}")
+
         # Extract aggregate metrics for comparison
         aggregate = results['aggregate_results']
         comparison_data.append({

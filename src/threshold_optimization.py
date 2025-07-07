@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import pickle
+import json
 from typing import Dict, Tuple, Optional, List
 from pathlib import Path
 import logging
@@ -451,7 +452,33 @@ class ThresholdOptimizer:
         with open(results_path, 'wb') as f:
             pickle.dump(results, f)
 
+        # Save thresholds as JSON to configs directory
+        configs_dir = Path('configs/optimal_thresholds')
+        configs_dir.mkdir(parents=True, exist_ok=True)
+
+        # Extract thresholds for JSON format
+        thresholds = []
+        for trader_id, trader_results in results['optimization_results'].items():
+            if 'optimal_var_threshold' in trader_results:
+                thresholds.append({
+                    "trader_id": trader_id,
+                    "var_threshold": trader_results['optimal_var_threshold'],
+                    "loss_prob_threshold": trader_results['optimal_loss_prob_threshold']
+                })
+
+        # Save thresholds in JSON format
+        thresholds_data = {
+            "thresholds": thresholds,
+            "optimization_date": pd.Timestamp.now().isoformat(),
+            "total_traders": len(thresholds)
+        }
+
+        thresholds_path = configs_dir / 'optimal_thresholds.json'
+        with open(thresholds_path, 'w') as f:
+            json.dump(thresholds_data, f, indent=2)
+
         logger.info(f"Threshold optimization completed. Results saved to {results_path}")
+        logger.info(f"Thresholds saved to {thresholds_path}")
         logger.info(f"Summary: {results['summary']}")
 
         return results

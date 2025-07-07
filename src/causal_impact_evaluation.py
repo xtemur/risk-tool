@@ -9,7 +9,7 @@ from typing import Dict, List, Tuple, Any
 import warnings
 warnings.filterwarnings('ignore')
 
-from src.utils import load_model
+# from src.utils import load_model  # Not needed for this evaluation
 
 
 class CausalImpactEvaluator:

@@ -1,151 +1,61 @@
 {
-  "metadata": {
-    "optimization_date": "2025-07-07T18:14:52.687125",
-    "total_traders": 10,
-    "model_version": "trader_specific_80pct",
-    "validation_method": "differential_evolution_validation_based",
-    "intervention_rate_constraint": "\u226425% validation (targeting \u226430% test)",
-    "summary": {
-      "total_traders_optimized": 10,
-      "total_traders_evaluated": 10,
-      "mean_improvement": 13216.2685546875,
-      "median_improvement": 12789.943359375,
-      "mean_improvement_pct": 97.73359248643828,
-      "median_improvement_pct": 34.27664190530777,
-      "positive_improvements": 9,
-      "total_improvement": 132162.67651367188
-    }
-  },
   "thresholds": [
     {
       "trader_id": "3942",
-      "var_threshold": -4685.2339063337995,
-      "loss_prob_threshold": 0.5879445253961866,
-      "intervention_rate": 0.23728813559322035,
-      "validation_impact": 37693.73046875,
-      "test_impact": 9318.8662109375,
-      "test_improvement_pct": 364.08751010894775,
-      "baseline_pnl": 2559.5126953125,
-      "var_threshold_percentile": 19.491525423728813,
-      "loss_prob_threshold_percentile": 88.13559322033898,
-      "optimization_date": "2025-07-07T18:14:52.687140"
+      "var_threshold": -5429.1776134515085,
+      "loss_prob_threshold": 0.24680194883746803
     },
     {
       "trader_id": "3943",
-      "var_threshold": -30568.828135859978,
-      "loss_prob_threshold": 0.009101144769870582,
-      "intervention_rate": 0.06779661016949153,
-      "validation_impact": 100754.203125,
-      "test_impact": 4.296875,
-      "test_improvement_pct": 0.002034217686741613,
-      "baseline_pnl": -211229.84375,
-      "var_threshold_percentile": 5.932203389830509,
-      "loss_prob_threshold_percentile": 94.0677966101695,
-      "optimization_date": "2025-07-07T18:14:52.687149"
+      "var_threshold": -19157.063857326983,
+      "loss_prob_threshold": 0.6983077379133928
     },
     {
       "trader_id": "3946",
-      "var_threshold": -2775.374541240063,
-      "loss_prob_threshold": 0.5675645878146935,
-      "intervention_rate": 0.2457627118644068,
-      "validation_impact": 48565.32421875,
-      "test_impact": -1258.296875,
-      "test_improvement_pct": -12.125855684280396,
-      "baseline_pnl": 10376.9736328125,
-      "var_threshold_percentile": 24.576271186440678,
-      "loss_prob_threshold_percentile": 98.30508474576271,
-      "optimization_date": "2025-07-07T18:14:52.687158"
+      "var_threshold": -3307.4525162657383,
+      "loss_prob_threshold": 0.717195907008158
     },
     {
       "trader_id": "3950",
-      "var_threshold": -18307.446105239425,
-      "loss_prob_threshold": 0.9397074576596567,
-      "intervention_rate": 0.22033898305084745,
-      "validation_impact": 310914.125,
-      "test_impact": 35672.0078125,
-      "test_improvement_pct": 44.49663162231445,
-      "baseline_pnl": -80167.8828125,
-      "var_threshold_percentile": 21.1864406779661,
-      "loss_prob_threshold_percentile": 98.30508474576271,
-      "optimization_date": "2025-07-07T18:14:52.687162"
+      "var_threshold": -21691.759649414336,
+      "loss_prob_threshold": 0.9585972700533194
     },
     {
       "trader_id": "3951",
-      "var_threshold": -4125.4837368893695,
-      "loss_prob_threshold": 0.42045263867463517,
-      "intervention_rate": 0.211864406779661,
-      "validation_impact": 55760.640625,
-      "test_impact": 23382.32421875,
-      "test_improvement_pct": 33.068180084228516,
-      "baseline_pnl": -70709.4375,
-      "var_threshold_percentile": 20.33898305084746,
-      "loss_prob_threshold_percentile": 95.76271186440678,
-      "optimization_date": "2025-07-07T18:14:52.687169"
+      "var_threshold": -5285.0485650440505,
+      "loss_prob_threshold": 0.9493111560647298
     },
     {
       "trader_id": "3956",
-      "var_threshold": -9164.61227879602,
-      "loss_prob_threshold": 0.23718492359537072,
-      "intervention_rate": 0.2457627118644068,
-      "validation_impact": 49737.8125,
-      "test_impact": 22034.8828125,
-      "test_improvement_pct": 18.99593472480774,
-      "baseline_pnl": 115997.8828125,
-      "var_threshold_percentile": 17.796610169491526,
-      "loss_prob_threshold_percentile": 87.28813559322035,
-      "optimization_date": "2025-07-07T18:14:52.687173"
+      "var_threshold": -6240.599702437198,
+      "loss_prob_threshold": 0.6276065125376495
     },
     {
       "trader_id": "4003",
-      "var_threshold": -5828.188835280259,
-      "loss_prob_threshold": 0.004325524092723036,
-      "intervention_rate": 0.025423728813559324,
-      "validation_impact": 2396.77197265625,
-      "test_impact": 1108.490234375,
-      "test_improvement_pct": 11.494173854589462,
-      "baseline_pnl": -9643.931640625,
-      "var_threshold_percentile": 1.694915254237288,
-      "loss_prob_threshold_percentile": 98.30508474576271,
-      "optimization_date": "2025-07-07T18:14:52.687181"
+      "var_threshold": -3310.290032293069,
+      "loss_prob_threshold": 0.007386818436264168
     },
     {
       "trader_id": "4004",
-      "var_threshold": -37476.50836139103,
-      "loss_prob_threshold": 0.1997434109159616,
-      "intervention_rate": 0.2457627118644068,
-      "validation_impact": 247882.53125,
-      "test_impact": 24750.705078125,
-      "test_improvement_pct": 431.8436622619629,
-      "baseline_pnl": 5731.404296875,
-      "var_threshold_percentile": 23.728813559322035,
-      "loss_prob_threshold_percentile": 94.91525423728814,
-      "optimization_date": "2025-07-07T18:14:52.687185"
+      "var_threshold": -47433.89368363341,
+      "loss_prob_threshold": 0.02851248524410671
+    },
+    {
+      "trader_id": "4396",
+      "var_threshold": -9430.865546023553,
+      "loss_prob_threshold": 0.2836326494470299
     },
     {
       "trader_id": "5093",
-      "var_threshold": -146.36471389729326,
-      "loss_prob_threshold": 0.426855752813426,
-      "intervention_rate": 0.11864406779661017,
-      "validation_impact": 862.4118041992188,
-      "test_impact": 888.380615234375,
-      "test_improvement_pct": 49.98854994773865,
-      "baseline_pnl": -1777.168212890625,
-      "var_threshold_percentile": 10.16949152542373,
-      "loss_prob_threshold_percentile": 95.76271186440678,
-      "optimization_date": "2025-07-07T18:14:52.687189"
+      "var_threshold": -179.753130158097,
+      "loss_prob_threshold": 0.9104759507377269
     },
     {
       "trader_id": "5580",
-      "var_threshold": -3286.4026280178464,
-      "loss_prob_threshold": 0.3533939819875549,
-      "intervention_rate": 0.23728813559322035,
-      "validation_impact": 31521.4765625,
-      "test_impact": 16261.01953125,
-      "test_improvement_pct": 35.485103726387024,
-      "baseline_pnl": 45824.91796875,
-      "var_threshold_percentile": 21.1864406779661,
-      "loss_prob_threshold_percentile": 95.76271186440678,
-      "optimization_date": "2025-07-07T18:14:52.687193"
+      "var_threshold": -4520.712803974617,
+      "loss_prob_threshold": 0.10770742753870882
     }
-  ]
+  ],
+  "optimization_date": "2025-07-07T22:50:18.841346",
+  "total_traders": 11
 }
