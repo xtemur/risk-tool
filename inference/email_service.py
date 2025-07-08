@@ -71,7 +71,7 @@ class EmailService:
         Returns:
             Rendered HTML string
         """
-        template = self.template_env.get_template('daily_signals.html')
+        template = self.template_env.get_template('daily_signals_simple.html')
 
         # Add generated timestamp
         signal_data['generated_time'] = datetime.now().strftime('%H:%M:%S UTC')
