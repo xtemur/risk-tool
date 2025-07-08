@@ -103,10 +103,8 @@
 
         .signals-table {
             width: 100%;
-            min-width: 1400px;
             border-collapse: collapse;
             background: white;
-            table-layout: fixed;
         }
 
         .signals-table th {
@@ -116,10 +114,9 @@
             text-align: center;
             font-size: 11px;
             text-transform: uppercase;
-            font-weight: 700;
-            letter-spacing: 0.3px;
+            font-weight: bold;
             border: 1px solid #333333;
-            font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', Consolas, 'Courier New', monospace;
+            font-family: Arial, sans-serif;
         }
 
         .signals-table td {
@@ -128,25 +125,20 @@
             font-size: 11px;
             vertical-align: middle;
             text-align: center;
-            font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', Consolas, 'Courier New', monospace;
-            font-weight: 500;
+            font-family: Arial, sans-serif;
+            font-weight: normal;
             height: 45px;
-            max-height: 45px;
-            overflow: hidden;
-            line-height: 1.1;
-            box-sizing: border-box;
         }
 
         .signals-table tr {
             height: 45px;
-            max-height: 45px;
         }
 
-        .signals-table tr:nth-child(even) {
+        .signals-table tr.even {
             background-color: #FAFAFA;
         }
 
-        .signals-table tr:hover {
+        .signals-table tr.hover {
             background-color: #F0F8FF;
         }
 
@@ -283,17 +275,15 @@
             color: #2f855a;
         }
 
+        /* Email clients don't support media queries well, so we'll use inline styles instead */
+
+        .mobile-hidden {
+            display: table-cell;
+        }
+
         @media only screen and (max-width: 768px) {
-            body {
-                padding: 10px;
-            }
-
-            .header {
-                padding: 18px;
-            }
-
-            .content {
-                padding: 20px;
+            .mobile-hidden {
+                display: none;
             }
 
             .summary-grid {
