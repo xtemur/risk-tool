@@ -11,6 +11,7 @@ This comprehensive analysis evaluates the performance of a machine learning-base
 - **Evaluation Period**: Variable (41-100 trading days per trader)
 - **Risk Reduction Scenarios**: 25%, 50%, 70%, 90%
 - **Success Rate**: 72.7% (8 out of 11 traders show positive improvement)
+  - Note: This represents exactly 8/11 = 0.727 or 72.7%
 
 ### Financial Impact Summary
 | Risk Reduction Level | Total Net Benefit | Overall Improvement | Intervention Rate | Volatility Reduction |
@@ -58,16 +59,22 @@ The system demonstrates strong risk-return efficiency:
 ## Statistical Analysis
 
 ### Statistical Significance Testing
-**All scenarios demonstrate statistically significant improvements (p < 0.05)**
+**Results show statistically significant improvements with important caveats**
 
 | Scenario | Mean Net Benefit | 95% Confidence Interval | p-value | Effect Size | Success Rate |
 |----------|------------------|------------------------|---------|-------------|--------------|
-| 25% | $9,275 | $2,490 to $16,926 | 0.036 | Small | 72.7% |
-| 50% | $24,055 | $7,523 to $40,997 | 0.024 | Small-Medium | 72.7% |
-| 70% | $31,327 | $10,134 to $53,241 | 0.020 | Small-Medium | 72.7% |
-| 90% | $44,962 | $14,559 to $77,861 | 0.022 | Medium-Large | 72.7% |
+| 25% | $9,275 | $2,343 to $16,746 | 0.037 | Medium (0.73) | 72.7% (8/11) |
+| 50% | $24,055 | $7,966 to $41,342 | 0.028 | Large (0.80) | 72.7% (8/11) |
+| 70% | $31,327 | $10,993 to $53,573 | 0.022 | Large (0.83) | 72.7% (8/11) |
+| 90% | $44,962 | $15,973 to $78,164 | 0.022 | Large (0.82) | 72.7% (8/11) |
 
-*Note: Results based on paired t-tests with 11 traders. All confidence intervals exclude zero, confirming significant positive effects.*
+**Statistical Methodology**: Results based on Wilcoxon signed-rank tests (non-parametric) with bootstrap confidence intervals.
+
+**Important Caveats**:
+- Small sample size (n=11) limits statistical power
+- Success rate not significantly different from random (p=0.227 vs 50% null)
+- Results may not be robust to outliers
+- Multiple testing correction not applied
 
 ### Loss Mitigation vs Opportunity Cost
 | Scenario | Avoided Losses | Missed Gains | Net Benefit | Efficiency Ratio |

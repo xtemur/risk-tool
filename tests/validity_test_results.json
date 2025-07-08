@@ -1,0 +1,133 @@
+{
+  "data_integrity": {
+    "5093": {
+      "temporal_ordering_valid": true,
+      "train_size": 220,
+      "test_size": 56,
+      "test_ratio": 0.2028985507246377,
+      "date_overlap": 0,
+      "total_days": 276
+    },
+    "4004": {
+      "temporal_ordering_valid": true,
+      "train_size": 335,
+      "test_size": 84,
+      "test_ratio": 0.20047732696897375,
+      "date_overlap": 0,
+      "total_days": 419
+    },
+    "4003": {
+      "temporal_ordering_valid": true,
+      "train_size": 314,
+      "test_size": 79,
+      "test_ratio": 0.2010178117048346,
+      "date_overlap": 0,
+      "total_days": 393
+    },
+    "3946": {
+      "temporal_ordering_valid": true,
+      "train_size": 380,
+      "test_size": 95,
+      "test_ratio": 0.2,
+      "date_overlap": 0,
+      "total_days": 475
+    },
+    "3950": {
+      "temporal_ordering_valid": true,
+      "train_size": 400,
+      "test_size": 100,
+      "test_ratio": 0.2,
+      "date_overlap": 0,
+      "total_days": 500
+    },
+    "3956": {
+      "temporal_ordering_valid": true,
+      "train_size": 295,
+      "test_size": 74,
+      "test_ratio": 0.2005420054200542,
+      "date_overlap": 0,
+      "total_days": 369
+    },
+    "3951": {
+      "temporal_ordering_valid": true,
+      "train_size": 296,
+      "test_size": 75,
+      "test_ratio": 0.20215633423180593,
+      "date_overlap": 0,
+      "total_days": 371
+    },
+    "5580": {
+      "temporal_ordering_valid": true,
+      "train_size": 164,
+      "test_size": 41,
+      "test_ratio": 0.2,
+      "date_overlap": 0,
+      "total_days": 205
+    },
+    "3942": {
+      "temporal_ordering_valid": true,
+      "train_size": 348,
+      "test_size": 88,
+      "test_ratio": 0.2018348623853211,
+      "date_overlap": 0,
+      "total_days": 436
+    },
+    "4396": {
+      "temporal_ordering_valid": true,
+      "train_size": 202,
+      "test_size": 51,
+      "test_ratio": 0.2015810276679842,
+      "date_overlap": 0,
+      "total_days": 253
+    },
+    "3943": {
+      "temporal_ordering_valid": true,
+      "train_size": 171,
+      "test_size": 43,
+      "test_ratio": 0.20093457943925233,
+      "date_overlap": 0,
+      "total_days": 214
+    }
+  },
+  "overfitting_tests": {},
+  "sanity_checks": {
+    "scenario_25": {
+      "unrealistic_improvements": 0,
+      "mean_intervention_rate": 0.1900686478946718,
+      "std_intervention_rate": 0.1411840718073034,
+      "suspicious_traders": []
+    },
+    "scenario_50": {
+      "unrealistic_improvements": 0,
+      "mean_intervention_rate": 0.18329569948085647,
+      "std_intervention_rate": 0.14089036129122506,
+      "suspicious_traders": []
+    },
+    "scenario_70": {
+      "unrealistic_improvements": 0,
+      "mean_intervention_rate": 0.18521347198020208,
+      "std_intervention_rate": 0.1438073606334429,
+      "suspicious_traders": []
+    },
+    "scenario_90": {
+      "unrealistic_improvements": 0,
+      "mean_intervention_rate": 0.1846492271435114,
+      "std_intervention_rate": 0.14894164503541496,
+      "suspicious_traders": []
+    }
+  },
+  "statistical_tests": {
+    "success_rate_consistency": {
+      "success_rates": [
+        0.7272727272727273,
+        0.7272727272727273,
+        0.7272727272727273,
+        0.7272727272727273
+      ],
+      "all_identical": true
+    }
+  },
+  "red_flags": [
+    "SUSPICIOUS: All scenarios have identical success rate (72.7%)"
+  ]
+}
