@@ -171,7 +171,6 @@ class SignalGenerator:
             trader_stats AS (
                 SELECT
                     account_id,
-                    MAX(trade_date) as last_trade_date,
                     AVG(daily_pnl) as avg_daily_pnl,
                     SUM(daily_pnl) as total_pnl,
                     COUNT(*) as trading_days,
@@ -188,6 +187,13 @@ class SignalGenerator:
                     MAX(highest_trade_pnl) as highest_pnl,
                     MIN(lowest_trade_pnl) as lowest_pnl
                 FROM daily_pnl
+                GROUP BY account_id
+            ),
+            last_trade_dates AS (
+                SELECT
+                    account_id,
+                    MAX(trade_date) as last_trade_date
+                FROM trades
                 GROUP BY account_id
             ),
             all_time_daily_pnl AS (
@@ -232,7 +238,7 @@ class SignalGenerator:
             )
             SELECT
                 ts.account_id,
-                ts.last_trade_date,
+                ltd.last_trade_date,
                 COALESCE(lp.last_trading_day_pnl, 0) as last_trading_day_pnl,
                 COALESCE(ts.sharpe_30d, 0) as sharpe_30d,
                 COALESCE(ts.avg_daily_pnl, 0) as avg_daily_pnl,
@@ -249,6 +255,7 @@ class SignalGenerator:
                 COALESCE(ats.all_time_highest_pnl, 0) as all_time_highest_pnl,
                 COALESCE(ats.all_time_lowest_pnl, 0) as all_time_lowest_pnl
             FROM trader_stats ts
+            LEFT JOIN last_trade_dates ltd ON ts.account_id = ltd.account_id
             LEFT JOIN latest_pnl lp ON ts.account_id = lp.account_id
             LEFT JOIN all_time_stats ats ON ts.account_id = ats.account_id
             """
