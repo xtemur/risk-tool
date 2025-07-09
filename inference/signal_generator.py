@@ -14,6 +14,9 @@ import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.utils import load_config
+from src.data_processing import create_trader_day_panel
+from src.trader_data_processor import ImprovedTraderProcessor
+from src.causal_impact_evaluation import CausalImpactEvaluator
 from .email_service import EmailService
 
 logging.basicConfig(level=logging.INFO)
@@ -30,6 +33,8 @@ class SignalGenerator:
         self.optimal_thresholds = {}
         self.trader_data = {}
         self.email_service = None
+        self.trader_processor = ImprovedTraderProcessor(config_path)
+        self.causal_evaluator = CausalImpactEvaluator()
 
         # Load optimal thresholds
         self.load_optimal_thresholds()
@@ -168,26 +173,31 @@ class SignalGenerator:
                 WHERE trade_date >= ?
                 GROUP BY account_id, trade_date
             ),
-            trader_stats AS (
+            trader_stats_base AS (
                 SELECT
                     account_id,
                     AVG(daily_pnl) as avg_daily_pnl,
                     SUM(daily_pnl) as total_pnl,
                     COUNT(*) as trading_days,
-                    CASE
-                        WHEN COUNT(*) > 1 THEN
-                            COALESCE((AVG(daily_pnl) / NULLIF(
-                                SQRT(ABS(SUM((daily_pnl - (SELECT AVG(daily_pnl) FROM daily_pnl d2 WHERE d2.account_id = daily_pnl.account_id)) *
-                                        (daily_pnl - (SELECT AVG(daily_pnl) FROM daily_pnl d2 WHERE d2.account_id = daily_pnl.account_id))) /
-                                     (COUNT(*) - 1))), 0)) * SQRT(30), 0)
-                        ELSE 0
-                    END as sharpe_30d,
-                    AVG(CASE WHEN winning_trades > 0 THEN winning_pnl / winning_trades END) as avg_winning_trade,
-                    AVG(CASE WHEN losing_trades > 0 THEN losing_pnl / losing_trades END) as avg_losing_trade,
-                    MAX(highest_trade_pnl) as highest_pnl,
-                    MIN(lowest_trade_pnl) as lowest_pnl
+                    SUM(winning_pnl) / NULLIF(SUM(winning_trades), 0) as avg_winning_trade,
+                    SUM(losing_pnl) / NULLIF(SUM(losing_trades), 0) as avg_losing_trade,
+                    MAX(daily_pnl) as highest_pnl,
+                    MIN(daily_pnl) as lowest_pnl
                 FROM daily_pnl
                 GROUP BY account_id
+            ),
+            trader_stats AS (
+                SELECT
+                    tsb.*,
+                    CASE
+                        WHEN tsb.trading_days > 1 THEN
+                            tsb.avg_daily_pnl / NULLIF(SQRT(
+                                (SELECT SUM((dp.daily_pnl - tsb.avg_daily_pnl) * (dp.daily_pnl - tsb.avg_daily_pnl)) / (tsb.trading_days - 1)
+                                 FROM daily_pnl dp WHERE dp.account_id = tsb.account_id)
+                            ), 0) * SQRT(252)  -- Annualized Sharpe
+                        ELSE 0
+                    END as sharpe_30d
+                FROM trader_stats_base tsb
             ),
             last_trade_dates AS (
                 SELECT
@@ -211,22 +221,30 @@ class SignalGenerator:
                 FROM trades
                 GROUP BY account_id, trade_date
             ),
-            all_time_stats AS (
+            all_time_stats_base AS (
                 SELECT
                     account_id,
                     AVG(daily_pnl) as all_time_avg_daily_pnl,
-                    CASE
-                        WHEN COUNT(*) > 1 THEN
-                            COALESCE(AVG(daily_pnl) / NULLIF(
-                                SQRT(ABS((SUM(daily_pnl * daily_pnl) - SUM(daily_pnl) * SUM(daily_pnl) / COUNT(*)) / (COUNT(*) - 1))), 0) * SQRT(30), 0)
-                        ELSE 0
-                    END as all_time_sharpe,
-                    AVG(CASE WHEN winning_trades > 0 THEN winning_pnl / winning_trades END) as all_time_avg_winning_trade,
-                    AVG(CASE WHEN losing_trades > 0 THEN losing_pnl / losing_trades END) as all_time_avg_losing_trade,
-                    MAX(highest_trade_pnl) as all_time_highest_pnl,
-                    MIN(lowest_trade_pnl) as all_time_lowest_pnl
+                    COUNT(*) as all_time_trading_days,
+                    SUM(winning_pnl) / NULLIF(SUM(winning_trades), 0) as all_time_avg_winning_trade,
+                    SUM(losing_pnl) / NULLIF(SUM(losing_trades), 0) as all_time_avg_losing_trade,
+                    MAX(daily_pnl) as all_time_highest_pnl,
+                    MIN(daily_pnl) as all_time_lowest_pnl
                 FROM all_time_daily_pnl
                 GROUP BY account_id
+            ),
+            all_time_stats AS (
+                SELECT
+                    atsb.*,
+                    CASE
+                        WHEN atsb.all_time_trading_days > 1 THEN
+                            atsb.all_time_avg_daily_pnl / NULLIF(SQRT(
+                                (SELECT SUM((atdp.daily_pnl - atsb.all_time_avg_daily_pnl) * (atdp.daily_pnl - atsb.all_time_avg_daily_pnl)) / (atsb.all_time_trading_days - 1)
+                                 FROM all_time_daily_pnl atdp WHERE atdp.account_id = atsb.account_id)
+                            ), 0) * SQRT(252)  -- Annualized Sharpe
+                        ELSE 0
+                    END as all_time_sharpe
+                FROM all_time_stats_base atsb
             ),
             latest_pnl AS (
                 SELECT
@@ -400,25 +418,48 @@ class SignalGenerator:
 
         return bg_color, text_color, intensity_class
 
-    def get_latest_trader_data(self, lookback_days: int = 1) -> Dict[int, pd.Series]:
-        """Get the most recent data for each active trader."""
-        if not self.trader_data:
-            self.load_trader_data()
+    def get_latest_trader_data(self, lookback_days: int = 60) -> Dict[int, pd.Series]:
+        """Get the most recent data for each active trader by fetching fresh data from database."""
+        logger.info("Fetching fresh data from database for signal generation...")
+
+        # Create fresh trader-day panel from database
+        panel_df = create_trader_day_panel(self.config)
 
         latest_records = {}
 
-        for trader_id, df in self.trader_data.items():
-            if df.empty:
+        for trader_id in self.config['active_traders']:
+            # Extract trader data
+            trader_data = panel_df[panel_df['account_id'] == trader_id].copy()
+
+            if trader_data.empty:
+                logger.warning(f"No data found for trader {trader_id}")
                 continue
 
-            # Get the latest record for this trader
-            latest_record = df.sort_values('trade_date').iloc[-1]
-            latest_records[trader_id] = latest_record
+            # Rename columns to match expected format
+            trader_data = trader_data.rename(columns={'trade_date': 'date', 'account_id': 'trader_id'})
 
+            # Create features using the existing processor
+            try:
+                trader_features = self.trader_processor.create_improved_features(trader_data)
+
+                if not trader_features.empty:
+                    # Get the latest record
+                    latest_record = trader_features.sort_values('date').iloc[-1]
+                    latest_records[trader_id] = latest_record
+                    logger.info(f"Processed fresh data for trader {trader_id}, last date: {latest_record['date']}")
+                else:
+                    logger.warning(f"No features generated for trader {trader_id}")
+
+            except Exception as e:
+                logger.error(f"Error creating features for trader {trader_id}: {e}")
+                continue
+
+        logger.info(f"Generated fresh features for {len(latest_records)} traders")
+        logger.info(latest_records)
         return latest_records
 
     def generate_predictions(self, trader_data_dict: Dict[int, pd.Series]) -> Dict[int, Dict]:
-        """Generate predictions for each trader using their specific model."""
+        """Generate predictions using causal impact evaluation models."""
         if not self.trader_models:
             self.load_trader_models()
 
@@ -432,64 +473,54 @@ class SignalGenerator:
             model_data = self.trader_models[trader_id]
 
             try:
-                # Extract the actual model from the dictionary
-                if isinstance(model_data, dict):
-                    model = model_data.get('classification_model')
-                    feature_names = model_data.get('feature_names', [])
-                else:
-                    model = model_data
-                    feature_names = []
+                # Get feature names from model
+                feature_names = model_data.get('feature_names', [])
 
-                if model is None:
-                    logger.error(f"No classification model found for trader {trader_id}")
-                    continue
-
-                # Convert series to dataframe for prediction
+                # Convert series to dataframe
                 data_df = pd.DataFrame([data_series])
 
-                # Use feature names from model if available, otherwise filter columns
+                # Prepare features for prediction
                 if feature_names:
-                    # Check if all required features are available
                     missing_features = [f for f in feature_names if f not in data_df.columns]
                     if missing_features:
                         logger.warning(f"Missing features for trader {trader_id}: {missing_features}")
-                        # Use available features only
                         available_features = [f for f in feature_names if f in data_df.columns]
                         if not available_features:
                             logger.error(f"No features available for trader {trader_id}")
                             continue
-                        feature_cols = available_features
+                        X_test = data_df[available_features]
                     else:
-                        feature_cols = feature_names
+                        X_test = data_df[feature_names]
                 else:
-                    # Fallback to removing known non-feature columns
+                    # Fallback
                     feature_cols = [col for col in data_df.columns if col not in [
-                        'trader_id', 'date', 'target_pnl', 'target_large_loss', 'trade_date'
+                        'trader_id', 'date', 'target_pnl', 'target_large_loss', 'trade_date', 'daily_pnl'
                     ]]
+                    X_test = data_df[feature_cols]
 
-                if not feature_cols:
-                    logger.warning(f"No feature columns found for trader {trader_id}")
+                # Use causal impact models
+                var_model = model_data.get('var_model')
+                classification_model = model_data.get('classification_model')
+
+                if var_model is None or classification_model is None:
+                    logger.error(f"Missing var_model or classification_model for trader {trader_id}")
                     continue
 
-                X = data_df[feature_cols]
-
-                # Make prediction using the trader's model
-                prediction = model.predict(X)[0]
-                prediction_proba = model.predict_proba(X)[0, 1] if hasattr(model, 'predict_proba') else 0.5
-
-                # Convert prediction to VaR-like interpretation
-                # Since these models predict large loss probability, we'll use it directly
-                var_prediction = prediction_proba * -5000  # Scale to dollar amount using probability
-                loss_probability = prediction_proba
+                logger.info("="*60)
+                logger.info(X_test.columns)
+                logger.info(X_test)
+                # Generate predictions using causal impact approach
+                var_predictions = var_model.predict(X_test)[0]
+                loss_probabilities = classification_model.predict_proba(X_test)[0, 1]
 
                 predictions[trader_id] = {
-                    'var_prediction': var_prediction,
-                    'loss_probability': loss_probability,
-                    'model_confidence': max(prediction_proba, 1 - prediction_proba),
-                    'feature_count': len(feature_cols)
+                    'var_prediction': var_predictions,
+                    'loss_probability': loss_probabilities,
+                    'model_confidence': max(loss_probabilities, 1 - loss_probabilities),
+                    'feature_count': len(X_test.columns)
                 }
 
-                logger.info(f"Generated prediction for trader {trader_id}: VaR=${var_prediction:.2f}, P(Loss)={loss_probability:.3f}")
+                logger.info(f"Generated prediction for trader {trader_id}: VaR=${var_predictions:.2f}, P(Loss)={loss_probabilities:.3f}")
 
             except Exception as e:
                 logger.error(f"Error generating prediction for trader {trader_id}: {e}")
@@ -498,29 +529,25 @@ class SignalGenerator:
         return predictions
 
     def classify_risk_level(self, trader_id: int, var_pred: float, loss_prob: float) -> str:
-        """Classify risk level based on predictions and optimal thresholds."""
+        """Classify risk level using causal impact intervention logic."""
         # Get trader-specific thresholds
-        thresholds = self.optimal_thresholds.get(trader_id, {
+        trader_thresholds = self.optimal_thresholds.get(trader_id, {
             'var_threshold': -5000,
             'loss_prob_threshold': 0.15
         })
 
-        var_threshold = thresholds['var_threshold']
-        loss_prob_threshold = thresholds['loss_prob_threshold']
+        var_threshold = trader_thresholds['var_threshold']
+        loss_prob_threshold = trader_thresholds['loss_prob_threshold']
 
-        # Apply 70% risk reduction logic (optimal configuration from analysis)
-        adjusted_var_threshold = var_threshold * 0.7  # More conservative
-        adjusted_loss_prob_threshold = loss_prob_threshold * 0.7  # More conservative
+        # Apply intervention logic from causal impact evaluation
+        # High risk if model suggests intervention (don't trade)
+        should_intervene = (
+            (var_pred <= var_threshold) or
+            (loss_prob >= loss_prob_threshold)
+        )
 
-        # High risk conditions (using optimal thresholds)
-        if (loss_prob >= adjusted_loss_prob_threshold or var_pred <= adjusted_var_threshold):
+        if should_intervene:
             return 'high'
-
-        # Medium risk conditions (using standard thresholds)
-        elif (loss_prob >= loss_prob_threshold * 0.5 or var_pred <= var_threshold * 0.5):
-            return 'medium'
-
-        # Low risk
         else:
             return 'low'
 
@@ -550,14 +577,14 @@ class SignalGenerator:
         return signals
 
     def generate_alerts(self, predictions_dict: Dict[int, Dict], trader_names: Dict[int, str] = None) -> List[Dict]:
-        """Generate critical alerts for high-risk situations."""
+        """Generate critical alerts based on intervention recommendations."""
         alerts = []
 
         if trader_names is None:
             trader_names = self.get_trader_names()
 
         for trader_id, pred_data in predictions_dict.items():
-            var_amount = abs(pred_data['var_prediction'])
+            var_prediction = pred_data['var_prediction']
             loss_prob = pred_data['loss_probability']
 
             # Get trader name
@@ -565,25 +592,35 @@ class SignalGenerator:
             trader_label = f"Trader {trader_id} ({trader_name})"
 
             # Get trader-specific thresholds
-            thresholds = self.optimal_thresholds.get(trader_id, {})
-            var_threshold = abs(thresholds.get('var_threshold', -5000))
-            loss_prob_threshold = thresholds.get('loss_prob_threshold', 0.15)
+            trader_thresholds = self.optimal_thresholds.get(trader_id, {})
+            var_threshold = trader_thresholds.get('var_threshold', -5000)
+            loss_prob_threshold = trader_thresholds.get('loss_prob_threshold', 0.15)
 
-            # Critical risk: Exceeds optimal thresholds significantly
-            if var_amount >= var_threshold * 1.5 or loss_prob >= loss_prob_threshold * 1.5:
-                alerts.append({
-                    'trader_id': str(trader_id),
-                    'trader_label': trader_label,
-                    'message': f"CRITICAL: Exceeds optimal risk thresholds. VaR: ${var_amount:,.0f} (threshold: ${var_threshold:,.0f}), Loss Prob: {loss_prob:.1%} (threshold: {loss_prob_threshold:.1%})"
-                })
+            # Check if intervention is recommended
+            should_intervene = (
+                (var_prediction <= var_threshold) or
+                (loss_prob >= loss_prob_threshold)
+            )
 
-            # High risk: Exceeds optimal thresholds
-            elif var_amount >= var_threshold or loss_prob >= loss_prob_threshold:
-                alerts.append({
-                    'trader_id': str(trader_id),
-                    'trader_label': trader_label,
-                    'message': f"WARNING: Risk approaching limits. Consider position reduction per optimal strategy."
-                })
+            if should_intervene:
+                # Determine severity
+                var_ratio = var_prediction / var_threshold if var_threshold != 0 else 1
+                prob_ratio = loss_prob / loss_prob_threshold if loss_prob_threshold != 0 else 1
+
+                if var_ratio <= 0.5 or prob_ratio >= 2.0:
+                    # Critical intervention needed
+                    alerts.append({
+                        'trader_id': str(trader_id),
+                        'trader_label': trader_label,
+                        'message': f"CRITICAL INTERVENTION: Model strongly recommends reducing position. VaR: ${var_prediction:,.0f} (threshold: ${var_threshold:,.0f}), Loss Prob: {loss_prob:.1%} (threshold: {loss_prob_threshold:.1%})"
+                    })
+                else:
+                    # Standard intervention
+                    alerts.append({
+                        'trader_id': str(trader_id),
+                        'trader_label': trader_label,
+                        'message': f"INTERVENTION RECOMMENDED: Consider reducing position size by 50% based on model prediction."
+                    })
 
         return alerts
 
@@ -674,9 +711,9 @@ class SignalGenerator:
             )
 
             lowest_pnl_color = self.calculate_heatmap_color(
-                abs(db_metrics.get('lowest_pnl', 0)),
-                abs(db_metrics.get('all_time_lowest_pnl', 0)),
-                'lower_better'
+                db_metrics.get('lowest_pnl', 0),
+                db_metrics.get('all_time_lowest_pnl', 0),
+                'higher_better'  # For losses, less negative (higher) is better
             )
 
             signal = {
@@ -715,9 +752,9 @@ class SignalGenerator:
             }
             trader_signals.append(signal)
 
-        # Sort by risk level and loss probability
-        risk_order = {'high': 0, 'medium': 1, 'low': 2}
-        trader_signals.sort(key=lambda x: (risk_order[x['risk_level']], -x['loss_probability']))
+        # Sort by risk level (high risk first) and loss probability
+        risk_order = {'high': 0, 'low': 1}
+        trader_signals.sort(key=lambda x: (risk_order.get(x['risk_level'], 1), -x['loss_probability']))
 
         # Generate alerts
         alerts = self.generate_alerts(predictions, trader_names)
@@ -734,7 +771,8 @@ class SignalGenerator:
                 'max_loss_prob': np.max(loss_probs),
                 'total_warning_signals': sum(len(s['warning_signals']) for s in trader_signals),
                 'using_optimal_thresholds': True,
-                'risk_reduction_level': '70%'  # From our analysis
+                'intervention_based': True,
+                'causal_impact_model': True
             }
         else:
             summary_stats = {
@@ -744,7 +782,8 @@ class SignalGenerator:
                 'max_loss_prob': 0,
                 'total_warning_signals': 0,
                 'using_optimal_thresholds': True,
-                'risk_reduction_level': '70%'
+                'intervention_based': True,
+                'causal_impact_model': True
             }
 
         # Prepare final signal data
