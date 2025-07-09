@@ -251,9 +251,32 @@ class SignalGenerator:
         """Generate predictions using the new RiskPredictor class."""
         return self.risk_predictor.generate_predictions_batch(trader_data_dict)
 
-    def classify_risk_level(self, trader_id: int, var_pred: float, loss_prob: float) -> str:
-        """Classify risk level using the new RiskPredictor class."""
-        return self.risk_predictor.classify_risk_level(trader_id, var_pred, loss_prob)
+    def classify_risk_level(self, trader_id: int, var_pred: float, loss_prob: float,
+                          use_weighted_formula: bool = True, alpha: float = 0.6,
+                          beta: float = 0.4, thresholds: Dict[str, float] = None,
+                          var_range: Tuple[float, float] = None) -> str:
+        """
+        Classify risk level using either binary thresholds or weighted formula.
+
+        Args:
+            trader_id: Trader account ID
+            var_pred: VaR prediction value
+            loss_prob: Loss probability prediction
+            use_weighted_formula: Whether to use weighted formula (default True)
+            alpha: Weight for VaR component
+            beta: Weight for loss probability component
+            thresholds: Risk level thresholds for weighted formula
+            var_range: VaR normalization range
+
+        Returns:
+            Risk level classification
+        """
+        if use_weighted_formula:
+            return self.risk_predictor.classify_risk_level_weighted(
+                var_pred, loss_prob, alpha, beta, thresholds, var_range
+            )
+        else:
+            return self.risk_predictor.classify_risk_level(trader_id, var_pred, loss_prob)
 
     def generate_warning_signals(self, trader_id: int, row: pd.Series) -> List[str]:
         """Generate warning signals based on trader metrics and optimal thresholds."""
@@ -309,12 +332,20 @@ class SignalGenerator:
 
         return alerts
 
-    def generate_daily_signals(self, target_date: str = None) -> Dict:
+    def generate_daily_signals(self, target_date: str = None, use_weighted_formula: bool = True,
+                             alpha: float = 0.6, beta: float = 0.4,
+                             thresholds: Dict[str, float] = None,
+                             var_range: Tuple[float, float] = None) -> Dict:
         """
         Generate complete daily signal report using trader-specific models.
 
         Args:
             target_date: Date string (YYYY-MM-DD) or None for latest
+            use_weighted_formula: Whether to use weighted risk formula (default True)
+            alpha: Weight for VaR component (default 0.6)
+            beta: Weight for loss probability component (default 0.4)
+            thresholds: Risk level thresholds for weighted formula
+            var_range: VaR normalization range for weighted formula
 
         Returns:
             Dictionary with signal data for email template
@@ -437,11 +468,21 @@ class SignalGenerator:
                 'risk_level': self.classify_risk_level(
                     trader_id,
                     pred_data['var_prediction'],
-                    pred_data['loss_probability']
+                    pred_data['loss_probability'],
+                    use_weighted_formula,
+                    alpha,
+                    beta,
+                    thresholds,
+                    var_range
                 ),
                 'var_5pct': pred_data['var_prediction'],
                 'loss_probability': pred_data['loss_probability'],
                 'model_confidence': pred_data.get('model_confidence', 0.5),
+                'risk_score': self.risk_predictor.calculate_weighted_risk_score(
+                    pred_data['var_prediction'],
+                    pred_data['loss_probability'],
+                    alpha, beta, var_range, 'sigmoid'
+                ) if use_weighted_formula else None,
                 'last_trade_date': str(db_metrics.get('last_trade_date', 'N/A')).replace('2025-', '') if db_metrics.get('last_trade_date', 'N/A') != 'N/A' else 'N/A',
                 'last_trading_day_pnl': db_metrics.get('last_trading_day_pnl', 0),
                 'sharpe_30d': db_metrics.get('sharpe_30d', 0),
@@ -474,9 +515,18 @@ class SignalGenerator:
             }
             trader_signals.append(signal)
 
-        # Sort by risk level (high risk first) and loss probability
-        risk_order = {'high': 0, 'low': 1}
-        trader_signals.sort(key=lambda x: (risk_order.get(x['risk_level'], 1), -x['loss_probability']))
+        # Sort by risk level (high risk first) and loss probability/risk score
+        if use_weighted_formula:
+            # 4-level classification sorting
+            risk_order = {'High Risk': 0, 'Medium Risk': 1, 'Low Risk': 2, 'Neutral': 3}
+            trader_signals.sort(key=lambda x: (
+                risk_order.get(x['risk_level'], 3),
+                -x.get('risk_score', 0) if x.get('risk_score') is not None else -x['loss_probability']
+            ))
+        else:
+            # Binary classification sorting
+            risk_order = {'high': 0, 'low': 1}
+            trader_signals.sort(key=lambda x: (risk_order.get(x['risk_level'], 1), -x['loss_probability']))
 
         # Generate alerts
         alerts = self.generate_alerts(predictions, trader_names)
@@ -494,7 +544,11 @@ class SignalGenerator:
                 'total_warning_signals': sum(len(s['warning_signals']) for s in trader_signals),
                 'using_optimal_thresholds': True,
                 'intervention_based': True,
-                'causal_impact_model': True
+                'causal_impact_model': True,
+                'weighted_formula_enabled': use_weighted_formula,
+                'alpha': alpha if use_weighted_formula else None,
+                'beta': beta if use_weighted_formula else None,
+                'risk_classification_levels': 4 if use_weighted_formula else 2
             }
         else:
             summary_stats = {
@@ -505,7 +559,11 @@ class SignalGenerator:
                 'total_warning_signals': 0,
                 'using_optimal_thresholds': True,
                 'intervention_based': True,
-                'causal_impact_model': True
+                'causal_impact_model': True,
+                'weighted_formula_enabled': use_weighted_formula,
+                'alpha': alpha if use_weighted_formula else None,
+                'beta': beta if use_weighted_formula else None,
+                'risk_classification_levels': 4 if use_weighted_formula else 2
             }
 
         # Prepare final signal data

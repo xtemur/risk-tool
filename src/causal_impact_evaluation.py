@@ -16,9 +16,10 @@ class CausalImpactEvaluator:
     """
     Evaluates the causal impact of model-based trading interventions on unseen test data.
 
-    When model thresholds indicate 'don't trade', actual PnL is multiplied by 0.5:
-    - Negative PnL: avoid half the loss
-    - Positive PnL: miss half the gain
+    Enhanced to support:
+    - Multiple PnL reduction levels (0%, 10%, 30%, 60%)
+    - Weighted risk formula (alpha * VaR + beta * LossProb)
+    - 4-level risk classification
     """
 
     def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool"):
@@ -38,6 +39,10 @@ class CausalImpactEvaluator:
             }
             for thresh in thresholds_data["thresholds"]
         }
+
+        # PnL reduction levels to test
+        self.reduction_levels = [0.0, 0.1, 0.3, 0.6]  # 0%, 10%, 30%, 60%
+        self.default_reduction = 0.5  # Current system default
 
         self.results = {}
 
@@ -77,31 +82,127 @@ class CausalImpactEvaluator:
 
         return predictions_df
 
-    def apply_intervention_logic(self, predictions_df: pd.DataFrame, trader_id: str) -> pd.DataFrame:
-        """Apply intervention logic based on model thresholds."""
-        trader_thresholds = self.thresholds[trader_id]
-        var_threshold = trader_thresholds["var_threshold"]
-        loss_prob_threshold = trader_thresholds["loss_prob_threshold"]
+    def calculate_weighted_risk_score(self, predictions_df: pd.DataFrame,
+                                    alpha: float = 0.6, beta: float = 0.4) -> pd.DataFrame:
+        """
+        Calculate weighted risk score: alpha * normalized_VaR + beta * normalized_LossProb
+        """
+        # Normalize VaR to 0-1 scale (lower VaR = higher risk)
+        var_min = predictions_df['var_prediction'].min()
+        var_max = predictions_df['var_prediction'].max()
 
-        # Determine intervention decisions
-        # Intervene if VaR prediction is below threshold OR loss probability is above threshold
-        should_intervene = (
-            (predictions_df['var_prediction'] <= var_threshold) |
-            (predictions_df['loss_probability'] >= loss_prob_threshold)
-        )
+        if var_max != var_min:
+            # Invert normalization so higher score = higher risk
+            normalized_var = (var_max - predictions_df['var_prediction']) / (var_max - var_min)
+        else:
+            normalized_var = 0.5  # Neutral if no variance
 
-        # Calculate adjusted PnL
-        # If we intervene (don't trade), multiply actual PnL by 0.5
+        # Loss probability is already 0-1 scale
+        normalized_loss_prob = predictions_df['loss_probability']
+
+        # Calculate weighted risk score
+        risk_score = alpha * normalized_var + beta * normalized_loss_prob
+
+        predictions_df['normalized_var'] = normalized_var
+        predictions_df['normalized_loss_prob'] = normalized_loss_prob
+        predictions_df['risk_score'] = risk_score
+
+        return predictions_df
+
+    def classify_risk_level_weighted(self, risk_score: pd.Series,
+                                   thresholds: Dict[str, float] = None) -> pd.Series:
+        """
+        Classify risk level using weighted risk score with 4 levels.
+        """
+        if thresholds is None:
+            thresholds = {
+                'high_threshold': 0.7,
+                'medium_threshold': 0.5,
+                'low_threshold': 0.3
+            }
+
+        def classify_single_score(score):
+            if score >= thresholds['high_threshold']:
+                return 'High Risk'
+            elif score >= thresholds['medium_threshold']:
+                return 'Medium Risk'
+            elif score >= thresholds['low_threshold']:
+                return 'Low Risk'
+            else:
+                return 'Neutral'
+
+        return risk_score.apply(classify_single_score)
+
+    def apply_intervention_logic(self, predictions_df: pd.DataFrame, trader_id: str,
+                               reduction_level: float = None,
+                               use_weighted_formula: bool = False,
+                               alpha: float = 0.6, beta: float = 0.4,
+                               risk_thresholds: Dict[str, float] = None) -> pd.DataFrame:
+        """
+        Apply intervention logic with configurable PnL reduction level.
+
+        Args:
+            predictions_df: DataFrame with predictions
+            trader_id: Trader ID
+            reduction_level: PnL reduction factor (0.0 = no reduction, 0.6 = 60% reduction)
+            use_weighted_formula: Whether to use weighted risk formula
+            alpha, beta: Coefficients for weighted formula
+            risk_thresholds: Thresholds for weighted risk classification
+        """
+        results_df = predictions_df.copy()
+
+        # Use default reduction if not specified
+        if reduction_level is None:
+            reduction_level = self.default_reduction
+
+        if use_weighted_formula:
+            # Calculate weighted risk score
+            results_df = self.calculate_weighted_risk_score(results_df, alpha, beta)
+
+            # Classify risk levels
+            results_df['risk_level'] = self.classify_risk_level_weighted(
+                results_df['risk_score'], risk_thresholds
+            )
+
+            # Intervention logic based on risk level
+            if risk_thresholds is None:
+                risk_thresholds = {
+                    'high_threshold': 0.7,
+                    'medium_threshold': 0.5,
+                    'low_threshold': 0.3
+                }
+
+            # Define intervention strategy
+            should_intervene = results_df['risk_score'] >= risk_thresholds['medium_threshold']
+
+        else:
+            # Use original binary threshold logic
+            trader_thresholds = self.thresholds[trader_id]
+            var_threshold = trader_thresholds["var_threshold"]
+            loss_prob_threshold = trader_thresholds["loss_prob_threshold"]
+
+            # Original intervention logic
+            should_intervene = (
+                (results_df['var_prediction'] <= var_threshold) |
+                (results_df['loss_probability'] >= loss_prob_threshold)
+            )
+
+            results_df['var_threshold'] = var_threshold
+            results_df['loss_prob_threshold'] = loss_prob_threshold
+
+        # Calculate adjusted PnL based on reduction level
+        # reduction_level: 0.0 = no reduction, 0.6 = 60% reduction
+        reduction_factor = 1.0 - reduction_level
+
         adjusted_pnl = np.where(should_intervene,
-                               predictions_df['daily_pnl'] * 0.5,
-                               predictions_df['daily_pnl'])
+                               results_df['daily_pnl'] * reduction_factor,
+                               results_df['daily_pnl'])
 
         # Add results to dataframe
-        results_df = predictions_df.copy()
         results_df['should_intervene'] = should_intervene
         results_df['adjusted_pnl'] = adjusted_pnl
-        results_df['var_threshold'] = var_threshold
-        results_df['loss_prob_threshold'] = loss_prob_threshold
+        results_df['reduction_level'] = reduction_level
+        results_df['reduction_factor'] = reduction_factor
 
         return results_df
 
@@ -113,11 +214,14 @@ class CausalImpactEvaluator:
         # Calculate avoided losses and missed gains
         intervention_days = results_df[results_df['should_intervene']]
 
+        # Get reduction level from the results
+        reduction_level = results_df['reduction_level'].iloc[0] if len(results_df) > 0 else self.default_reduction
+
         # Avoided losses: days where we intervened and actual PnL was negative
-        avoided_losses = intervention_days[intervention_days['daily_pnl'] < 0]['daily_pnl'].sum() * 0.5
+        avoided_losses = intervention_days[intervention_days['daily_pnl'] < 0]['daily_pnl'].sum() * reduction_level
 
         # Missed gains: days where we intervened and actual PnL was positive
-        missed_gains = intervention_days[intervention_days['daily_pnl'] > 0]['daily_pnl'].sum() * 0.5
+        missed_gains = intervention_days[intervention_days['daily_pnl'] > 0]['daily_pnl'].sum() * reduction_level
 
         # Intervention rate
         intervention_rate = results_df['should_intervene'].mean()
@@ -128,8 +232,13 @@ class CausalImpactEvaluator:
         # Performance improvement
         improvement_pct = ((adjusted_pnl - actual_pnl) / abs(actual_pnl) * 100) if actual_pnl != 0 else 0
 
+        # Risk-adjusted metrics
+        sharpe_actual = self.calculate_sharpe_ratio(results_df['daily_pnl'])
+        sharpe_adjusted = self.calculate_sharpe_ratio(results_df['adjusted_pnl'])
+
         return {
             'trader_id': trader_id,
+            'reduction_level': reduction_level,
             'actual_pnl': actual_pnl,
             'adjusted_pnl': adjusted_pnl,
             'net_benefit': net_benefit,
@@ -138,10 +247,23 @@ class CausalImpactEvaluator:
             'missed_gains': abs(missed_gains),  # Make positive for clarity
             'intervention_rate': intervention_rate,
             'total_days': len(results_df),
-            'intervention_days': intervention_days.shape[0]
+            'intervention_days': intervention_days.shape[0],
+            'sharpe_actual': sharpe_actual,
+            'sharpe_adjusted': sharpe_adjusted,
+            'sharpe_improvement': sharpe_adjusted - sharpe_actual
         }
 
-    def evaluate_trader(self, trader_id: str) -> Dict[str, Any]:
+    def calculate_sharpe_ratio(self, pnl_series: pd.Series) -> float:
+        """Calculate Sharpe ratio for a PnL series."""
+        if len(pnl_series) == 0 or pnl_series.std() == 0:
+            return 0.0
+        return pnl_series.mean() / pnl_series.std() * np.sqrt(252)  # Annualized
+
+    def evaluate_trader(self, trader_id: str,
+                      reduction_level: float = None,
+                      use_weighted_formula: bool = False,
+                      alpha: float = 0.6, beta: float = 0.4,
+                      risk_thresholds: Dict[str, float] = None) -> Dict[str, Any]:
         """Evaluate a single trader and return comprehensive results."""
         print(f"Evaluating trader {trader_id}...")
 
@@ -152,7 +274,10 @@ class CausalImpactEvaluator:
         predictions_df = self.generate_predictions(test_data, model_data)
 
         # Apply intervention logic
-        results_df = self.apply_intervention_logic(predictions_df, trader_id)
+        results_df = self.apply_intervention_logic(
+            predictions_df, trader_id, reduction_level,
+            use_weighted_formula, alpha, beta, risk_thresholds
+        )
 
         # Calculate metrics
         metrics = self.calculate_performance_metrics(results_df, trader_id)
@@ -170,7 +295,55 @@ class CausalImpactEvaluator:
         self.results[trader_id] = trader_results
         return trader_results
 
-    def evaluate_all_traders(self) -> Dict[str, Any]:
+    def evaluate_trader_multilevel(self, trader_id: str,
+                                 use_weighted_formula: bool = False,
+                                 alpha: float = 0.6, beta: float = 0.4,
+                                 risk_thresholds: Dict[str, float] = None) -> Dict[str, Any]:
+        """
+        Evaluate a single trader across all reduction levels.
+        """
+        print(f"Evaluating trader {trader_id} across all reduction levels...")
+
+        # Load data and model
+        test_data, model_data = self.load_trader_data(trader_id)
+
+        # Generate predictions
+        predictions_df = self.generate_predictions(test_data, model_data)
+
+        trader_results = {
+            'trader_id': trader_id,
+            'reduction_level_results': {},
+            'model_info': {
+                'var_model_features': model_data.get('feature_names', []),
+                'model_performance': model_data.get('test_metrics', {})
+            }
+        }
+
+        # Test each reduction level
+        for reduction_level in self.reduction_levels:
+            print(f"  Testing {reduction_level*100:.0f}% reduction...")
+
+            # Apply intervention logic
+            results_df = self.apply_intervention_logic(
+                predictions_df, trader_id, reduction_level,
+                use_weighted_formula, alpha, beta, risk_thresholds
+            )
+
+            # Calculate metrics
+            metrics = self.calculate_performance_metrics(results_df, trader_id)
+
+            # Store results
+            trader_results['reduction_level_results'][reduction_level] = {
+                'metrics': metrics,
+                'daily_results': results_df
+            }
+
+        return trader_results
+
+    def evaluate_all_traders(self, reduction_level: float = None,
+                           use_weighted_formula: bool = False,
+                           alpha: float = 0.6, beta: float = 0.4,
+                           risk_thresholds: Dict[str, float] = None) -> Dict[str, Any]:
         """Evaluate all traders with available models."""
         # Get list of available traders
         available_traders = [f.stem.split('_')[0] for f in self.models_path.glob("*_tuned_validated.pkl")]
@@ -181,7 +354,7 @@ class CausalImpactEvaluator:
         # Evaluate each trader
         for trader_id in available_traders:
             try:
-                self.evaluate_trader(trader_id)
+                self.evaluate_trader(trader_id, reduction_level, use_weighted_formula, alpha, beta, risk_thresholds)
             except Exception as e:
                 print(f"Error evaluating trader {trader_id}: {e}")
                 continue
@@ -195,7 +368,53 @@ class CausalImpactEvaluator:
             'evaluation_summary': {
                 'total_traders': len(available_traders),
                 'successful_evaluations': len(self.results),
-                'evaluation_date': pd.Timestamp.now().isoformat()
+                'evaluation_date': pd.Timestamp.now().isoformat(),
+                'reduction_level': reduction_level or self.default_reduction,
+                'used_weighted_formula': use_weighted_formula,
+                'alpha': alpha,
+                'beta': beta,
+                'risk_thresholds': risk_thresholds
+            }
+        }
+
+    def evaluate_all_traders_multilevel(self, use_weighted_formula: bool = False,
+                                      alpha: float = 0.6, beta: float = 0.4,
+                                      risk_thresholds: Dict[str, float] = None) -> Dict[str, Any]:
+        """Evaluate all traders across all reduction levels."""
+        # Get list of available traders
+        available_traders = [f.stem.split('_')[0] for f in self.models_path.glob("*_tuned_validated.pkl")]
+        available_traders = [t for t in available_traders if t in self.thresholds.keys()]
+
+        print(f"Found {len(available_traders)} traders to evaluate: {available_traders}")
+
+        all_results = {}
+
+        # Evaluate each trader
+        for trader_id in available_traders:
+            try:
+                trader_results = self.evaluate_trader_multilevel(
+                    trader_id, use_weighted_formula, alpha, beta, risk_thresholds
+                )
+                all_results[trader_id] = trader_results
+            except Exception as e:
+                print(f"Error evaluating trader {trader_id}: {e}")
+                continue
+
+        # Generate aggregate results
+        aggregate_results = self.calculate_aggregate_metrics_multilevel(all_results)
+
+        return {
+            'individual_results': all_results,
+            'aggregate_results': aggregate_results,
+            'evaluation_summary': {
+                'total_traders': len(available_traders),
+                'successful_evaluations': len(all_results),
+                'evaluation_date': pd.Timestamp.now().isoformat(),
+                'reduction_levels_tested': self.reduction_levels,
+                'used_weighted_formula': use_weighted_formula,
+                'alpha': alpha,
+                'beta': beta,
+                'risk_thresholds': risk_thresholds
             }
         }
 
@@ -228,6 +447,113 @@ class CausalImpactEvaluator:
             aggregate['overall_improvement_pct'] = 0
 
         return aggregate
+
+    def calculate_aggregate_metrics_multilevel(self, all_results: Dict[str, Any]) -> Dict[str, Any]:
+        """Calculate aggregate metrics across all traders and reduction levels."""
+        if not all_results:
+            return {}
+
+        aggregate_by_reduction = {}
+
+        # Aggregate by reduction level
+        for reduction_level in self.reduction_levels:
+            metrics_list = []
+
+            for trader_id, trader_results in all_results.items():
+                if reduction_level in trader_results['reduction_level_results']:
+                    metrics_list.append(trader_results['reduction_level_results'][reduction_level]['metrics'])
+
+            if metrics_list:
+                aggregate_by_reduction[reduction_level] = {
+                    'total_actual_pnl': sum(m['actual_pnl'] for m in metrics_list),
+                    'total_adjusted_pnl': sum(m['adjusted_pnl'] for m in metrics_list),
+                    'total_net_benefit': sum(m['net_benefit'] for m in metrics_list),
+                    'total_avoided_losses': sum(m['avoided_losses'] for m in metrics_list),
+                    'total_missed_gains': sum(m['missed_gains'] for m in metrics_list),
+                    'mean_intervention_rate': np.mean([m['intervention_rate'] for m in metrics_list]),
+                    'mean_improvement_pct': np.mean([m['improvement_pct'] for m in metrics_list]),
+                    'mean_sharpe_improvement': np.mean([m['sharpe_improvement'] for m in metrics_list]),
+                    'positive_improvements': sum(1 for m in metrics_list if m['net_benefit'] > 0),
+                    'total_traders': len(metrics_list)
+                }
+
+                # Calculate overall improvement percentage
+                total_actual = aggregate_by_reduction[reduction_level]['total_actual_pnl']
+                total_adjusted = aggregate_by_reduction[reduction_level]['total_adjusted_pnl']
+
+                if total_actual != 0:
+                    aggregate_by_reduction[reduction_level]['overall_improvement_pct'] = (
+                        (total_adjusted - total_actual) / abs(total_actual) * 100
+                    )
+                else:
+                    aggregate_by_reduction[reduction_level]['overall_improvement_pct'] = 0
+
+        return aggregate_by_reduction
+
+    def find_optimal_reduction_level(self, aggregate_results: Dict[str, Any]) -> Dict[str, Any]:
+        """Find the optimal reduction level based on various metrics."""
+        if not aggregate_results:
+            return {}
+
+        best_by_metric = {}
+
+        # Find best reduction level by different metrics
+        metrics_to_optimize = [
+            ('total_net_benefit', 'max'),
+            ('overall_improvement_pct', 'max'),
+            ('mean_sharpe_improvement', 'max'),
+            ('positive_improvements', 'max')
+        ]
+
+        for metric, direction in metrics_to_optimize:
+            values = [(level, results[metric]) for level, results in aggregate_results.items()]
+
+            if direction == 'max':
+                optimal_level, optimal_value = max(values, key=lambda x: x[1])
+            else:
+                optimal_level, optimal_value = min(values, key=lambda x: x[1])
+
+            best_by_metric[metric] = {
+                'optimal_reduction_level': optimal_level,
+                'optimal_value': optimal_value
+            }
+
+        # Calculate overall recommendation based on weighted score
+        recommendation_scores = {}
+        for level in self.reduction_levels:
+            if level in aggregate_results:
+                # Weighted score: 40% net benefit, 30% improvement %, 20% sharpe, 10% positive count
+                score = (
+                    0.4 * self.normalize_metric(aggregate_results[level]['total_net_benefit'],
+                                               [r['total_net_benefit'] for r in aggregate_results.values()]) +
+                    0.3 * self.normalize_metric(aggregate_results[level]['overall_improvement_pct'],
+                                               [r['overall_improvement_pct'] for r in aggregate_results.values()]) +
+                    0.2 * self.normalize_metric(aggregate_results[level]['mean_sharpe_improvement'],
+                                               [r['mean_sharpe_improvement'] for r in aggregate_results.values()]) +
+                    0.1 * self.normalize_metric(aggregate_results[level]['positive_improvements'],
+                                               [r['positive_improvements'] for r in aggregate_results.values()])
+                )
+                recommendation_scores[level] = score
+
+        if recommendation_scores:
+            overall_optimal = max(recommendation_scores.items(), key=lambda x: x[1])
+
+            return {
+                'best_by_metric': best_by_metric,
+                'overall_recommendation': {
+                    'optimal_reduction_level': overall_optimal[0],
+                    'score': overall_optimal[1]
+                },
+                'all_scores': recommendation_scores
+            }
+
+        return {}
+
+    def normalize_metric(self, value: float, all_values: List[float]) -> float:
+        """Normalize a metric value to 0-1 scale."""
+        if not all_values or max(all_values) == min(all_values):
+            return 0.5
+        return (value - min(all_values)) / (max(all_values) - min(all_values))
 
     def create_pnl_comparison_plot(self, trader_id: str, save_path: str = None) -> plt.Figure:
         """Create PnL comparison plot for a specific trader."""
@@ -381,21 +707,52 @@ def main():
     # Initialize evaluator
     evaluator = CausalImpactEvaluator()
 
-    # Run evaluation for all traders
-    print("Starting causal impact evaluation...")
-    results = evaluator.evaluate_all_traders()
-
     # Create output directory
     output_dir = Path("/Users/temurbekkhujaev/Repos/risk-tool/results/causal_impact_evaluation")
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Generate and save report
-    report = evaluator.generate_report()
-    with open(output_dir / "evaluation_report.txt", 'w') as f:
-        f.write(report)
+    print("Starting enhanced causal impact evaluation...")
 
-    # Create summary dashboard
-    dashboard_fig = evaluator.create_summary_dashboard(str(output_dir / "summary_dashboard.png"))
+    # Test 1: Original system (50% reduction, binary thresholds)
+    print("\n=== Testing Original System (50% reduction, binary thresholds) ===")
+    original_results = evaluator.evaluate_all_traders(reduction_level=0.5, use_weighted_formula=False)
+
+    # Test 2: Multilevel evaluation with binary system
+    print("\n=== Testing Multiple Reduction Levels (0%, 10%, 30%, 60%) with Binary System ===")
+    binary_multilevel_results = evaluator.evaluate_all_traders_multilevel(use_weighted_formula=False)
+
+    # Test 3: Multilevel evaluation with weighted formula
+    print("\n=== Testing Multiple Reduction Levels with Weighted Formula (α=0.6, β=0.4) ===")
+    weighted_multilevel_results = evaluator.evaluate_all_traders_multilevel(
+        use_weighted_formula=True, alpha=0.6, beta=0.4
+    )
+
+    # Save results
+    with open(output_dir / "original_system_results.pkl", 'wb') as f:
+        pickle.dump(original_results, f)
+
+    with open(output_dir / "binary_multilevel_results.pkl", 'wb') as f:
+        pickle.dump(binary_multilevel_results, f)
+
+    with open(output_dir / "weighted_multilevel_results.pkl", 'wb') as f:
+        pickle.dump(weighted_multilevel_results, f)
+
+    # Generate reports
+    original_report = evaluator.generate_report()
+    with open(output_dir / "original_system_report.txt", 'w') as f:
+        f.write(original_report)
+
+    # Generate multilevel reports
+    binary_report = evaluator.generate_multilevel_report(binary_multilevel_results)
+    with open(output_dir / "binary_multilevel_report.txt", 'w') as f:
+        f.write(binary_report)
+
+    weighted_report = evaluator.generate_multilevel_report(weighted_multilevel_results)
+    with open(output_dir / "weighted_multilevel_report.txt", 'w') as f:
+        f.write(weighted_report)
+
+    # Create summary dashboard (using original results for compatibility)
+    dashboard_fig = evaluator.create_summary_dashboard(str(output_dir / "original_system_dashboard.png"))
     plt.close(dashboard_fig)
 
     # Create individual trader plots
@@ -407,15 +764,85 @@ def main():
                                                        str(trader_plots_dir / f"trader_{trader_id}_pnl_comparison.png"))
         plt.close(plot_fig)
 
-    # Save detailed results
-    with open(output_dir / "detailed_results.pkl", 'wb') as f:
-        pickle.dump(results, f)
-
     print(f"\nEvaluation complete! Results saved to: {output_dir}")
-    print("\nSUMMARY:")
-    print(report.split("INDIVIDUAL TRADER RESULTS")[0])
+    print("\nORIGINAL SYSTEM SUMMARY:")
+    print(original_report.split("INDIVIDUAL TRADER RESULTS")[0])
 
-    return results
+    # Print optimal reduction level findings
+    if binary_multilevel_results.get('aggregate_results'):
+        binary_optimal = evaluator.find_optimal_reduction_level(binary_multilevel_results['aggregate_results'])
+        if binary_optimal:
+            print(f"\nBINARY SYSTEM OPTIMAL REDUCTION: {binary_optimal['overall_recommendation']['optimal_reduction_level']*100:.0f}%")
+
+    if weighted_multilevel_results.get('aggregate_results'):
+        weighted_optimal = evaluator.find_optimal_reduction_level(weighted_multilevel_results['aggregate_results'])
+        if weighted_optimal:
+            print(f"WEIGHTED FORMULA OPTIMAL REDUCTION: {weighted_optimal['overall_recommendation']['optimal_reduction_level']*100:.0f}%")
+
+    return {
+        'original_results': original_results,
+        'binary_multilevel_results': binary_multilevel_results,
+        'weighted_multilevel_results': weighted_multilevel_results
+    }
+
+def generate_multilevel_report(self, results: Dict[str, Any]) -> str:
+    """Generate comprehensive report for multilevel evaluation."""
+    if not results:
+        return "No evaluation results available."
+
+    report = []
+    report.append("="*80)
+    report.append("MULTI-LEVEL CAUSAL IMPACT EVALUATION REPORT")
+    report.append("="*80)
+    report.append("")
+
+    # Summary
+    summary = results['evaluation_summary']
+    report.append("EVALUATION SUMMARY")
+    report.append("-"*40)
+    report.append(f"Total Traders Evaluated: {summary['successful_evaluations']}")
+    report.append(f"Reduction Levels Tested: {[f'{level*100:.0f}%' for level in summary['reduction_levels_tested']]}")
+    report.append(f"Used Weighted Formula: {summary['used_weighted_formula']}")
+    if summary['used_weighted_formula']:
+        report.append(f"Alpha (VaR Weight): {summary['alpha']}")
+        report.append(f"Beta (LossProb Weight): {summary['beta']}")
+    report.append("")
+
+    # Aggregate results by reduction level
+    aggregate_results = results['aggregate_results']
+    report.append("AGGREGATE RESULTS BY REDUCTION LEVEL")
+    report.append("-"*40)
+
+    for level, metrics in aggregate_results.items():
+        report.append(f"\n{level*100:.0f}% PnL Reduction:")
+        report.append(f"  Total Actual PnL: ${metrics['total_actual_pnl']:,.2f}")
+        report.append(f"  Total Adjusted PnL: ${metrics['total_adjusted_pnl']:,.2f}")
+        report.append(f"  Total Net Benefit: ${metrics['total_net_benefit']:,.2f}")
+        report.append(f"  Overall Improvement: {metrics['overall_improvement_pct']:.2f}%")
+        report.append(f"  Mean Intervention Rate: {metrics['mean_intervention_rate']*100:.1f}%")
+        report.append(f"  Mean Sharpe Improvement: {metrics['mean_sharpe_improvement']:.3f}")
+        report.append(f"  Positive Improvements: {metrics['positive_improvements']}/{metrics['total_traders']}")
+
+    # Optimal reduction level analysis
+    optimal_analysis = self.find_optimal_reduction_level(aggregate_results)
+    if optimal_analysis:
+        report.append("\n")
+        report.append("OPTIMAL REDUCTION LEVEL ANALYSIS")
+        report.append("-"*40)
+
+        overall_rec = optimal_analysis['overall_recommendation']
+        report.append(f"Overall Recommendation: {overall_rec['optimal_reduction_level']*100:.0f}% reduction")
+        report.append(f"Recommendation Score: {overall_rec['score']:.3f}")
+        report.append("")
+
+        report.append("Best by Individual Metrics:")
+        for metric, info in optimal_analysis['best_by_metric'].items():
+            report.append(f"  {metric}: {info['optimal_reduction_level']*100:.0f}% (value: {info['optimal_value']:.2f})")
+
+    return "\n".join(report)
+
+# Add method to the class
+CausalImpactEvaluator.generate_multilevel_report = generate_multilevel_report
 
 
 if __name__ == "__main__":
