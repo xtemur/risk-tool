@@ -22,17 +22,17 @@ The Risk Management System is an advanced machine learning-based trading risk pr
 ## 📊 Executive Dashboard
 
 ### Performance Overview
-![Executive Summary Dashboard](executive_summary_dashboard.png)
+![Executive Summary Dashboard](results/executive_summary_dashboard.png)
 
 *This dashboard shows the comprehensive performance metrics across all risk reduction scenarios, including net benefit, overall improvement, intervention rates, and success rates.*
 
 ### Risk Reduction Analysis
-![Risk Reduction Scenarios](risk_reduction_scenarios.png)
+![Risk Reduction Scenarios](results/risk_reduction_scenarios.png)
 
 *Comparative analysis showing PnL improvements, risk-return efficiency, and avoided losses vs missed gains across different risk reduction levels.*
 
 ### Risk-Return Efficiency
-![Risk Return Heatmap](risk_return_heatmap.png)
+![Risk Return Heatmap](results/risk_return_heatmap.png)
 
 *Heatmap visualization showing the normalized performance scores across different risk reduction levels and key metrics.*
 

@@ -159,15 +159,18 @@ The system demonstrates robust performance across diverse trading styles and mar
 ### Generated Analysis Charts
 
 
+#### Executive Summary Dashboard
+![Executive Summary Dashboard](results/executive_summary_dashboard.png)
+
 *Comprehensive performance metrics across all risk reduction scenarios, showing net benefit, overall improvement, intervention rates, and success rates.*
 
 #### Risk Reduction Scenarios Comparison
-![Risk Reduction Scenarios](risk_reduction_scenarios.png)
+![Risk Reduction Scenarios](results/risk_reduction_scenarios.png)
 
 *Detailed comparison of PnL improvements, risk-return efficiency, and avoided losses vs missed gains across different risk reduction levels.*
 
 #### Risk-Return Efficiency Analysis
-![Risk Return Heatmap](risk_return_heatmap.png)
+![Risk Return Heatmap](results/risk_return_heatmap.png)
 
 *Heatmap visualization showing normalized performance scores across different risk reduction levels and key performance metrics.*
 
