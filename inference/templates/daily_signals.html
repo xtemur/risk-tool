@@ -154,6 +154,10 @@
             border-left: 3px solid #38a169;
         }
 
+        .risk-neutral {
+            border-left: 3px solid #718096;
+        }
+
         .footer {
             margin-top: 30px;
             padding: 20px 30px;
@@ -184,6 +188,7 @@
         .risk-indicator.high { background-color: #e53e3e; }
         .risk-indicator.medium { background-color: #dd6b20; }
         .risk-indicator.low { background-color: #38a169; }
+        .risk-indicator.neutral { background-color: #718096; }
 
         .mono-number {
             font-family: 'SF Mono', Monaco, 'Inconsolata', 'Roboto Mono', Consolas, 'Courier New', monospace;
@@ -218,6 +223,12 @@
             background-color: #c6f6d5;
             color: #2f855a;
             border: 1px solid #9ae6b4;
+        }
+
+        .risk-badge.neutral {
+            background-color: #e2e8f0;
+            color: #4a5568;
+            border: 1px solid #cbd5e0;
         }
 
         .alerts-section {
@@ -428,8 +439,16 @@
                         <div class="metric-value warning">{{ medium_risk_count }}</div>
                     </div>
                     <div class="metric">
+                        <div class="metric-label">Low Risk</div>
+                        <div class="metric-value normal">{{ low_risk_count }}</div>
+                    </div>
+                    <div class="metric">
+                        <div class="metric-label">Neutral</div>
+                        <div class="metric-value" style="color: #718096;">{{ neutral_risk_count }}</div>
+                    </div>
+                    <div class="metric">
                         <div class="metric-label">Total Monitored</div>
-                        <div class="metric-value normal">{{ total_traders }}</div>
+                        <div class="metric-value" style="color: #2d3748;">{{ total_traders }}</div>
                     </div>
                     {% if summary_stats %}
                     <div class="metric">

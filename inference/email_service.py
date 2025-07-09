@@ -89,6 +89,18 @@ class EmailService:
                 if s.get('risk_level') == 'medium'
             )
 
+        if 'low_risk_count' not in signal_data:
+            signal_data['low_risk_count'] = sum(
+                1 for s in signal_data.get('trader_signals', [])
+                if s.get('risk_level') == 'low'
+            )
+
+        if 'neutral_risk_count' not in signal_data:
+            signal_data['neutral_risk_count'] = sum(
+                1 for s in signal_data.get('trader_signals', [])
+                if s.get('risk_level') == 'neutral'
+            )
+
         if 'total_traders' not in signal_data:
             signal_data['total_traders'] = len(signal_data.get('trader_signals', []))
 

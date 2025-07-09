@@ -2,60 +2,60 @@
   "thresholds": [
     {
       "trader_id": "3942",
-      "var_threshold": -5429.1776134515085,
-      "loss_prob_threshold": 0.24680194883746803
+      "var_threshold": -3924.083370924705,
+      "loss_prob_threshold": 0.9434101964059743
     },
     {
       "trader_id": "3943",
-      "var_threshold": -19157.063857326983,
-      "loss_prob_threshold": 0.6983077379133928
+      "var_threshold": -18992.8590135223,
+      "loss_prob_threshold": 0.002219434646095272
     },
     {
       "trader_id": "3946",
-      "var_threshold": -3307.4525162657383,
-      "loss_prob_threshold": 0.717195907008158
+      "var_threshold": -3661.870604417245,
+      "loss_prob_threshold": 0.0057316065200142185
     },
     {
       "trader_id": "3950",
-      "var_threshold": -21691.759649414336,
-      "loss_prob_threshold": 0.9585972700533194
+      "var_threshold": -20947.09071733589,
+      "loss_prob_threshold": 0.01879829298739701
     },
     {
       "trader_id": "3951",
-      "var_threshold": -5285.0485650440505,
-      "loss_prob_threshold": 0.9493111560647298
+      "var_threshold": -5908.343052055072,
+      "loss_prob_threshold": 0.05061877800214995
     },
     {
       "trader_id": "3956",
-      "var_threshold": -6240.599702437198,
-      "loss_prob_threshold": 0.6276065125376495
+      "var_threshold": -5961.355194690908,
+      "loss_prob_threshold": 0.7403020884972028
     },
     {
       "trader_id": "4003",
-      "var_threshold": -3310.290032293069,
-      "loss_prob_threshold": 0.007386818436264168
+      "var_threshold": -3452.186785640079,
+      "loss_prob_threshold": 0.005862347125836127
     },
     {
       "trader_id": "4004",
-      "var_threshold": -47433.89368363341,
-      "loss_prob_threshold": 0.02851248524410671
+      "var_threshold": -46590.893538825614,
+      "loss_prob_threshold": 0.02140309693718316
     },
     {
       "trader_id": "4396",
-      "var_threshold": -9430.865546023553,
-      "loss_prob_threshold": 0.2836326494470299
+      "var_threshold": -8060.391269163099,
+      "loss_prob_threshold": 0.021726322498506843
     },
     {
       "trader_id": "5093",
-      "var_threshold": -179.753130158097,
-      "loss_prob_threshold": 0.9104759507377269
+      "var_threshold": -174.37712560539705,
+      "loss_prob_threshold": 0.9090493794105268
     },
     {
       "trader_id": "5580",
-      "var_threshold": -4520.712803974617,
-      "loss_prob_threshold": 0.10770742753870882
+      "var_threshold": -3981.7803076147084,
+      "loss_prob_threshold": 0.9034652635954392
     }
   ],
-  "optimization_date": "2025-07-07T22:50:18.841346",
+  "optimization_date": "2025-07-09T17:12:42.967731",
   "total_traders": 11
 }

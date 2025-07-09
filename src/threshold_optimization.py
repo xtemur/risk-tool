@@ -7,7 +7,7 @@ from pathlib import Path
 import logging
 import yaml
 from sklearn.metrics import roc_auc_score, average_precision_score
-from scipy.optimize import minimize_scalar, differential_evolution
+from scipy.optimize import minimize_scalar
 import warnings
 warnings.filterwarnings('ignore')
 
@@ -189,6 +189,142 @@ class ThresholdOptimizer:
 
         return results
 
+    def train_linear_regression_for_trader(self, trader_id: str, predictions: pd.DataFrame) -> Dict:
+        """
+        Train linear regression to find optimal thresholds for a trader with capped intervention rate.
+
+        Uses linear regression to create a risk score, then finds thresholds that maximize
+        PnL improvement while keeping intervention rate under control.
+        """
+        from sklearn.linear_model import LinearRegression
+        from sklearn.metrics import roc_auc_score, mean_squared_error, r2_score
+
+        # Prepare features: VaR and loss probability
+        var_pred = predictions['var_pred'].values
+        loss_prob = predictions['loss_prob'].values
+
+        # Create target: binary indicator of large loss
+        # We'll use actual PnL as proxy for risk outcome
+        actual_pnl = predictions['actual_pnl'].values
+        target = (actual_pnl < 0).astype(int)  # 1 if loss, 0 if profit
+
+        # Normalize features
+        var_min = var_pred.min()
+        var_max = var_pred.max()
+
+        # Normalize VaR to [0, 1] (higher = higher risk)
+        if var_max != var_min:
+            normalized_var = (var_max - var_pred) / (var_max - var_min)
+        else:
+            normalized_var = np.full_like(var_pred, 0.5)
+
+        # Loss probability is already normalized [0, 1]
+        normalized_loss_prob = loss_prob
+
+        # Prepare feature matrix
+        X = np.column_stack([normalized_var, normalized_loss_prob])
+        y = target
+
+        # Fit linear regression
+        model = LinearRegression()
+        model.fit(X, y)
+
+        # Get coefficients
+        alpha = model.coef_[0]  # VaR coefficient
+        beta = model.coef_[1]   # Loss probability coefficient
+        bias = model.intercept_
+
+        # Calculate risk scores
+        risk_scores = model.predict(X)
+
+        # Maximum allowed intervention rate
+        max_intervention_rate = 0.25
+
+        # Sort indices by risk score (highest risk first)
+        sorted_indices = np.argsort(-risk_scores)
+
+        # Find the best thresholds by testing different intervention rates
+        best_impact = float('-inf')
+        best_var_threshold = None
+        best_loss_prob_threshold = None
+        best_intervention_rate = None
+
+        # Test intervention rates from 5% to max_intervention_rate in steps
+        for test_rate in np.arange(0.05, max_intervention_rate + 0.01, 0.02):
+            # Get top risk indices based on test rate
+            n_interventions = int(len(risk_scores) * test_rate)
+            if n_interventions == 0:
+                continue
+
+            top_risk_indices = sorted_indices[:n_interventions]
+
+            # Find threshold boundaries that capture these high-risk cases
+            # We want the most restrictive thresholds that still capture all high-risk cases
+            high_risk_var = var_pred[top_risk_indices]
+            high_risk_loss_prob = loss_prob[top_risk_indices]
+
+            # Set thresholds to capture these high-risk cases
+            # For VaR: use the maximum (least negative) value among high-risk cases
+            # For loss_prob: use the minimum value among high-risk cases
+            test_var_threshold = np.max(high_risk_var)
+            test_loss_prob_threshold = np.min(high_risk_loss_prob)
+
+            # Calculate intervention mask with these thresholds
+            intervention_mask = ((var_pred <= test_var_threshold) | (loss_prob >= test_loss_prob_threshold))
+            actual_rate = intervention_mask.mean()
+
+            # Skip if actual rate exceeds maximum
+            if actual_rate > max_intervention_rate:
+                continue
+
+            # Calculate impact with these thresholds
+            impact_result = self.calculate_causal_impact(
+                predictions, test_var_threshold, test_loss_prob_threshold
+            )
+
+            # Update best if this is better
+            if impact_result['impact'] > best_impact:
+                best_impact = impact_result['impact']
+                best_var_threshold = test_var_threshold
+                best_loss_prob_threshold = test_loss_prob_threshold
+                best_intervention_rate = actual_rate
+
+        # If no valid thresholds found, use conservative defaults
+        if best_var_threshold is None:
+            # Use percentiles that give approximately 15% intervention rate
+            best_var_threshold = np.percentile(var_pred, 15)
+            best_loss_prob_threshold = np.percentile(loss_prob, 85)
+            intervention_mask = ((var_pred <= best_var_threshold) | (loss_prob >= best_loss_prob_threshold))
+            best_intervention_rate = intervention_mask.mean()
+
+        # Calculate performance metrics
+        try:
+            auc_score = roc_auc_score(y, risk_scores)
+        except:
+            auc_score = 0.5
+
+        r2 = r2_score(y, risk_scores)
+        mse = mean_squared_error(y, risk_scores)
+
+        return {
+            'var_threshold': best_var_threshold,
+            'loss_prob_threshold': best_loss_prob_threshold,
+            'metrics': {
+                'alpha': alpha,
+                'beta': beta,
+                'bias': bias,
+                'auc': auc_score,
+                'r2': r2,
+                'mse': mse,
+                'risk_scores_mean': risk_scores.mean(),
+                'risk_scores_std': risk_scores.std(),
+                'actual_intervention_rate': best_intervention_rate,
+                'max_intervention_rate': max_intervention_rate,
+                'best_impact': best_impact,
+                'var_range': (var_min, var_max)
+            }
+        }
+
     def calculate_causal_impact(self, predictions: pd.DataFrame,
                               var_threshold: float, loss_prob_threshold: float) -> Dict:
         """Calculate causal impact of applying thresholds"""
@@ -223,8 +359,8 @@ class ThresholdOptimizer:
 
     def optimize_trader_thresholds(self, trader_id: str, data: pd.DataFrame,
                                  validation_range: Tuple[str, str]) -> Dict:
-        """Optimize thresholds for a single trader using validation data"""
-        logger.info(f"Optimizing thresholds for trader {trader_id}")
+        """Optimize thresholds for a single trader using linear regression"""
+        logger.info(f"Optimizing thresholds for trader {trader_id} using linear regression")
 
         # Load model
         model_data = self.load_trader_model(trader_id)
@@ -239,76 +375,39 @@ class ThresholdOptimizer:
 
         logger.info(f"Generated {len(predictions)} predictions for trader {trader_id}")
 
-        # Define search ranges based on data distribution
-        # Expand ranges to ensure we can find solutions with ≤30% intervention rate
-        var_percentiles = np.percentile(predictions['var_pred'], [1, 5, 10, 20, 30, 50, 70, 90])
-        loss_prob_percentiles = np.percentile(predictions['loss_prob'], [30, 50, 70, 80, 90, 95, 99])
-
-        # Objective function to maximize PnL improvement with intervention rate constraint
-        def objective(params):
-            var_thresh, loss_prob_thresh = params
-            impact_result = self.calculate_causal_impact(predictions, var_thresh, loss_prob_thresh)
-
-            # We want to maximize impact (PnL improvement) while keeping intervention rate ≤ 25% (with buffer)
-            impact = impact_result['impact']
-            intervention_rate = impact_result['intervention_rate']
-
-            # Hard constraint: intervention rate must be ≤ 25% (conservative buffer for distribution shift)
-            if intervention_rate > 0.25:
-                # Return a large penalty to make this solution infeasible
-                return 1e10
-
-            return -impact  # Minimize negative impact (maximize positive impact)
-
-        # Search bounds - use wider ranges to ensure feasible solutions
-        bounds = [
-            (var_percentiles[0], var_percentiles[-1]),  # VaR threshold range
-            (loss_prob_percentiles[0], loss_prob_percentiles[-1])  # Loss prob threshold range
-        ]
-
-        # Optimize using differential evolution with increased iterations for constraint handling
-        result = differential_evolution(
-            objective,
-            bounds,
-            seed=42,
-            maxiter=200,  # Increased iterations to handle constraint
-            popsize=20,   # Increased population size
-            atol=1e-6,
-            tol=1e-6
-        )
-
-        if result.success:
-            optimal_var_thresh, optimal_loss_prob_thresh = result.x
-
-            # Calculate final metrics with optimal thresholds
-            optimal_impact = self.calculate_causal_impact(
-                predictions, optimal_var_thresh, optimal_loss_prob_thresh
-            )
-
-            # Store results
-            optimization_result = {
-                'trader_id': trader_id,
-                'optimal_var_threshold': optimal_var_thresh,
-                'optimal_loss_prob_threshold': optimal_loss_prob_thresh,
-                'validation_impact': optimal_impact,
-                'validation_samples': len(predictions),
-                'var_threshold_percentile': np.searchsorted(np.sort(predictions['var_pred']), optimal_var_thresh) / len(predictions) * 100,
-                'loss_prob_threshold_percentile': np.searchsorted(np.sort(predictions['loss_prob']), optimal_loss_prob_thresh) / len(predictions) * 100,
-                'optimization_success': True
-            }
-
-            logger.info(f"Trader {trader_id} optimal thresholds: VaR={optimal_var_thresh:.2f}, "
-                       f"Loss_Prob={optimal_loss_prob_thresh:.4f}, Impact={optimal_impact['impact']:.2f}, "
-                       f"Validation_Rate={optimal_impact['intervention_rate']*100:.1f}%")
-
-            return optimization_result
-        else:
-            logger.warning(f"Optimization failed for trader {trader_id}")
+        # Use linear regression to find optimal thresholds
+        linear_result = self.train_linear_regression_for_trader(trader_id, predictions)
+        if linear_result is None:
+            logger.warning(f"Linear regression failed for trader {trader_id}")
             return {
                 'trader_id': trader_id,
                 'optimization_success': False,
-                'error': result.message
+                'error': 'Linear regression failed'
             }
+
+        # Calculate final metrics with linear regression thresholds
+        optimal_impact = self.calculate_causal_impact(
+            predictions, linear_result['var_threshold'], linear_result['loss_prob_threshold']
+        )
+
+        # Store results
+        optimization_result = {
+            'trader_id': trader_id,
+            'optimal_var_threshold': linear_result['var_threshold'],
+            'optimal_loss_prob_threshold': linear_result['loss_prob_threshold'],
+            'validation_impact': optimal_impact,
+            'validation_samples': len(predictions),
+            'var_threshold_percentile': np.searchsorted(np.sort(predictions['var_pred']), linear_result['var_threshold']) / len(predictions) * 100,
+            'loss_prob_threshold_percentile': np.searchsorted(np.sort(predictions['loss_prob']), linear_result['loss_prob_threshold']) / len(predictions) * 100,
+            'optimization_success': True,
+            'linear_regression_metrics': linear_result['metrics']
+        }
+
+        logger.info(f"Trader {trader_id} linear regression thresholds: VaR={linear_result['var_threshold']:.2f}, "
+                   f"Loss_Prob={linear_result['loss_prob_threshold']:.4f}, Impact={optimal_impact['impact']:.2f}, "
+                   f"Validation_Rate={optimal_impact['intervention_rate']*100:.1f}%")
+
+        return optimization_result
 
     def evaluate_on_test_set(self, trader_id: str, data: pd.DataFrame,
                            test_range: Tuple[str, str], thresholds: Dict) -> Dict:

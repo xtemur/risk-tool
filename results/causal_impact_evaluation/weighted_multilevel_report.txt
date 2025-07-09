@@ -1,0 +1,62 @@
+================================================================================
+MULTI-LEVEL CAUSAL IMPACT EVALUATION REPORT
+================================================================================
+
+EVALUATION SUMMARY
+----------------------------------------
+Total Traders Evaluated: 11
+Reduction Levels Tested: ['0%', '10%', '30%', '60%']
+Used Weighted Formula: True
+Alpha (VaR Weight): 0.6
+Beta (LossProb Weight): 0.4
+
+AGGREGATE RESULTS BY REDUCTION LEVEL
+----------------------------------------
+
+0% PnL Reduction:
+  Total Actual PnL: $159,993.19
+  Total Adjusted PnL: $159,993.19
+  Total Net Benefit: $0.00
+  Overall Improvement: 0.00%
+  Mean Intervention Rate: 12.9%
+  Mean Sharpe Improvement: 0.000
+  Positive Improvements: 0/11
+
+10% PnL Reduction:
+  Total Actual PnL: $159,993.19
+  Total Adjusted PnL: $237,162.92
+  Total Net Benefit: $77,169.72
+  Overall Improvement: 48.23%
+  Mean Intervention Rate: 12.9%
+  Mean Sharpe Improvement: 0.158
+  Positive Improvements: 10/11
+
+30% PnL Reduction:
+  Total Actual PnL: $159,993.19
+  Total Adjusted PnL: $391,502.37
+  Total Net Benefit: $231,509.17
+  Overall Improvement: 144.70%
+  Mean Intervention Rate: 12.9%
+  Mean Sharpe Improvement: 0.513
+  Positive Improvements: 10/11
+
+60% PnL Reduction:
+  Total Actual PnL: $159,993.19
+  Total Adjusted PnL: $623,011.54
+  Total Net Benefit: $463,018.35
+  Overall Improvement: 289.40%
+  Mean Intervention Rate: 12.9%
+  Mean Sharpe Improvement: 1.150
+  Positive Improvements: 10/11
+
+
+OPTIMAL REDUCTION LEVEL ANALYSIS
+----------------------------------------
+Overall Recommendation: 60% reduction
+Recommendation Score: 1.000
+
+Best by Individual Metrics:
+  total_net_benefit: 60% (value: 463018.35)
+  overall_improvement_pct: 60% (value: 289.40)
+  mean_sharpe_improvement: 60% (value: 1.15)
+  positive_improvements: 10% (value: 10.00)

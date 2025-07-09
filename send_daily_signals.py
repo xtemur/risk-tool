@@ -124,13 +124,16 @@ def main():
         print(f"Date: {signal_data['date']}")
         print(f"Total Traders: {len(signal_data['trader_signals'])}")
 
-        risk_counts = {'high': 0, 'medium': 0, 'low': 0}
+        risk_counts = {'high': 0, 'medium': 0, 'low': 0, 'neutral': 0}
         for signal in signal_data['trader_signals']:
-            risk_counts[signal['risk_level']] += 1
+            risk_level = signal['risk_level']
+            if risk_level in risk_counts:
+                risk_counts[risk_level] += 1
 
         print(f"High Risk: {risk_counts['high']}")
         print(f"Medium Risk: {risk_counts['medium']}")
         print(f"Low Risk: {risk_counts['low']}")
+        print(f"Neutral: {risk_counts['neutral']}")
         print(f"Critical Alerts: {len(signal_data['alerts'])}")
 
         if signal_data['alerts']:

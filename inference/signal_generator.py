@@ -251,6 +251,41 @@ class SignalGenerator:
         """Generate predictions using the new RiskPredictor class."""
         return self.risk_predictor.generate_predictions_batch(trader_data_dict)
 
+    def _calculate_risk_score(self, var_pred: float, loss_prob: float,
+                            alpha: float = 0.6, beta: float = 0.4,
+                            var_range: Tuple[float, float] = None) -> float:
+        """
+        Calculate weighted risk score.
+
+        Args:
+            var_pred: VaR prediction value
+            loss_prob: Loss probability prediction
+            alpha: Weight for VaR component
+            beta: Weight for loss probability component
+            var_range: VaR normalization range
+
+        Returns:
+            Risk score (0-1 scale)
+        """
+        if var_range is None:
+            var_range = (-50000, 0)  # Default range
+
+        var_min, var_max = var_range
+        # Normalize VaR to [0, 1] (higher = higher risk)
+        if var_max != var_min:
+            normalized_var = (var_max - var_pred) / (var_max - var_min)
+            normalized_var = max(0, min(1, normalized_var))  # Clamp to 0-1
+        else:
+            normalized_var = 0.5
+
+        # Loss probability is already 0-1 scale
+        normalized_loss_prob = max(0, min(1, loss_prob))
+
+        # Calculate weighted risk score
+        risk_score = alpha * normalized_var + beta * normalized_loss_prob
+
+        return risk_score
+
     def classify_risk_level(self, trader_id: int, var_pred: float, loss_prob: float,
                           use_weighted_formula: bool = True, alpha: float = 0.6,
                           beta: float = 0.4, thresholds: Dict[str, float] = None,
@@ -272,9 +307,41 @@ class SignalGenerator:
             Risk level classification
         """
         if use_weighted_formula:
-            return self.risk_predictor.classify_risk_level_weighted(
-                var_pred, loss_prob, alpha, beta, thresholds, var_range
-            )
+            # Calculate weighted risk score
+            if var_range is None:
+                var_range = (-50000, 0)  # Default range
+
+            var_min, var_max = var_range
+            # Normalize VaR to [0, 1] (higher = higher risk)
+            if var_max != var_min:
+                normalized_var = (var_max - var_pred) / (var_max - var_min)
+                normalized_var = max(0, min(1, normalized_var))  # Clamp to 0-1
+            else:
+                normalized_var = 0.5
+
+            # Loss probability is already 0-1 scale
+            normalized_loss_prob = max(0, min(1, loss_prob))
+
+            # Calculate weighted risk score
+            risk_score = alpha * normalized_var + beta * normalized_loss_prob
+
+            # Default thresholds for 4-level classification
+            if thresholds is None:
+                thresholds = {
+                    'high_threshold': 0.7,
+                    'medium_threshold': 0.5,
+                    'low_threshold': 0.3
+                }
+
+            # Classify based on risk score
+            if risk_score >= thresholds['high_threshold']:
+                return 'high'
+            elif risk_score >= thresholds['medium_threshold']:
+                return 'medium'
+            elif risk_score >= thresholds['low_threshold']:
+                return 'low'
+            else:
+                return 'neutral'
         else:
             return self.risk_predictor.classify_risk_level(trader_id, var_pred, loss_prob)
 
@@ -478,10 +545,10 @@ class SignalGenerator:
                 'var_5pct': pred_data['var_prediction'],
                 'loss_probability': pred_data['loss_probability'],
                 'model_confidence': pred_data.get('model_confidence', 0.5),
-                'risk_score': self.risk_predictor.calculate_weighted_risk_score(
+                'risk_score': self._calculate_risk_score(
                     pred_data['var_prediction'],
                     pred_data['loss_probability'],
-                    alpha, beta, var_range, 'sigmoid'
+                    alpha, beta, var_range
                 ) if use_weighted_formula else None,
                 'last_trade_date': str(db_metrics.get('last_trade_date', 'N/A')).replace('2025-', '') if db_metrics.get('last_trade_date', 'N/A') != 'N/A' else 'N/A',
                 'last_trading_day_pnl': db_metrics.get('last_trading_day_pnl', 0),
