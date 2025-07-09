@@ -325,11 +325,13 @@
                         <th rowspan="2">VaR (5%)</th>
                         <th rowspan="2">Loss Prob</th>
                         <th rowspan="2">Last Day PnL</th>
-                        <th colspan="6" style="background-color: #2A2A2A; border-bottom: 2px solid #00D4AA;">30D Performance Window</th>
+                        <th colspan="8" style="background-color: #2A2A2A; border-bottom: 2px solid #00D4AA;">30D Performance Window</th>
                         <th rowspan="2">Last Trade</th>
                         <th rowspan="2">Warnings</th>
                     </tr>
                     <tr>
+                        <th>BAT</th>
+                        <th>W/L</th>
                         <th>Sharpe</th>
                         <th>Avg Daily PnL</th>
                         <th>Avg Win</th>
@@ -355,6 +357,12 @@
                         </td>
                         <td style="background-color: {{ signal.last_day_pnl_heatmap.bg }}; color: {{ signal.last_day_pnl_heatmap.text }};">
                             ${{ signal.last_trading_day_pnl|round(0)|int|format_number }}
+                        </td>
+                        <td style="background-color: {{ signal.bat_heatmap.bg }}; color: {{ signal.bat_heatmap.text }};">
+                            {{ "%.1f"|format(signal.bat_30d) }}%
+                        </td>
+                        <td style="background-color: {{ signal.wl_ratio_heatmap.bg }}; color: {{ signal.wl_ratio_heatmap.text }};">
+                            {{ "%.2f"|format(signal.wl_ratio_30d) }}
                         </td>
                         <td style="background-color: {{ signal.sharpe_heatmap.bg }}; color: {{ signal.sharpe_heatmap.text }};">
                             {{ "%.2f"|format(signal.sharpe_30d) }}
