@@ -370,8 +370,10 @@ class SignalGenerator:
 
         return signals
 
-    def generate_alerts(self, predictions_dict: Dict[int, Dict], trader_names: Dict[int, str] = None) -> List[Dict]:
-        """Generate critical alerts based on intervention recommendations."""
+    def generate_alerts(self, predictions_dict: Dict[int, Dict], trader_names: Dict[int, str] = None,
+                       use_weighted_formula: bool = True, alpha: float = 0.6, beta: float = 0.4,
+                       thresholds: Dict[str, float] = None, var_range: Tuple[float, float] = None) -> List[Dict]:
+        """Generate critical alerts based on risk classification levels."""
         alerts = []
 
         if trader_names is None:
@@ -385,16 +387,37 @@ class SignalGenerator:
             trader_name = trader_names.get(trader_id, f"ID {trader_id}")
             trader_label = f"Trader {trader_id} ({trader_name})"
 
-            # Use RiskPredictor to get intervention recommendation
-            intervention = self.risk_predictor.generate_intervention_recommendation(
-                trader_id, var_prediction, loss_prob
+            # Use the same risk classification logic as the main signal generation
+            risk_level = self.classify_risk_level(
+                trader_id, var_prediction, loss_prob,
+                use_weighted_formula, alpha, beta, thresholds, var_range
             )
 
-            if intervention['should_intervene']:
+            # Only generate alerts for high and medium risk levels
+            if risk_level in ['high', 'medium']:
+                # Calculate risk score for alert message
+                risk_score = self._calculate_risk_score(
+                    var_prediction, loss_prob, alpha, beta, var_range
+                ) if use_weighted_formula else None
+
+                # Format alert message based on risk level
+                if risk_level == 'high':
+                    if use_weighted_formula:
+                        message = f"HIGH RISK ALERT: Strong model signal to reduce position. Risk Score: {risk_score:.3f}, VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                    else:
+                        message = f"HIGH RISK ALERT: Strong model signal to reduce position. VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                else:  # medium risk
+                    if use_weighted_formula:
+                        message = f"MEDIUM RISK ALERT: Model suggests caution. Risk Score: {risk_score:.3f}, VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                    else:
+                        message = f"MEDIUM RISK ALERT: Model suggests caution. VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+
                 alerts.append({
                     'trader_id': str(trader_id),
                     'trader_label': trader_label,
-                    'message': intervention['recommendation']
+                    'message': message,
+                    'risk_level': risk_level,
+                    'risk_score': risk_score
                 })
 
         return alerts
@@ -595,8 +618,10 @@ class SignalGenerator:
             risk_order = {'high': 0, 'low': 1}
             trader_signals.sort(key=lambda x: (risk_order.get(x['risk_level'], 1), -x['loss_probability']))
 
-        # Generate alerts
-        alerts = self.generate_alerts(predictions, trader_names)
+        # Generate alerts using the same parameters as risk classification
+        alerts = self.generate_alerts(
+            predictions, trader_names, use_weighted_formula, alpha, beta, thresholds, var_range
+        )
 
         # Calculate summary statistics
         if trader_signals:
