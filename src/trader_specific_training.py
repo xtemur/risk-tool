@@ -99,7 +99,11 @@ class TraderSpecificTrainer:
         trader_data = train_data.sort_values('date').copy()
 
         # Get all feature columns (exclude metadata and targets)
-        exclude_cols = ['trader_id', 'date', 'target_pnl', 'target_large_loss']
+        exclude_cols = [
+            'trader_id', 'date', 'target_pnl', 'target_large_loss',
+            'target_reduce_size', 'target_increase_size', 'target_stop_trading',
+            'target_vol_regime', 'target_underperform', 'target_outperform'
+        ]
         feature_cols = [col for col in trader_data.columns if col not in exclude_cols]
 
         # Remove features that are all null

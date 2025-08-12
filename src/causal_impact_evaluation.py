@@ -22,11 +22,12 @@ class CausalImpactEvaluator:
     - 4-level risk classification
     """
 
-    def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool"):
+    def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool", model_suffix: str = "_tuned_validated"):
         self.base_path = Path(base_path)
         self.models_path = self.base_path / "models" / "trader_specific"
         self.data_path = self.base_path / "data" / "processed" / "trader_splits"
         self.thresholds_path = self.base_path / "configs" / "optimal_thresholds" / "optimal_thresholds.json"
+        self.model_suffix = model_suffix
 
         # Load optimal thresholds
         with open(self.thresholds_path, 'r') as f:
@@ -53,7 +54,7 @@ class CausalImpactEvaluator:
         test_data = pd.read_parquet(test_data_path)
 
         # Load trained model
-        model_path = self.models_path / f"{trader_id}_tuned_validated.pkl"
+        model_path = self.models_path / f"{trader_id}{self.model_suffix}.pkl"
         with open(model_path, 'rb') as f:
             model_data = pickle.load(f)
 
@@ -346,7 +347,7 @@ class CausalImpactEvaluator:
                            risk_thresholds: Dict[str, float] = None) -> Dict[str, Any]:
         """Evaluate all traders with available models."""
         # Get list of available traders
-        available_traders = [f.stem.split('_')[0] for f in self.models_path.glob("*_tuned_validated.pkl")]
+        available_traders = [f.stem.replace(self.model_suffix, '') for f in self.models_path.glob(f"*{self.model_suffix}.pkl")]
         available_traders = [t for t in available_traders if t in self.thresholds.keys()]
 
         print(f"Found {len(available_traders)} traders to evaluate: {available_traders}")
@@ -382,7 +383,7 @@ class CausalImpactEvaluator:
                                       risk_thresholds: Dict[str, float] = None) -> Dict[str, Any]:
         """Evaluate all traders across all reduction levels."""
         # Get list of available traders
-        available_traders = [f.stem.split('_')[0] for f in self.models_path.glob("*_tuned_validated.pkl")]
+        available_traders = [f.stem.replace(self.model_suffix, '') for f in self.models_path.glob(f"*{self.model_suffix}.pkl")]
         available_traders = [t for t in available_traders if t in self.thresholds.keys()]
 
         print(f"Found {len(available_traders)} traders to evaluate: {available_traders}")

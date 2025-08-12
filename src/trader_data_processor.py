@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 
 from src.data_processing import create_trader_day_panel
+from src.day_trading_features import DayTradingFeatureEngineer
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,10 @@ class ImprovedTraderProcessor:
         self.output_dir = Path('data/processed/trader_splits')
         self.output_dir.mkdir(parents=True, exist_ok=True)
 
-        logger.info(f"ImprovedTraderProcessor initialized, output dir: {self.output_dir}")
+        # Initialize day trading feature engineer
+        self.day_trading_engineer = DayTradingFeatureEngineer(self.config)
+
+        logger.info(f"ImprovedTraderProcessor initialized with day trading features, output dir: {self.output_dir}")
 
     def create_improved_features(self, trader_data: pd.DataFrame) -> pd.DataFrame:
         """Create features with proper handling of missing days"""
@@ -93,21 +97,18 @@ class ImprovedTraderProcessor:
             df[f'volume_lag_{lag}'] = df['daily_volume'].shift(lag)
             df[f'trades_lag_{lag}'] = df['n_trades'].shift(lag)
 
-        # Target variables
-        # Large loss indicator (bottom 10% of actual trading days)
-        loss_threshold = df['daily_pnl'].quantile(0.1)
-        df['target_large_loss'] = (df['daily_pnl'] < loss_threshold).astype(int)
-
-        # Next day PnL target for VaR (next actual trading day)
-        df['target_pnl'] = df['daily_pnl'].shift(-1)
+        # Apply day trading feature engineering
+        logger.info("Applying day trading feature engineering...")
+        df = self.day_trading_engineer.create_day_trading_features(df)
 
         # Fill NaN values with 0 (not forward fill!)
-        # This only affects the first few rows for lag features
+        # This only affects the first few rows for lag features and some advanced features
         df = df.fillna(0)
 
         # Add data quality check
         self._check_data_quality(df)
 
+        logger.info(f"Created {len(df.columns)} total features including day trading signals")
         return df
 
     def _check_data_quality(self, df: pd.DataFrame) -> None:

@@ -22,16 +22,18 @@ class RiskPredictor:
     Provides VaR predictions and loss probabilities for trader risk assessment.
     """
 
-    def __init__(self, config: Dict):
+    def __init__(self, config: Dict, model_suffix: str = "_tuned_validated_prod"):
         """
         Initialize risk predictor with configuration.
 
         Args:
             config: Configuration dictionary containing paths and settings
+            model_suffix: Model file suffix (default: "_tuned_validated_prod" for production models)
         """
         self.config = config
         self.models_path = Path(config['paths']['model_dir'])
         self.thresholds_path = Path(config['paths'].get('optimal_thresholds_dir', 'configs/optimal_thresholds')) / 'optimal_thresholds.json'
+        self.model_suffix = model_suffix
 
         # Storage for loaded models and thresholds
         self.trader_models = {}
@@ -74,7 +76,7 @@ class RiskPredictor:
         Returns:
             True if model loaded successfully, False otherwise
         """
-        model_path = self.models_path / f'{trader_id}_tuned_validated.pkl'
+        model_path = self.models_path / f'{trader_id}{self.model_suffix}.pkl'
 
         try:
             with open(model_path, 'rb') as f:

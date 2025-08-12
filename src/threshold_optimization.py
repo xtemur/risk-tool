@@ -27,9 +27,10 @@ class ThresholdOptimizer:
     Then PnL is reduced by 50% to simulate risk management intervention.
     """
 
-    def __init__(self, models_dir: str = 'models/trader_specific', data_dir: str = 'data/processed/trader_splits'):
+    def __init__(self, models_dir: str = 'models/trader_specific', data_dir: str = 'data/processed/trader_splits', model_suffix: str = ''):
         self.models_dir = Path(models_dir)
         self.data_dir = Path(data_dir)
+        self.model_suffix = model_suffix
         self.results_dir = Path('results/threshold_optimization')
         self.results_dir.mkdir(parents=True, exist_ok=True)
 
@@ -40,7 +41,7 @@ class ThresholdOptimizer:
 
     def load_trader_model(self, trader_id) -> Optional[Dict]:
         """Load trained models for a trader"""
-        model_path = self.models_dir / f"{trader_id}_tuned_validated.pkl"
+        model_path = self.models_dir / f"{trader_id}_tuned_validated{self.model_suffix}.pkl"
         if not model_path.exists():
             logger.warning(f"No model found for trader {trader_id}")
             return None

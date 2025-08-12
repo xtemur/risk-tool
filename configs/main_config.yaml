@@ -85,3 +85,15 @@ advanced_metrics:
   cvar_alpha: 0.05  # Conditional VaR at 5% level
   multi_horizon: [1, 5, 21]  # Prediction horizons in days
   regime_detection: true
+
+# Risk Classification Thresholds (for 4-level system)
+risk_classification:
+  use_weighted_formula: true
+  alpha: 0.6  # Weight for VaR component
+  beta: 0.4   # Weight for loss probability component
+  thresholds:
+    high_threshold: 0.35    # High risk: score >= 0.35
+    medium_threshold: 0.22  # Medium risk: 0.22 <= score < 0.35
+    low_threshold: 0.15     # Low risk: 0.15 <= score < 0.22
+                           # Neutral: score < 0.15
+  var_range: [-50000, 0]   # Range for VaR normalization
