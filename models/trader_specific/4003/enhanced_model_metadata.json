@@ -1,0 +1,155 @@
+{
+  "trader_id": 4003,
+  "training_timestamp": "2025-08-26T16:55:37.910008",
+  "enhanced_features": true,
+  "feature_categories": {
+    "traditional": [
+      "ewm_price_impact_mean_10",
+      "rolling_vol_7",
+      "ewm_fills_removing_liquidity_rate_10",
+      "ewm_price_impact_mean_21",
+      "rolling_max_drawdown",
+      "win_rate_21d",
+      "ewm_volume_fills_efficiency_10",
+      "ewm_trading_aggressiveness_10",
+      "ewm_pnl_3",
+      "ewm_volume_3"
+    ],
+    "fills_based": [
+      "fills_total_qty",
+      "fills_count",
+      "fills_mean_qty"
+    ],
+    "execution_quality": [],
+    "cross_features": [],
+    "behavioral": [],
+    "uncategorized": [
+      "daily_pnl",
+      "daily_gross"
+    ]
+  },
+  "selected_features": [
+    "fills_total_qty",
+    "ewm_price_impact_mean_10",
+    "rolling_vol_7",
+    "ewm_fills_removing_liquidity_rate_10",
+    "ewm_price_impact_mean_21",
+    "rolling_max_drawdown",
+    "win_rate_21d",
+    "ewm_volume_fills_efficiency_10",
+    "daily_pnl",
+    "ewm_trading_aggressiveness_10",
+    "daily_gross",
+    "ewm_pnl_3",
+    "ewm_volume_3",
+    "fills_count",
+    "fills_mean_qty"
+  ],
+  "feature_count": 15,
+  "training_data_shape": [
+    483,
+    15
+  ],
+  "test_data_shape": [
+    121,
+    15
+  ],
+  "models": {
+    "loss_model": {
+      "type": "LGBMClassifier",
+      "params": {
+        "objective": "binary",
+        "metric": "auc",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 44,
+        "learning_rate": 0.17254716573280354,
+        "feature_fraction": 0.892797576724562,
+        "bagging_fraction": 0.8394633936788146,
+        "min_child_samples": 12,
+        "reg_alpha": 0.15599452033620265,
+        "reg_lambda": 0.05808361216819946
+      },
+      "train_auc": 1.0,
+      "test_auc": 0.375,
+      "feature_importance": {
+        "fills_total_qty": 0,
+        "ewm_price_impact_mean_10": 0,
+        "rolling_vol_7": 87,
+        "ewm_fills_removing_liquidity_rate_10": 0,
+        "ewm_price_impact_mean_21": 0,
+        "rolling_max_drawdown": 0,
+        "win_rate_21d": 0,
+        "ewm_volume_fills_efficiency_10": 2,
+        "daily_pnl": 0,
+        "ewm_trading_aggressiveness_10": 0,
+        "daily_gross": 0,
+        "ewm_pnl_3": 0,
+        "ewm_volume_3": 7,
+        "fills_count": 0,
+        "fills_mean_qty": 0
+      },
+      "importance_by_category": {
+        "traditional": 96,
+        "fills_based": 0,
+        "uncategorized": 0
+      }
+    },
+    "var_model": {
+      "type": "LGBMRegressor",
+      "params": {
+        "objective": "regression",
+        "metric": "rmse",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 95,
+        "learning_rate": 0.13851221130396282,
+        "feature_fraction": 0.9674564582824399,
+        "bagging_fraction": 0.828599972875884,
+        "min_child_samples": 20,
+        "reg_alpha": 0.0913117954081744,
+        "reg_lambda": 0.26729196491809853
+      },
+      "train_rmse": 0.0004830158208205469,
+      "test_rmse": 0.0908872777272322,
+      "train_mae": 0.00037975938993444164,
+      "test_mae": 0.008504478872718615,
+      "feature_importance": {
+        "fills_total_qty": 0,
+        "ewm_price_impact_mean_10": 0,
+        "rolling_vol_7": 100,
+        "ewm_fills_removing_liquidity_rate_10": 0,
+        "ewm_price_impact_mean_21": 0,
+        "rolling_max_drawdown": 0,
+        "win_rate_21d": 0,
+        "ewm_volume_fills_efficiency_10": 0,
+        "daily_pnl": 0,
+        "ewm_trading_aggressiveness_10": 0,
+        "daily_gross": 0,
+        "ewm_pnl_3": 0,
+        "ewm_volume_3": 0,
+        "fills_count": 0,
+        "fills_mean_qty": 0
+      },
+      "importance_by_category": {
+        "traditional": 100,
+        "fills_based": 0,
+        "uncategorized": 0
+      }
+    }
+  },
+  "data_info": {
+    "train_period": [
+      "2023-05-02T00:00:00",
+      "2025-03-06T00:00:00"
+    ],
+    "test_period": [
+      "2025-03-07T00:00:00",
+      "2025-08-22T00:00:00"
+    ],
+    "large_loss_rate_train": 0.8095238095238095,
+    "large_loss_rate_test": 0.9917355371900827
+  }
+}

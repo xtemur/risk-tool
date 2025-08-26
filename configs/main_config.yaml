@@ -2,7 +2,7 @@
 paths:
   db_path: "data/risk_tool.db"  # SQLite database path
   raw_data: "data/risk_tool.db"  # Alias for backwards compatibility
-  processed_features: "data/processed/trader_splits/"
+  processed_features: "data/processed/enhanced_features.parquet"
   model_dir: "models/trader_specific/"
   report_dir: "reports/"
 
@@ -19,6 +19,13 @@ feature_params:
   profit_factor_window: 21
   # Behavioral feature lookback
   large_loss_lookback: 21  # days to look back for a 'large loss' to flag revenge trading
+
+  # Enhanced fills-based feature parameters
+  fills_ewma_spans: [5, 10, 21]  # EWMA spans for fills features
+  fills_rolling_windows: [7, 14, 21]  # Rolling windows for fills features
+  execution_quality_window: 21  # Window for execution quality trend analysis
+  market_impact_trend_window: 10  # Window for market impact trend
+  liquidity_consistency_window: 14  # Window for liquidity provision consistency
 
 target_variable_params:
   large_loss_quantile: 0.15  # Defines a 'bad day'

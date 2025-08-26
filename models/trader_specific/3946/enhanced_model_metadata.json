@@ -1,0 +1,161 @@
+{
+  "trader_id": 3946,
+  "training_timestamp": "2025-08-26T16:55:19.768583",
+  "enhanced_features": true,
+  "feature_categories": {
+    "traditional": [
+      "cumulative_pnl",
+      "rolling_vol_7",
+      "ewm_fills_adding_liquidity_rate_10",
+      "ewm_fills_removing_liquidity_rate_10",
+      "rolling_max_drawdown",
+      "win_rate_21d",
+      "ewm_volume_fills_efficiency_10",
+      "ewm_pnl_3",
+      "ewm_volume_3"
+    ],
+    "fills_based": [
+      "fills_total_qty",
+      "fills_count"
+    ],
+    "execution_quality": [
+      "rolling_effective_spread_proxy_std_21"
+    ],
+    "cross_features": [
+      "rolling_pnl_impact_ratio_14"
+    ],
+    "behavioral": [],
+    "uncategorized": [
+      "daily_pnl",
+      "daily_gross"
+    ]
+  },
+  "selected_features": [
+    "rolling_pnl_impact_ratio_14",
+    "cumulative_pnl",
+    "rolling_vol_7",
+    "fills_total_qty",
+    "ewm_fills_adding_liquidity_rate_10",
+    "ewm_fills_removing_liquidity_rate_10",
+    "daily_pnl",
+    "rolling_max_drawdown",
+    "win_rate_21d",
+    "ewm_volume_fills_efficiency_10",
+    "daily_gross",
+    "rolling_effective_spread_proxy_std_21",
+    "fills_count",
+    "ewm_pnl_3",
+    "ewm_volume_3"
+  ],
+  "feature_count": 15,
+  "training_data_shape": [
+    483,
+    15
+  ],
+  "test_data_shape": [
+    121,
+    15
+  ],
+  "models": {
+    "loss_model": {
+      "type": "LGBMClassifier",
+      "params": {
+        "objective": "binary",
+        "metric": "auc",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 44,
+        "learning_rate": 0.17254716573280354,
+        "feature_fraction": 0.892797576724562,
+        "bagging_fraction": 0.8394633936788146,
+        "min_child_samples": 12,
+        "reg_alpha": 0.15599452033620265,
+        "reg_lambda": 0.05808361216819946
+      },
+      "train_auc": 1.0,
+      "test_auc": 0.5,
+      "feature_importance": {
+        "rolling_pnl_impact_ratio_14": 0,
+        "cumulative_pnl": 0,
+        "rolling_vol_7": 87,
+        "fills_total_qty": 0,
+        "ewm_fills_adding_liquidity_rate_10": 0,
+        "ewm_fills_removing_liquidity_rate_10": 0,
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 0,
+        "win_rate_21d": 0,
+        "ewm_volume_fills_efficiency_10": 0,
+        "daily_gross": 0,
+        "rolling_effective_spread_proxy_std_21": 0,
+        "fills_count": 0,
+        "ewm_pnl_3": 0,
+        "ewm_volume_3": 9
+      },
+      "importance_by_category": {
+        "traditional": 96,
+        "fills_based": 0,
+        "execution_quality": 0,
+        "cross_features": 0,
+        "uncategorized": 0
+      }
+    },
+    "var_model": {
+      "type": "LGBMRegressor",
+      "params": {
+        "objective": "regression",
+        "metric": "rmse",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 67,
+        "learning_rate": 0.11620563962635319,
+        "feature_fraction": 0.9483784709542175,
+        "bagging_fraction": 0.9192685676733212,
+        "min_child_samples": 15,
+        "reg_alpha": 0.007824948815467647,
+        "reg_lambda": 0.25795145395440944
+      },
+      "train_rmse": 0.00024186370052825082,
+      "test_rmse": 0.09090551277319385,
+      "train_mae": 5.507635594422201e-05,
+      "test_mae": 0.008321008978601432,
+      "feature_importance": {
+        "rolling_pnl_impact_ratio_14": 0,
+        "cumulative_pnl": 0,
+        "rolling_vol_7": 94,
+        "fills_total_qty": 0,
+        "ewm_fills_adding_liquidity_rate_10": 0,
+        "ewm_fills_removing_liquidity_rate_10": 0,
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 9,
+        "win_rate_21d": 4,
+        "ewm_volume_fills_efficiency_10": 0,
+        "daily_gross": 0,
+        "rolling_effective_spread_proxy_std_21": 0,
+        "fills_count": 0,
+        "ewm_pnl_3": 2,
+        "ewm_volume_3": 3
+      },
+      "importance_by_category": {
+        "traditional": 112,
+        "fills_based": 0,
+        "execution_quality": 0,
+        "cross_features": 0,
+        "uncategorized": 0
+      }
+    }
+  },
+  "data_info": {
+    "train_period": [
+      "2023-05-02T00:00:00",
+      "2025-03-06T00:00:00"
+    ],
+    "test_period": [
+      "2025-03-07T00:00:00",
+      "2025-08-22T00:00:00"
+    ],
+    "large_loss_rate_train": 0.9606625258799172,
+    "large_loss_rate_test": 0.9917355371900827
+  }
+}

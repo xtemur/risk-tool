@@ -1,0 +1,158 @@
+{
+  "trader_id": 3942,
+  "training_timestamp": "2025-08-26T16:55:11.444825",
+  "enhanced_features": true,
+  "feature_categories": {
+    "traditional": [
+      "rolling_vol_7",
+      "win_rate_21d",
+      "ewm_volume_7",
+      "rolling_profit_factor",
+      "cumulative_pnl",
+      "rolling_max_drawdown",
+      "avg_trades_21d"
+    ],
+    "fills_based": [
+      "fills_count",
+      "fills_total_qty"
+    ],
+    "execution_quality": [],
+    "cross_features": [],
+    "behavioral": [
+      "large_loss_threshold",
+      "large_loss_recent"
+    ],
+    "uncategorized": [
+      "daily_gross",
+      "daily_volume",
+      "gross_loss",
+      "daily_pnl"
+    ]
+  },
+  "selected_features": [
+    "rolling_vol_7",
+    "fills_count",
+    "win_rate_21d",
+    "daily_gross",
+    "ewm_volume_7",
+    "rolling_profit_factor",
+    "fills_total_qty",
+    "cumulative_pnl",
+    "rolling_max_drawdown",
+    "large_loss_threshold",
+    "daily_volume",
+    "gross_loss",
+    "avg_trades_21d",
+    "daily_pnl",
+    "large_loss_recent"
+  ],
+  "feature_count": 15,
+  "training_data_shape": [
+    483,
+    15
+  ],
+  "test_data_shape": [
+    121,
+    15
+  ],
+  "models": {
+    "loss_model": {
+      "type": "LGBMClassifier",
+      "params": {
+        "objective": "binary",
+        "metric": "auc",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 44,
+        "learning_rate": 0.17254716573280354,
+        "feature_fraction": 0.892797576724562,
+        "bagging_fraction": 0.8394633936788146,
+        "min_child_samples": 12,
+        "reg_alpha": 0.15599452033620265,
+        "reg_lambda": 0.05808361216819946
+      },
+      "train_auc": 1.0,
+      "test_auc": 0.325,
+      "feature_importance": {
+        "rolling_vol_7": 92,
+        "fills_count": 0,
+        "win_rate_21d": 0,
+        "daily_gross": 0,
+        "ewm_volume_7": 0,
+        "rolling_profit_factor": 5,
+        "fills_total_qty": 0,
+        "cumulative_pnl": 0,
+        "rolling_max_drawdown": 1,
+        "large_loss_threshold": 0,
+        "daily_volume": 0,
+        "gross_loss": 0,
+        "avg_trades_21d": 0,
+        "daily_pnl": 0,
+        "large_loss_recent": 0
+      },
+      "importance_by_category": {
+        "traditional": 98,
+        "fills_based": 0,
+        "behavioral": 0,
+        "uncategorized": 0
+      }
+    },
+    "var_model": {
+      "type": "LGBMRegressor",
+      "params": {
+        "objective": "regression",
+        "metric": "rmse",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 47,
+        "learning_rate": 0.05491414261954721,
+        "feature_fraction": 0.8872443923690236,
+        "bagging_fraction": 0.7128101586155492,
+        "min_child_samples": 7,
+        "reg_alpha": 0.019638704335400572,
+        "reg_lambda": 0.14860579525394482
+      },
+      "train_rmse": 0.002372156215871296,
+      "test_rmse": 0.09090275173107715,
+      "train_mae": 0.0005234151429216415,
+      "test_mae": 0.008382434716575215,
+      "feature_importance": {
+        "rolling_vol_7": 103,
+        "fills_count": 0,
+        "win_rate_21d": 0,
+        "daily_gross": 39,
+        "ewm_volume_7": 96,
+        "rolling_profit_factor": 66,
+        "fills_total_qty": 0,
+        "cumulative_pnl": 30,
+        "rolling_max_drawdown": 17,
+        "large_loss_threshold": 17,
+        "daily_volume": 2,
+        "gross_loss": 0,
+        "avg_trades_21d": 63,
+        "daily_pnl": 5,
+        "large_loss_recent": 0
+      },
+      "importance_by_category": {
+        "traditional": 375,
+        "fills_based": 0,
+        "behavioral": 17,
+        "uncategorized": 46
+      }
+    }
+  },
+  "data_info": {
+    "train_period": [
+      "2023-05-02T00:00:00",
+      "2025-03-06T00:00:00"
+    ],
+    "test_period": [
+      "2025-03-07T00:00:00",
+      "2025-08-22T00:00:00"
+    ],
+    "large_loss_rate_train": 0.9855072463768116,
+    "large_loss_rate_test": 0.9917355371900827
+  }
+}

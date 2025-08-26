@@ -1,0 +1,161 @@
+{
+  "trader_id": 3950,
+  "training_timestamp": "2025-08-26T16:55:24.241519",
+  "enhanced_features": true,
+  "feature_categories": {
+    "traditional": [
+      "cumulative_pnl",
+      "rolling_vol_7",
+      "ewm_fills_removing_liquidity_rate_10",
+      "rolling_max_drawdown",
+      "win_rate_21d",
+      "ewm_volume_fills_efficiency_10",
+      "ewm_volume_3",
+      "ewm_volume_7"
+    ],
+    "fills_based": [
+      "fills_total_qty",
+      "fills_count",
+      "fills_mean_qty"
+    ],
+    "execution_quality": [],
+    "cross_features": [
+      "rolling_pnl_impact_ratio_14"
+    ],
+    "behavioral": [
+      "large_loss_threshold"
+    ],
+    "uncategorized": [
+      "daily_pnl",
+      "daily_gross"
+    ]
+  },
+  "selected_features": [
+    "rolling_pnl_impact_ratio_14",
+    "cumulative_pnl",
+    "rolling_vol_7",
+    "fills_total_qty",
+    "ewm_fills_removing_liquidity_rate_10",
+    "daily_pnl",
+    "rolling_max_drawdown",
+    "win_rate_21d",
+    "ewm_volume_fills_efficiency_10",
+    "daily_gross",
+    "fills_count",
+    "fills_mean_qty",
+    "ewm_volume_3",
+    "ewm_volume_7",
+    "large_loss_threshold"
+  ],
+  "feature_count": 15,
+  "training_data_shape": [
+    483,
+    15
+  ],
+  "test_data_shape": [
+    121,
+    15
+  ],
+  "models": {
+    "loss_model": {
+      "type": "LGBMClassifier",
+      "params": {
+        "objective": "binary",
+        "metric": "auc",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 44,
+        "learning_rate": 0.17254716573280354,
+        "feature_fraction": 0.892797576724562,
+        "bagging_fraction": 0.8394633936788146,
+        "min_child_samples": 12,
+        "reg_alpha": 0.15599452033620265,
+        "reg_lambda": 0.05808361216819946
+      },
+      "train_auc": 1.0,
+      "test_auc": 0.5,
+      "feature_importance": {
+        "rolling_pnl_impact_ratio_14": 0,
+        "cumulative_pnl": 0,
+        "rolling_vol_7": 87,
+        "fills_total_qty": 0,
+        "ewm_fills_removing_liquidity_rate_10": 2,
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 0,
+        "win_rate_21d": 2,
+        "ewm_volume_fills_efficiency_10": 0,
+        "daily_gross": 0,
+        "fills_count": 0,
+        "fills_mean_qty": 0,
+        "ewm_volume_3": 2,
+        "ewm_volume_7": 0,
+        "large_loss_threshold": 0
+      },
+      "importance_by_category": {
+        "traditional": 93,
+        "fills_based": 0,
+        "cross_features": 0,
+        "behavioral": 0,
+        "uncategorized": 0
+      }
+    },
+    "var_model": {
+      "type": "LGBMRegressor",
+      "params": {
+        "objective": "regression",
+        "metric": "rmse",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 65,
+        "learning_rate": 0.16789636691744297,
+        "feature_fraction": 0.9680218096680833,
+        "bagging_fraction": 0.7943223108384223,
+        "min_child_samples": 7,
+        "reg_alpha": 0.12659709920371592,
+        "reg_lambda": 0.737870546853001
+      },
+      "train_rmse": 0.012163726393991709,
+      "test_rmse": 0.09063668269274801,
+      "train_mae": 0.003043189394207205,
+      "test_mae": 0.008454657531333827,
+      "feature_importance": {
+        "rolling_pnl_impact_ratio_14": 40,
+        "cumulative_pnl": 34,
+        "rolling_vol_7": 133,
+        "fills_total_qty": 3,
+        "ewm_fills_removing_liquidity_rate_10": 42,
+        "daily_pnl": 12,
+        "rolling_max_drawdown": 6,
+        "win_rate_21d": 35,
+        "ewm_volume_fills_efficiency_10": 17,
+        "daily_gross": 49,
+        "fills_count": 0,
+        "fills_mean_qty": 0,
+        "ewm_volume_3": 62,
+        "ewm_volume_7": 33,
+        "large_loss_threshold": 12
+      },
+      "importance_by_category": {
+        "traditional": 362,
+        "fills_based": 3,
+        "cross_features": 40,
+        "behavioral": 12,
+        "uncategorized": 61
+      }
+    }
+  },
+  "data_info": {
+    "train_period": [
+      "2023-05-02T00:00:00",
+      "2025-03-06T00:00:00"
+    ],
+    "test_period": [
+      "2025-03-07T00:00:00",
+      "2025-08-22T00:00:00"
+    ],
+    "large_loss_rate_train": 0.9917184265010351,
+    "large_loss_rate_test": 0.9917355371900827
+  }
+}

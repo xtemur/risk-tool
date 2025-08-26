@@ -1,0 +1,158 @@
+{
+  "trader_id": 4396,
+  "training_timestamp": "2025-08-26T16:55:47.058190",
+  "enhanced_features": true,
+  "feature_categories": {
+    "traditional": [
+      "rolling_vol_7",
+      "avg_trades_21d",
+      "rolling_max_drawdown",
+      "rolling_vol_21",
+      "win_rate_21d",
+      "ewm_pnl_7",
+      "ewm_pnl_3",
+      "ewm_volume_3",
+      "ewm_volume_7"
+    ],
+    "fills_based": [
+      "fills_count",
+      "trades_to_fills_ratio"
+    ],
+    "execution_quality": [],
+    "cross_features": [
+      "rolling_pnl_impact_ratio_14"
+    ],
+    "behavioral": [],
+    "uncategorized": [
+      "daily_pnl",
+      "daily_gross",
+      "daily_fees"
+    ]
+  },
+  "selected_features": [
+    "rolling_pnl_impact_ratio_14",
+    "rolling_vol_7",
+    "avg_trades_21d",
+    "fills_count",
+    "daily_pnl",
+    "rolling_max_drawdown",
+    "rolling_vol_21",
+    "win_rate_21d",
+    "ewm_pnl_7",
+    "daily_gross",
+    "trades_to_fills_ratio",
+    "ewm_pnl_3",
+    "ewm_volume_3",
+    "ewm_volume_7",
+    "daily_fees"
+  ],
+  "feature_count": 15,
+  "training_data_shape": [
+    483,
+    15
+  ],
+  "test_data_shape": [
+    121,
+    15
+  ],
+  "models": {
+    "loss_model": {
+      "type": "LGBMClassifier",
+      "params": {
+        "objective": "binary",
+        "metric": "auc",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 44,
+        "learning_rate": 0.17254716573280354,
+        "feature_fraction": 0.892797576724562,
+        "bagging_fraction": 0.8394633936788146,
+        "min_child_samples": 12,
+        "reg_alpha": 0.15599452033620265,
+        "reg_lambda": 0.05808361216819946
+      },
+      "train_auc": 1.0,
+      "test_auc": 0.5,
+      "feature_importance": {
+        "rolling_pnl_impact_ratio_14": 0,
+        "rolling_vol_7": 88,
+        "avg_trades_21d": 0,
+        "fills_count": 0,
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 0,
+        "rolling_vol_21": 0,
+        "win_rate_21d": 0,
+        "ewm_pnl_7": 0,
+        "daily_gross": 0,
+        "trades_to_fills_ratio": 0,
+        "ewm_pnl_3": 0,
+        "ewm_volume_3": 7,
+        "ewm_volume_7": 0,
+        "daily_fees": 0
+      },
+      "importance_by_category": {
+        "traditional": 95,
+        "fills_based": 0,
+        "cross_features": 0,
+        "uncategorized": 0
+      }
+    },
+    "var_model": {
+      "type": "LGBMRegressor",
+      "params": {
+        "objective": "regression",
+        "metric": "rmse",
+        "boosting_type": "gbdt",
+        "random_state": 42,
+        "verbose": -1,
+        "num_leaves": 70,
+        "learning_rate": 0.10660290908929812,
+        "feature_fraction": 0.9788098681769468,
+        "bagging_fraction": 0.9314847272144393,
+        "min_child_samples": 32,
+        "reg_alpha": 0.0018399913518364688,
+        "reg_lambda": 0.7304237546314652
+      },
+      "train_rmse": 5.111751161554856e-05,
+      "test_rmse": 0.0909079237238965,
+      "train_mae": 2.7532823366191287e-05,
+      "test_mae": 0.00830937864910423,
+      "feature_importance": {
+        "rolling_pnl_impact_ratio_14": 4,
+        "rolling_vol_7": 85,
+        "avg_trades_21d": 0,
+        "fills_count": 0,
+        "daily_pnl": 3,
+        "rolling_max_drawdown": 21,
+        "rolling_vol_21": 0,
+        "win_rate_21d": 0,
+        "ewm_pnl_7": 2,
+        "daily_gross": 2,
+        "trades_to_fills_ratio": 0,
+        "ewm_pnl_3": 0,
+        "ewm_volume_3": 4,
+        "ewm_volume_7": 6,
+        "daily_fees": 5
+      },
+      "importance_by_category": {
+        "traditional": 118,
+        "fills_based": 0,
+        "cross_features": 4,
+        "uncategorized": 10
+      }
+    }
+  },
+  "data_info": {
+    "train_period": [
+      "2023-05-02T00:00:00",
+      "2025-03-06T00:00:00"
+    ],
+    "test_period": [
+      "2025-03-07T00:00:00",
+      "2025-08-22T00:00:00"
+    ],
+    "large_loss_rate_train": 0.4575569358178054,
+    "large_loss_rate_test": 0.9917355371900827
+  }
+}
