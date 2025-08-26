@@ -320,20 +320,20 @@
 <body>
     <div class="container">
         <div class="header">
-            <h1>Daily Risk Signals</h1>
+            <h1>Daily Position Sizing Signals</h1>
             <div class="date">{{ date }} | Generated: {{ generated_time }}</div>
         </div>
 
         <div class="content">
-            <div class="section-title">Trader Risk Signals</div>
+            <div class="section-title">Trader Position Sizing Signals</div>
 
             <div class="table-container">
                 <table class="signals-table">
                 <thead>
                     <tr>
                         <th rowspan="2">Trader</th>
-                        <th rowspan="2">Risk Level</th>
-                        <th rowspan="2">VaR (5%)</th>
+                        <th rowspan="2">Position Level</th>
+                        <th rowspan="2">Position Size</th>
                         <th rowspan="2">Loss Prob</th>
                         <th rowspan="2">Last Day PnL</th>
                         <th colspan="8" style="background-color: #2A2A2A; border-bottom: 2px solid #00D4AA;">30D Performance Window</th>
@@ -353,15 +353,15 @@
                 </thead>
                 <tbody>
                     {% for signal in trader_signals %}
-                    <tr class="risk-{{ signal.risk_level }}">
+                    <tr class="risk-{{ signal.position_level or signal.risk_level }}">
                         <td><span style="font-size: 8px; color: #888; font-weight: normal;">{{ signal.trader_id }}</span><br><strong style="font-size: 12px; color: #000;">{{ signal.trader_name }}</strong></td>
                         <td>
-                            <div class="risk-badge {{ signal.risk_level }}">
-                                {{ signal.risk_level|title }}
+                            <div class="risk-badge {{ signal.position_level or signal.risk_level }}">
+                                {{ (signal.position_level or signal.risk_level)|title }}
                             </div>
                         </td>
-                        <td style="background-color: {{ signal.var_heatmap.bg }}; color: {{ signal.var_heatmap.text }};">
-                            ${{ signal.var_5pct|round(0)|int|format_number }}
+                        <td style="background-color: {{ signal.position_heatmap.bg }}; color: {{ signal.position_heatmap.text }};">
+                            {{ "%.1f"|format(signal.position_size * 100) }}%
                         </td>
                         <td style="background-color: {{ signal.loss_prob_heatmap.bg }}; color: {{ signal.loss_prob_heatmap.text }};">
                             {{ "%.1f"|format(signal.loss_probability * 100) }}%
@@ -428,23 +428,23 @@
             {% endif %}
 
             <div class="summary-section">
-                <div class="section-title">Market Risk Summary</div>
+                <div class="section-title">Position Sizing Summary</div>
                 <div class="summary-grid">
                     <div class="metric">
-                        <div class="metric-label">High Risk</div>
-                        <div class="metric-value alert">{{ high_risk_count }}</div>
+                        <div class="metric-label">Reduce Position</div>
+                        <div class="metric-value alert">{{ reduce_position_count }}</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-label">Medium Risk</div>
-                        <div class="metric-value warning">{{ medium_risk_count }}</div>
+                        <div class="metric-label">Conservative</div>
+                        <div class="metric-value warning">{{ conservative_count }}</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-label">Low Risk</div>
-                        <div class="metric-value normal">{{ low_risk_count }}</div>
+                        <div class="metric-label">Normal</div>
+                        <div class="metric-value normal">{{ normal_count }}</div>
                     </div>
                     <div class="metric">
-                        <div class="metric-label">Neutral</div>
-                        <div class="metric-value" style="color: #718096;">{{ neutral_risk_count }}</div>
+                        <div class="metric-label">Aggressive</div>
+                        <div class="metric-value" style="color: #718096;">{{ aggressive_count }}</div>
                     </div>
                     <div class="metric">
                         <div class="metric-label">Total Monitored</div>
@@ -452,8 +452,8 @@
                     </div>
                     {% if summary_stats %}
                     <div class="metric">
-                        <div class="metric-label">Max VaR</div>
-                        <div class="metric-value" style="color: #2d3748;">${{ summary_stats.max_var|round(0)|int|format_number }}</div>
+                        <div class="metric-label">Max Position</div>
+                        <div class="metric-value" style="color: #2d3748;">{{ "%.1f"|format(summary_stats.max_position_size * 100) }}%</div>
                     </div>
                     <div class="metric">
                         <div class="metric-label">Max Loss Prob</div>

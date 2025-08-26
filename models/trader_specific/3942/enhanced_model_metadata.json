@@ -1,50 +1,50 @@
 {
   "trader_id": 3942,
-  "training_timestamp": "2025-08-26T16:55:11.444825",
+  "training_timestamp": "2025-08-26T17:36:32.399822",
   "enhanced_features": true,
   "feature_categories": {
     "traditional": [
-      "rolling_vol_7",
       "win_rate_21d",
       "ewm_volume_7",
       "rolling_profit_factor",
-      "cumulative_pnl",
-      "rolling_max_drawdown",
-      "avg_trades_21d"
+      "rolling_vol_7",
+      "ewm_pnl_3",
+      "ewm_volume_3",
+      "rolling_max_drawdown"
     ],
     "fills_based": [
-      "fills_count",
-      "fills_total_qty"
+      "fills_mean_qty",
+      "fills_total_qty",
+      "fills_count"
     ],
     "execution_quality": [],
     "cross_features": [],
     "behavioral": [
-      "large_loss_threshold",
       "large_loss_recent"
     ],
     "uncategorized": [
-      "daily_gross",
-      "daily_volume",
+      "daily_pnl",
       "gross_loss",
-      "daily_pnl"
+      "daily_gross",
+      "daily_fees"
     ]
   },
   "selected_features": [
-    "rolling_vol_7",
-    "fills_count",
+    "large_loss_recent",
     "win_rate_21d",
-    "daily_gross",
+    "daily_pnl",
     "ewm_volume_7",
     "rolling_profit_factor",
-    "fills_total_qty",
-    "cumulative_pnl",
+    "fills_mean_qty",
+    "rolling_vol_7",
+    "ewm_pnl_3",
+    "ewm_volume_3",
     "rolling_max_drawdown",
-    "large_loss_threshold",
-    "daily_volume",
     "gross_loss",
-    "avg_trades_21d",
-    "daily_pnl",
-    "large_loss_recent"
+    "daily_gross",
+    "daily_fees",
+    "fills_total_qty",
+    "fills_count"
   ],
   "feature_count": 15,
   "training_data_shape": [
@@ -75,30 +75,30 @@
       "train_auc": 1.0,
       "test_auc": 0.325,
       "feature_importance": {
-        "rolling_vol_7": 92,
-        "fills_count": 0,
+        "large_loss_recent": 0,
         "win_rate_21d": 0,
-        "daily_gross": 0,
-        "ewm_volume_7": 0,
-        "rolling_profit_factor": 5,
-        "fills_total_qty": 0,
-        "cumulative_pnl": 0,
-        "rolling_max_drawdown": 1,
-        "large_loss_threshold": 0,
-        "daily_volume": 0,
-        "gross_loss": 0,
-        "avg_trades_21d": 0,
         "daily_pnl": 0,
-        "large_loss_recent": 0
+        "ewm_volume_7": 2,
+        "rolling_profit_factor": 10,
+        "fills_mean_qty": 0,
+        "rolling_vol_7": 83,
+        "ewm_pnl_3": 0,
+        "ewm_volume_3": 4,
+        "rolling_max_drawdown": 2,
+        "gross_loss": 0,
+        "daily_gross": 2,
+        "daily_fees": 0,
+        "fills_total_qty": 0,
+        "fills_count": 0
       },
       "importance_by_category": {
-        "traditional": 98,
+        "traditional": 101,
         "fills_based": 0,
         "behavioral": 0,
-        "uncategorized": 0
+        "uncategorized": 2
       }
     },
-    "var_model": {
+    "position_model": {
       "type": "LGBMRegressor",
       "params": {
         "objective": "regression",
@@ -106,40 +106,40 @@
         "boosting_type": "gbdt",
         "random_state": 42,
         "verbose": -1,
-        "num_leaves": 47,
-        "learning_rate": 0.05491414261954721,
-        "feature_fraction": 0.8872443923690236,
-        "bagging_fraction": 0.7128101586155492,
+        "num_leaves": 11,
+        "learning_rate": 0.047624873009518356,
+        "feature_fraction": 0.8201947749452626,
+        "bagging_fraction": 0.7168965350525915,
         "min_child_samples": 7,
-        "reg_alpha": 0.019638704335400572,
-        "reg_lambda": 0.14860579525394482
+        "reg_alpha": 0.09153668285577933,
+        "reg_lambda": 0.2913744850491264
       },
-      "train_rmse": 0.002372156215871296,
-      "test_rmse": 0.09090275173107715,
-      "train_mae": 0.0005234151429216415,
-      "test_mae": 0.008382434716575215,
+      "train_rmse": 0.007093873376312552,
+      "test_rmse": 0.09089310773090616,
+      "train_mae": 0.0016497943642027496,
+      "test_mae": 0.008502009177303435,
       "feature_importance": {
-        "rolling_vol_7": 103,
-        "fills_count": 0,
+        "large_loss_recent": 0,
         "win_rate_21d": 0,
-        "daily_gross": 39,
-        "ewm_volume_7": 96,
-        "rolling_profit_factor": 66,
-        "fills_total_qty": 0,
-        "cumulative_pnl": 30,
-        "rolling_max_drawdown": 17,
-        "large_loss_threshold": 17,
-        "daily_volume": 2,
+        "daily_pnl": 1,
+        "ewm_volume_7": 69,
+        "rolling_profit_factor": 20,
+        "fills_mean_qty": 1,
+        "rolling_vol_7": 99,
+        "ewm_pnl_3": 7,
+        "ewm_volume_3": 67,
+        "rolling_max_drawdown": 2,
         "gross_loss": 0,
-        "avg_trades_21d": 63,
-        "daily_pnl": 5,
-        "large_loss_recent": 0
+        "daily_gross": 4,
+        "daily_fees": 12,
+        "fills_total_qty": 1,
+        "fills_count": 2
       },
       "importance_by_category": {
-        "traditional": 375,
-        "fills_based": 0,
-        "behavioral": 17,
-        "uncategorized": 46
+        "traditional": 264,
+        "fills_based": 4,
+        "behavioral": 0,
+        "uncategorized": 17
       }
     }
   },

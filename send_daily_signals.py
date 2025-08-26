@@ -124,16 +124,21 @@ def main():
         print(f"Date: {signal_data['date']}")
         print(f"Total Traders: {len(signal_data['trader_signals'])}")
 
-        risk_counts = {'high': 0, 'medium': 0, 'low': 0, 'neutral': 0}
+        position_counts = {'reduce': 0, 'conservative': 0, 'normal': 0, 'aggressive': 0}
         for signal in signal_data['trader_signals']:
-            risk_level = signal['risk_level']
-            if risk_level in risk_counts:
-                risk_counts[risk_level] += 1
+            position_level = signal.get('position_level', 'normal')
+            # Map old risk levels to position levels for backward compatibility
+            if position_level in ['high', 'medium', 'low', 'neutral']:
+                position_map = {'high': 'reduce', 'medium': 'conservative', 'low': 'normal', 'neutral': 'normal'}
+                position_level = position_map.get(position_level, 'normal')
+            if position_level in position_counts:
+                position_counts[position_level] += 1
 
-        print(f"High Risk: {risk_counts['high']}")
-        print(f"Medium Risk: {risk_counts['medium']}")
-        print(f"Low Risk: {risk_counts['low']}")
-        print(f"Neutral: {risk_counts['neutral']}")
+        print(f"Reduce Position: {position_counts['reduce']}")
+        print(f"Conservative: {position_counts['conservative']}")
+        print(f"Normal: {position_counts['normal']}")
+        print(f"Aggressive: {position_counts['aggressive']}")
+        # Position counts already printed above
         print(f"Critical Alerts: {len(signal_data['alerts'])}")
 
         if signal_data['alerts']:

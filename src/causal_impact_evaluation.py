@@ -17,9 +17,9 @@ class CausalImpactEvaluator:
     Evaluates the causal impact of model-based trading interventions on unseen test data.
 
     Enhanced to support:
+    - Position sizing optimization (0% to 150%)
     - Multiple PnL reduction levels (0%, 10%, 30%, 60%)
-    - Weighted risk formula (alpha * VaR + beta * LossProb)
-    - 4-level risk classification
+    - Position-based risk management
     """
 
     def __init__(self, base_path: str = "/Users/temurbekkhujaev/Repos/risk-tool"):
@@ -34,7 +34,7 @@ class CausalImpactEvaluator:
 
         self.thresholds = {
             str(thresh["trader_id"]): {
-                "var_threshold": thresh["var_threshold"],
+                "position_threshold": thresh.get("position_threshold", 0.5),  # Low position threshold
                 "loss_prob_threshold": thresh["loss_prob_threshold"]
             }
             for thresh in thresholds_data["thresholds"]
@@ -60,7 +60,7 @@ class CausalImpactEvaluator:
         return test_data, model_data
 
     def generate_predictions(self, test_data: pd.DataFrame, model_data: Dict[str, Any]) -> pd.DataFrame:
-        """Generate VaR and loss probability predictions for test data."""
+        """Generate position sizing and loss probability predictions for test data."""
         # Use the feature names from the model
         feature_names = model_data['feature_names']
 

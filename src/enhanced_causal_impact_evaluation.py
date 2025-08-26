@@ -226,8 +226,8 @@ class EnhancedCausalImpactEvaluator:
                     labels=['Reduce', 'Conservative', 'Normal', 'Aggressive']
                 )
 
-            # Backward compatibility - add var_prediction as alias for position_size
-            results_df['var_prediction'] = position_size_predictions
+            # Main prediction is position sizing
+            # results_df['var_prediction'] = position_size_predictions  # Removed VAR reference
 
             logger.info(f"Generated {len(results_df)} position sizing predictions")
             logger.info(f"  Position size range: {position_size_predictions.min():.3f} to {position_size_predictions.max():.3f}")
@@ -379,15 +379,15 @@ class EnhancedCausalImpactEvaluator:
                 else:
                     metrics['risk_classification'] = {'note': 'Insufficient class diversity for risk classification'}
 
-            # Legacy regression metrics (for backward compatibility)
-            if 'actual_pnl' in predictions_df.columns and 'var_prediction' in predictions_df.columns:
-                actual_pnl = predictions_df['actual_pnl'].dropna()
-                var_pred = predictions_df['var_prediction'].loc[actual_pnl.index]
+            # Position sizing regression metrics
+            if 'actual_position_size' in predictions_df.columns and 'predicted_position_size' in predictions_df.columns:
+                actual_pos = predictions_df['actual_position_size'].dropna()
+                pred_pos = predictions_df['predicted_position_size'].loc[actual_pos.index]
 
-                metrics['regression'] = {
-                    'rmse': float(np.sqrt(mean_squared_error(actual_pnl, var_pred))),
-                    'mae': float(mean_absolute_error(actual_pnl, var_pred)),
-                    'r2': float(r2_score(actual_pnl, var_pred))
+                metrics['position_sizing'] = {
+                    'rmse': float(np.sqrt(mean_squared_error(actual_pos, pred_pos))),
+                    'mae': float(mean_absolute_error(actual_pos, pred_pos)),
+                    'r2': float(r2_score(actual_pos, pred_pos))
                 }
 
             # Legacy classification metrics (for backward compatibility)
@@ -412,15 +412,15 @@ class EnhancedCausalImpactEvaluator:
                     'large_loss_rate': float(predictions_df['actual_large_loss'].mean()),
                     'avg_loss_probability_on_loss_days': float(actual_losses['loss_probability'].mean()),
                     'avg_loss_probability_on_normal_days': float(predictions_df[predictions_df['actual_large_loss'] == 0]['loss_probability'].mean()),
-                    'var_accuracy_on_loss_days': float(actual_losses['var_prediction'].mean()),
+                    'position_size_on_loss_days': float(actual_losses.get('predicted_position_size', pd.Series([0])).mean()),
                 }
 
             # Prediction distribution
             metrics['prediction_distribution'] = {
                 'loss_prob_mean': float(predictions_df['loss_probability'].mean()),
                 'loss_prob_std': float(predictions_df['loss_probability'].std()),
-                'var_pred_mean': float(predictions_df['var_prediction'].mean()),
-                'var_pred_std': float(predictions_df['var_prediction'].std())
+                'position_size_mean': float(predictions_df.get('predicted_position_size', pd.Series([1.0])).mean()),
+                'position_size_std': float(predictions_df.get('predicted_position_size', pd.Series([0])).std())
             }
 
         except Exception as e:
@@ -442,11 +442,11 @@ class EnhancedCausalImpactEvaluator:
                         sorted(loss_importance.items(), key=lambda x: x[1], reverse=True)
                     )
 
-                # VaR model feature importance
-                if 'var_model' in metadata['models']:
-                    var_importance = metadata['models']['var_model'].get('importance_by_category', {})
-                    feature_analysis['var_model_importance'] = dict(
-                        sorted(var_importance.items(), key=lambda x: x[1], reverse=True)
+                # Position sizing model feature importance
+                if 'position_sizing_model' in metadata['models']:
+                    pos_importance = metadata['models']['position_sizing_model'].get('importance_by_category', {})
+                    feature_analysis['position_sizing_importance'] = dict(
+                        sorted(pos_importance.items(), key=lambda x: x[1], reverse=True)
                     )
 
                 # Feature categories
@@ -480,7 +480,7 @@ class EnhancedCausalImpactEvaluator:
 
                 insights['training_performance'] = {
                     'loss_model_auc': loss_model_info.get('test_auc', 0),
-                    'var_model_rmse': var_model_info.get('test_rmse', 0)
+                    'position_sizing_rmse': metadata.get('models', {}).get('position_sizing_model', {}).get('test_rmse', 0)
                 }
 
             # Prediction characteristics
@@ -488,7 +488,7 @@ class EnhancedCausalImpactEvaluator:
             insights['prediction_insights'] = {
                 'high_risk_days_count': len(high_risk_days),
                 'high_risk_days_rate': len(high_risk_days) / len(predictions_df),
-                'avg_var_on_high_risk_days': float(high_risk_days['var_prediction'].mean()) if len(high_risk_days) > 0 else 0,
+                'avg_position_size_on_high_risk_days': float(high_risk_days.get('predicted_position_size', pd.Series([1.0])).mean()) if len(high_risk_days) > 0 else 0,
                 'actual_losses_on_high_risk_days': int(high_risk_days['actual_large_loss'].sum()) if len(high_risk_days) > 0 else 0
             }
 

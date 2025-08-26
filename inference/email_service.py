@@ -78,27 +78,27 @@ class EmailService:
 
         # Calculate summary metrics if not provided
         if 'high_risk_count' not in signal_data:
-            signal_data['high_risk_count'] = sum(
+            signal_data['reduce_position_count'] = sum(
                 1 for s in signal_data.get('trader_signals', [])
-                if s.get('risk_level') == 'high'
+                if s.get('position_level', s.get('risk_level', 'normal')) in ['reduce', 'high']
             )
 
         if 'medium_risk_count' not in signal_data:
-            signal_data['medium_risk_count'] = sum(
+            signal_data['conservative_count'] = sum(
                 1 for s in signal_data.get('trader_signals', [])
-                if s.get('risk_level') == 'medium'
+                if s.get('position_level', s.get('risk_level', 'normal')) in ['conservative', 'medium']
             )
 
         if 'low_risk_count' not in signal_data:
-            signal_data['low_risk_count'] = sum(
+            signal_data['normal_count'] = sum(
                 1 for s in signal_data.get('trader_signals', [])
-                if s.get('risk_level') == 'low'
+                if s.get('position_level', s.get('risk_level', 'normal')) in ['normal', 'low']
             )
 
         if 'neutral_risk_count' not in signal_data:
-            signal_data['neutral_risk_count'] = sum(
+            signal_data['aggressive_count'] = sum(
                 1 for s in signal_data.get('trader_signals', [])
-                if s.get('risk_level') == 'neutral'
+                if s.get('position_level', s.get('risk_level', 'normal')) in ['aggressive', 'neutral']
             )
 
         if 'total_traders' not in signal_data:
@@ -255,8 +255,8 @@ def test_email_service():
         'trader_signals': [
             {
                 'trader_id': '3942',
-                'risk_level': 'high',
-                'var_5pct': -5234.50,
+                'position_level': 'reduce',
+                'position_size': 0.35,
                 'loss_probability': 0.82,
                 'current_pnl': -1250.00,
                 'volatility': 1823.45,
@@ -264,8 +264,8 @@ def test_email_service():
             },
             {
                 'trader_id': '3943',
-                'risk_level': 'medium',
-                'var_5pct': -2100.00,
+                'position_level': 'conservative',
+                'position_size': 0.75,
                 'loss_probability': 0.45,
                 'current_pnl': 350.00,
                 'volatility': 980.20,
@@ -273,8 +273,8 @@ def test_email_service():
             },
             {
                 'trader_id': '3946',
-                'risk_level': 'low',
-                'var_5pct': -800.00,
+                'position_level': 'normal',
+                'position_size': 1.0,
                 'loss_probability': 0.15,
                 'current_pnl': 1200.00,
                 'volatility': 450.30,

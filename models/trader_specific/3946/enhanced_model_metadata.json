@@ -1,21 +1,20 @@
 {
   "trader_id": 3946,
-  "training_timestamp": "2025-08-26T16:55:19.768583",
+  "training_timestamp": "2025-08-26T17:36:41.118525",
   "enhanced_features": true,
   "feature_categories": {
     "traditional": [
       "cumulative_pnl",
+      "win_rate_21d",
       "rolling_vol_7",
       "ewm_fills_adding_liquidity_rate_10",
-      "ewm_fills_removing_liquidity_rate_10",
-      "rolling_max_drawdown",
-      "win_rate_21d",
-      "ewm_volume_fills_efficiency_10",
       "ewm_pnl_3",
-      "ewm_volume_3"
+      "ewm_volume_fills_efficiency_10",
+      "rolling_max_drawdown"
     ],
     "fills_based": [
       "fills_total_qty",
+      "fills_market_open_rate",
       "fills_count"
     ],
     "execution_quality": [
@@ -26,26 +25,27 @@
     ],
     "behavioral": [],
     "uncategorized": [
-      "daily_pnl",
-      "daily_gross"
+      "daily_gross",
+      "daily_fees",
+      "daily_pnl"
     ]
   },
   "selected_features": [
-    "rolling_pnl_impact_ratio_14",
     "cumulative_pnl",
-    "rolling_vol_7",
-    "fills_total_qty",
-    "ewm_fills_adding_liquidity_rate_10",
-    "ewm_fills_removing_liquidity_rate_10",
-    "daily_pnl",
-    "rolling_max_drawdown",
-    "win_rate_21d",
-    "ewm_volume_fills_efficiency_10",
     "daily_gross",
+    "win_rate_21d",
+    "rolling_vol_7",
     "rolling_effective_spread_proxy_std_21",
-    "fills_count",
+    "ewm_fills_adding_liquidity_rate_10",
+    "rolling_pnl_impact_ratio_14",
+    "daily_fees",
     "ewm_pnl_3",
-    "ewm_volume_3"
+    "fills_total_qty",
+    "fills_market_open_rate",
+    "ewm_volume_fills_efficiency_10",
+    "fills_count",
+    "daily_pnl",
+    "rolling_max_drawdown"
   ],
   "feature_count": 15,
   "training_data_shape": [
@@ -74,33 +74,33 @@
         "reg_lambda": 0.05808361216819946
       },
       "train_auc": 1.0,
-      "test_auc": 0.5,
+      "test_auc": 0.4083333333333333,
       "feature_importance": {
-        "rolling_pnl_impact_ratio_14": 0,
         "cumulative_pnl": 0,
-        "rolling_vol_7": 87,
-        "fills_total_qty": 0,
-        "ewm_fills_adding_liquidity_rate_10": 0,
-        "ewm_fills_removing_liquidity_rate_10": 0,
-        "daily_pnl": 0,
-        "rolling_max_drawdown": 0,
-        "win_rate_21d": 0,
-        "ewm_volume_fills_efficiency_10": 0,
         "daily_gross": 0,
+        "win_rate_21d": 4,
+        "rolling_vol_7": 88,
         "rolling_effective_spread_proxy_std_21": 0,
+        "ewm_fills_adding_liquidity_rate_10": 0,
+        "rolling_pnl_impact_ratio_14": 0,
+        "daily_fees": 0,
+        "ewm_pnl_3": 1,
+        "fills_total_qty": 0,
+        "fills_market_open_rate": 0,
+        "ewm_volume_fills_efficiency_10": 4,
         "fills_count": 0,
-        "ewm_pnl_3": 0,
-        "ewm_volume_3": 9
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 0
       },
       "importance_by_category": {
-        "traditional": 96,
+        "traditional": 97,
         "fills_based": 0,
         "execution_quality": 0,
         "cross_features": 0,
         "uncategorized": 0
       }
     },
-    "var_model": {
+    "position_model": {
       "type": "LGBMRegressor",
       "params": {
         "objective": "regression",
@@ -108,37 +108,37 @@
         "boosting_type": "gbdt",
         "random_state": 42,
         "verbose": -1,
-        "num_leaves": 67,
-        "learning_rate": 0.11620563962635319,
-        "feature_fraction": 0.9483784709542175,
-        "bagging_fraction": 0.9192685676733212,
-        "min_child_samples": 15,
-        "reg_alpha": 0.007824948815467647,
-        "reg_lambda": 0.25795145395440944
+        "num_leaves": 66,
+        "learning_rate": 0.10366943891265999,
+        "feature_fraction": 0.9979030685774333,
+        "bagging_fraction": 0.9138294343870095,
+        "min_child_samples": 14,
+        "reg_alpha": 0.02141614717924656,
+        "reg_lambda": 0.061070953185390325
       },
-      "train_rmse": 0.00024186370052825082,
-      "test_rmse": 0.09090551277319385,
-      "train_mae": 5.507635594422201e-05,
-      "test_mae": 0.008321008978601432,
+      "train_rmse": 0.00023884479660431473,
+      "test_rmse": 0.09090391909977771,
+      "train_mae": 0.00010141062192001049,
+      "test_mae": 0.008339915572095373,
       "feature_importance": {
-        "rolling_pnl_impact_ratio_14": 0,
         "cumulative_pnl": 0,
-        "rolling_vol_7": 94,
-        "fills_total_qty": 0,
-        "ewm_fills_adding_liquidity_rate_10": 0,
-        "ewm_fills_removing_liquidity_rate_10": 0,
-        "daily_pnl": 0,
-        "rolling_max_drawdown": 9,
-        "win_rate_21d": 4,
-        "ewm_volume_fills_efficiency_10": 0,
         "daily_gross": 0,
+        "win_rate_21d": 2,
+        "rolling_vol_7": 118,
         "rolling_effective_spread_proxy_std_21": 0,
+        "ewm_fills_adding_liquidity_rate_10": 0,
+        "rolling_pnl_impact_ratio_14": 0,
+        "daily_fees": 0,
+        "ewm_pnl_3": 0,
+        "fills_total_qty": 0,
+        "fills_market_open_rate": 0,
+        "ewm_volume_fills_efficiency_10": 5,
         "fills_count": 0,
-        "ewm_pnl_3": 2,
-        "ewm_volume_3": 3
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 13
       },
       "importance_by_category": {
-        "traditional": 112,
+        "traditional": 138,
         "fills_based": 0,
         "execution_quality": 0,
         "cross_features": 0,

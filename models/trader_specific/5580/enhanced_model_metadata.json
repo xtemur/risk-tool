@@ -1,6 +1,6 @@
 {
   "trader_id": 5580,
-  "training_timestamp": "2025-08-26T16:55:55.732106",
+  "training_timestamp": "2025-08-26T17:37:16.696497",
   "enhanced_features": true,
   "feature_categories": {
     "traditional": [
@@ -11,41 +11,40 @@
     ],
     "fills_based": [
       "rolling_orders_count_mean_7",
-      "fills_total_qty",
-      "rolling_cost_per_share_std_7",
       "rolling_cost_per_share_mean_7",
+      "fills_total_qty",
+      "fills_market_open_rate",
       "rolling_fills_count_std_7",
-      "rolling_fills_count_mean_7",
-      "fills_market_open_rate"
+      "rolling_cost_per_share_std_7",
+      "rolling_orders_count_std_7",
+      "rolling_fills_count_mean_7"
     ],
     "execution_quality": [
       "rolling_effective_spread_proxy_std_7"
     ],
     "cross_features": [],
-    "behavioral": [
-      "large_loss_threshold"
-    ],
+    "behavioral": [],
     "uncategorized": [
-      "daily_pnl",
-      "daily_gross"
+      "daily_gross",
+      "daily_pnl"
     ]
   },
   "selected_features": [
     "rolling_orders_count_mean_7",
     "ewm_liquidity_provision_score_5",
-    "fills_total_qty",
+    "rolling_cost_per_share_mean_7",
     "cumulative_pnl",
     "rolling_vol_7",
-    "rolling_cost_per_share_std_7",
-    "daily_pnl",
-    "rolling_max_drawdown",
-    "rolling_cost_per_share_mean_7",
     "daily_gross",
+    "fills_total_qty",
+    "fills_market_open_rate",
     "rolling_fills_count_std_7",
+    "rolling_cost_per_share_std_7",
+    "rolling_orders_count_std_7",
     "rolling_effective_spread_proxy_std_7",
-    "large_loss_threshold",
+    "daily_pnl",
     "rolling_fills_count_mean_7",
-    "fills_market_open_rate"
+    "rolling_max_drawdown"
   ],
   "feature_count": 15,
   "training_data_shape": [
@@ -78,29 +77,28 @@
       "feature_importance": {
         "rolling_orders_count_mean_7": 5,
         "ewm_liquidity_provision_score_5": 0,
-        "fills_total_qty": 0,
+        "rolling_cost_per_share_mean_7": 1,
         "cumulative_pnl": 0,
         "rolling_vol_7": 86,
-        "rolling_cost_per_share_std_7": 0,
-        "daily_pnl": 0,
-        "rolling_max_drawdown": 0,
-        "rolling_cost_per_share_mean_7": 1,
         "daily_gross": 0,
+        "fills_total_qty": 0,
+        "fills_market_open_rate": 0,
         "rolling_fills_count_std_7": 1,
+        "rolling_cost_per_share_std_7": 0,
+        "rolling_orders_count_std_7": 0,
         "rolling_effective_spread_proxy_std_7": 1,
-        "large_loss_threshold": 0,
+        "daily_pnl": 0,
         "rolling_fills_count_mean_7": 0,
-        "fills_market_open_rate": 0
+        "rolling_max_drawdown": 0
       },
       "importance_by_category": {
         "traditional": 86,
         "fills_based": 7,
         "execution_quality": 1,
-        "behavioral": 0,
         "uncategorized": 0
       }
     },
-    "var_model": {
+    "position_model": {
       "type": "LGBMRegressor",
       "params": {
         "objective": "regression",
@@ -116,32 +114,31 @@
         "reg_alpha": 0.008041295974036298,
         "reg_lambda": 0.045466650323509994
       },
-      "train_rmse": 0.00017194146263628532,
-      "test_rmse": 0.09090160946957247,
-      "train_mae": 5.416700632125647e-05,
-      "test_mae": 0.0083759328633091,
+      "train_rmse": 0.00017213049595164596,
+      "test_rmse": 0.09090150108114087,
+      "train_mae": 5.445479366779973e-05,
+      "test_mae": 0.008376279985497177,
       "feature_importance": {
         "rolling_orders_count_mean_7": 0,
         "ewm_liquidity_provision_score_5": 0,
-        "fills_total_qty": 0,
+        "rolling_cost_per_share_mean_7": 40,
         "cumulative_pnl": 0,
         "rolling_vol_7": 90,
-        "rolling_cost_per_share_std_7": 0,
-        "daily_pnl": 0,
-        "rolling_max_drawdown": 14,
-        "rolling_cost_per_share_mean_7": 39,
         "daily_gross": 3,
+        "fills_total_qty": 0,
+        "fills_market_open_rate": 0,
         "rolling_fills_count_std_7": 0,
+        "rolling_cost_per_share_std_7": 0,
+        "rolling_orders_count_std_7": 0,
         "rolling_effective_spread_proxy_std_7": 0,
-        "large_loss_threshold": 5,
+        "daily_pnl": 0,
         "rolling_fills_count_mean_7": 2,
-        "fills_market_open_rate": 0
+        "rolling_max_drawdown": 13
       },
       "importance_by_category": {
-        "traditional": 104,
-        "fills_based": 41,
+        "traditional": 103,
+        "fills_based": 42,
         "execution_quality": 0,
-        "behavioral": 5,
         "uncategorized": 3
       }
     }

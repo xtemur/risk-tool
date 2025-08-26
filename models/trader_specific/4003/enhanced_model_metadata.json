@@ -1,49 +1,50 @@
 {
   "trader_id": 4003,
-  "training_timestamp": "2025-08-26T16:55:37.910008",
+  "training_timestamp": "2025-08-26T17:36:59.334974",
   "enhanced_features": true,
   "feature_categories": {
     "traditional": [
-      "ewm_price_impact_mean_10",
-      "rolling_vol_7",
-      "ewm_fills_removing_liquidity_rate_10",
-      "ewm_price_impact_mean_21",
-      "rolling_max_drawdown",
-      "win_rate_21d",
-      "ewm_volume_fills_efficiency_10",
       "ewm_trading_aggressiveness_10",
+      "rolling_vol_7",
+      "ewm_price_impact_mean_10",
+      "win_rate_21d",
+      "ewm_price_impact_mean_21",
+      "ewm_fills_mean_fee_rate_10",
       "ewm_pnl_3",
-      "ewm_volume_3"
+      "ewm_volume_fills_efficiency_10",
+      "rolling_max_drawdown"
     ],
     "fills_based": [
+      "fills_mean_qty",
       "fills_total_qty",
-      "fills_count",
-      "fills_mean_qty"
+      "fills_count"
     ],
-    "execution_quality": [],
+    "execution_quality": [
+      "liquidity_provision_score"
+    ],
     "cross_features": [],
     "behavioral": [],
     "uncategorized": [
-      "daily_pnl",
-      "daily_gross"
+      "daily_gross",
+      "daily_pnl"
     ]
   },
   "selected_features": [
-    "fills_total_qty",
-    "ewm_price_impact_mean_10",
-    "rolling_vol_7",
-    "ewm_fills_removing_liquidity_rate_10",
-    "ewm_price_impact_mean_21",
-    "rolling_max_drawdown",
-    "win_rate_21d",
-    "ewm_volume_fills_efficiency_10",
-    "daily_pnl",
     "ewm_trading_aggressiveness_10",
     "daily_gross",
+    "rolling_vol_7",
+    "ewm_price_impact_mean_10",
+    "win_rate_21d",
+    "ewm_price_impact_mean_21",
+    "liquidity_provision_score",
+    "ewm_fills_mean_fee_rate_10",
+    "fills_mean_qty",
+    "fills_total_qty",
     "ewm_pnl_3",
-    "ewm_volume_3",
+    "ewm_volume_fills_efficiency_10",
     "fills_count",
-    "fills_mean_qty"
+    "daily_pnl",
+    "rolling_max_drawdown"
   ],
   "feature_count": 15,
   "training_data_shape": [
@@ -72,31 +73,32 @@
         "reg_lambda": 0.05808361216819946
       },
       "train_auc": 1.0,
-      "test_auc": 0.375,
+      "test_auc": 0.36666666666666664,
       "feature_importance": {
-        "fills_total_qty": 0,
-        "ewm_price_impact_mean_10": 0,
-        "rolling_vol_7": 87,
-        "ewm_fills_removing_liquidity_rate_10": 0,
-        "ewm_price_impact_mean_21": 0,
-        "rolling_max_drawdown": 0,
-        "win_rate_21d": 0,
-        "ewm_volume_fills_efficiency_10": 2,
-        "daily_pnl": 0,
         "ewm_trading_aggressiveness_10": 0,
         "daily_gross": 0,
+        "rolling_vol_7": 87,
+        "ewm_price_impact_mean_10": 1,
+        "win_rate_21d": 1,
+        "ewm_price_impact_mean_21": 0,
+        "liquidity_provision_score": 0,
+        "ewm_fills_mean_fee_rate_10": 0,
+        "fills_mean_qty": 0,
+        "fills_total_qty": 0,
         "ewm_pnl_3": 0,
-        "ewm_volume_3": 7,
+        "ewm_volume_fills_efficiency_10": 9,
         "fills_count": 0,
-        "fills_mean_qty": 0
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 0
       },
       "importance_by_category": {
-        "traditional": 96,
+        "traditional": 98,
         "fills_based": 0,
+        "execution_quality": 0,
         "uncategorized": 0
       }
     },
-    "var_model": {
+    "position_model": {
       "type": "LGBMRegressor",
       "params": {
         "objective": "regression",
@@ -104,38 +106,39 @@
         "boosting_type": "gbdt",
         "random_state": 42,
         "verbose": -1,
-        "num_leaves": 95,
-        "learning_rate": 0.13851221130396282,
-        "feature_fraction": 0.9674564582824399,
-        "bagging_fraction": 0.828599972875884,
-        "min_child_samples": 20,
-        "reg_alpha": 0.0913117954081744,
-        "reg_lambda": 0.26729196491809853
+        "num_leaves": 38,
+        "learning_rate": 0.19973461655617034,
+        "feature_fraction": 0.9457309353566399,
+        "bagging_fraction": 0.6042383557613037,
+        "min_child_samples": 22,
+        "reg_alpha": 0.02690446866152814,
+        "reg_lambda": 0.17795814151565734
       },
-      "train_rmse": 0.0004830158208205469,
-      "test_rmse": 0.0908872777272322,
-      "train_mae": 0.00037975938993444164,
-      "test_mae": 0.008504478872718615,
+      "train_rmse": 0.00014548130416800506,
+      "test_rmse": 0.0909024939348107,
+      "train_mae": 0.00011585916433640304,
+      "test_mae": 0.008434749195795854,
       "feature_importance": {
-        "fills_total_qty": 0,
-        "ewm_price_impact_mean_10": 0,
-        "rolling_vol_7": 100,
-        "ewm_fills_removing_liquidity_rate_10": 0,
-        "ewm_price_impact_mean_21": 0,
-        "rolling_max_drawdown": 0,
-        "win_rate_21d": 0,
-        "ewm_volume_fills_efficiency_10": 0,
-        "daily_pnl": 0,
         "ewm_trading_aggressiveness_10": 0,
         "daily_gross": 0,
+        "rolling_vol_7": 94,
+        "ewm_price_impact_mean_10": 0,
+        "win_rate_21d": 0,
+        "ewm_price_impact_mean_21": 0,
+        "liquidity_provision_score": 0,
+        "ewm_fills_mean_fee_rate_10": 0,
+        "fills_mean_qty": 0,
+        "fills_total_qty": 0,
         "ewm_pnl_3": 0,
-        "ewm_volume_3": 0,
+        "ewm_volume_fills_efficiency_10": 3,
         "fills_count": 0,
-        "fills_mean_qty": 0
+        "daily_pnl": 0,
+        "rolling_max_drawdown": 0
       },
       "importance_by_category": {
-        "traditional": 100,
+        "traditional": 97,
         "fills_based": 0,
+        "execution_quality": 0,
         "uncategorized": 0
       }
     }

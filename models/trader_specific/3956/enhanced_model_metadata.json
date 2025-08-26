@@ -1,51 +1,50 @@
 {
   "trader_id": 3956,
-  "training_timestamp": "2025-08-26T16:55:33.613506",
+  "training_timestamp": "2025-08-26T17:36:54.915353",
   "enhanced_features": true,
   "feature_categories": {
     "traditional": [
-      "rolling_vol_7",
-      "ewm_fills_removing_liquidity_rate_10",
       "win_rate_21d",
-      "ewm_fills_adding_liquidity_rate_5",
-      "cumulative_pnl",
+      "rolling_vol_7",
+      "ewm_pnl_3",
+      "ewm_volume_3",
       "rolling_max_drawdown",
-      "avg_trades_21d",
-      "ewm_volume_fills_efficiency_10"
+      "ewm_fills_adding_liquidity_rate_5",
+      "ewm_fills_removing_liquidity_rate_10",
+      "cumulative_pnl"
     ],
     "fills_based": [
-      "fills_count",
-      "fills_total_qty"
+      "fills_market_open_rate",
+      "fills_total_qty",
+      "fills_count"
     ],
     "execution_quality": [],
     "cross_features": [
       "rolling_pnl_impact_ratio_14"
     ],
-    "behavioral": [
-      "large_loss_threshold"
-    ],
+    "behavioral": [],
     "uncategorized": [
+      "daily_pnl",
       "daily_gross",
-      "daily_volume",
-      "daily_pnl"
+      "daily_fees"
     ]
   },
   "selected_features": [
-    "rolling_vol_7",
-    "ewm_fills_removing_liquidity_rate_10",
-    "fills_count",
     "win_rate_21d",
+    "daily_pnl",
+    "rolling_vol_7",
+    "ewm_pnl_3",
+    "fills_market_open_rate",
+    "ewm_volume_3",
+    "rolling_max_drawdown",
     "daily_gross",
     "ewm_fills_adding_liquidity_rate_5",
-    "rolling_pnl_impact_ratio_14",
-    "cumulative_pnl",
+    "daily_fees",
     "fills_total_qty",
-    "rolling_max_drawdown",
-    "large_loss_threshold",
-    "daily_volume",
-    "avg_trades_21d",
-    "daily_pnl",
-    "ewm_volume_fills_efficiency_10"
+    "fills_count",
+    "ewm_fills_removing_liquidity_rate_10",
+    "cumulative_pnl",
+    "rolling_pnl_impact_ratio_14"
   ],
   "feature_count": 15,
   "training_data_shape": [
@@ -74,33 +73,32 @@
         "reg_lambda": 0.05808361216819946
       },
       "train_auc": 1.0,
-      "test_auc": 0.844017094017094,
+      "test_auc": 0.8333333333333334,
       "feature_importance": {
-        "rolling_vol_7": 90,
-        "ewm_fills_removing_liquidity_rate_10": 0,
-        "fills_count": 0,
         "win_rate_21d": 0,
+        "daily_pnl": 0,
+        "rolling_vol_7": 87,
+        "ewm_pnl_3": 0,
+        "fills_market_open_rate": 0,
+        "ewm_volume_3": 6,
+        "rolling_max_drawdown": 0,
         "daily_gross": 0,
         "ewm_fills_adding_liquidity_rate_5": 0,
-        "rolling_pnl_impact_ratio_14": 0,
-        "cumulative_pnl": 3,
+        "daily_fees": 0,
         "fills_total_qty": 0,
-        "rolling_max_drawdown": 0,
-        "large_loss_threshold": 0,
-        "daily_volume": 0,
-        "avg_trades_21d": 0,
-        "daily_pnl": 0,
-        "ewm_volume_fills_efficiency_10": 4
+        "fills_count": 0,
+        "ewm_fills_removing_liquidity_rate_10": 0,
+        "cumulative_pnl": 2,
+        "rolling_pnl_impact_ratio_14": 0
       },
       "importance_by_category": {
-        "traditional": 97,
+        "traditional": 95,
         "fills_based": 0,
         "cross_features": 0,
-        "behavioral": 0,
         "uncategorized": 0
       }
     },
-    "var_model": {
+    "position_model": {
       "type": "LGBMRegressor",
       "params": {
         "objective": "regression",
@@ -108,41 +106,40 @@
         "boosting_type": "gbdt",
         "random_state": 42,
         "verbose": -1,
-        "num_leaves": 71,
-        "learning_rate": 0.0867076907262091,
-        "feature_fraction": 0.9244113395564829,
-        "bagging_fraction": 0.8614306345471562,
-        "min_child_samples": 7,
-        "reg_alpha": 0.8583116643345579,
-        "reg_lambda": 0.5591489051303912
+        "num_leaves": 12,
+        "learning_rate": 0.08118846004392496,
+        "feature_fraction": 0.6874639387771578,
+        "bagging_fraction": 0.9795523825199317,
+        "min_child_samples": 8,
+        "reg_alpha": 0.3158918339043456,
+        "reg_lambda": 0.26495813550677844
       },
-      "train_rmse": 0.011043108821543787,
-      "test_rmse": 0.09134859152403105,
-      "train_mae": 0.003563542492103267,
-      "test_mae": 0.01222262106181042,
+      "train_rmse": 0.013217003776863582,
+      "test_rmse": 0.09571763102611955,
+      "train_mae": 0.0025361394640682545,
+      "test_mae": 0.014781796192078808,
       "feature_importance": {
-        "rolling_vol_7": 96,
-        "ewm_fills_removing_liquidity_rate_10": 1,
-        "fills_count": 0,
-        "win_rate_21d": 0,
+        "win_rate_21d": 11,
+        "daily_pnl": 1,
+        "rolling_vol_7": 71,
+        "ewm_pnl_3": 3,
+        "fills_market_open_rate": 0,
+        "ewm_volume_3": 54,
+        "rolling_max_drawdown": 4,
         "daily_gross": 0,
-        "ewm_fills_adding_liquidity_rate_5": 0,
-        "rolling_pnl_impact_ratio_14": 0,
-        "cumulative_pnl": 1,
+        "ewm_fills_adding_liquidity_rate_5": 16,
+        "daily_fees": 3,
         "fills_total_qty": 0,
-        "rolling_max_drawdown": 0,
-        "large_loss_threshold": 0,
-        "daily_volume": 0,
-        "avg_trades_21d": 0,
-        "daily_pnl": 0,
-        "ewm_volume_fills_efficiency_10": 2
+        "fills_count": 0,
+        "ewm_fills_removing_liquidity_rate_10": 10,
+        "cumulative_pnl": 12,
+        "rolling_pnl_impact_ratio_14": 4
       },
       "importance_by_category": {
-        "traditional": 100,
+        "traditional": 181,
         "fills_based": 0,
-        "cross_features": 0,
-        "behavioral": 0,
-        "uncategorized": 0
+        "cross_features": 4,
+        "uncategorized": 4
       }
     }
   },

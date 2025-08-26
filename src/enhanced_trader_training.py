@@ -445,7 +445,22 @@ class EnhancedTraderModelTrainer:
             trader_model_dir = self.models_dir / str(trader_id)
             trader_model_dir.mkdir(exist_ok=True)
 
-            # Save models with appropriate names
+            # Save models in the format expected by risk_predictor.py
+            combined_model = {
+                'classification_model': cls_model,
+                'var_model': reg_model,  # Keep legacy name for compatibility
+                'feature_names': list(selected_features),
+                'trader_id': trader_id,
+                'using_position_sizing': using_position_sizing,
+                'model_type': 'position_sizing' if using_position_sizing else 'legacy'
+            }
+
+            # Save combined model in expected format
+            combined_model_path = trader_model_dir / f'{trader_id}_tuned_validated.pkl'
+            with open(combined_model_path, 'wb') as f:
+                pickle.dump(combined_model, f)
+
+            # Also save individual models for backwards compatibility
             if using_position_sizing:
                 cls_model_name = 'enhanced_risk_model.pkl'
                 reg_model_name = 'enhanced_position_model.pkl'
@@ -500,7 +515,7 @@ class EnhancedTraderModelTrainer:
                         'feature_importance': make_json_safe(cls_importance.to_dict()),
                         'importance_by_category': make_json_safe(cls_importance_by_category)
                     },
-                    'var_model': {
+                    'position_model' if using_position_sizing else 'var_model': {
                         'type': 'LGBMRegressor',
                         'params': make_json_safe(reg_params),
                         'train_rmse': float(reg_train_rmse) if not pd.isna(reg_train_rmse) else 0.0,

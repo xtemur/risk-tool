@@ -251,9 +251,9 @@ class SignalGenerator:
         """Generate predictions using the new RiskPredictor class."""
         return self.risk_predictor.generate_predictions_batch(trader_data_dict)
 
-    def _calculate_risk_score(self, var_pred: float, loss_prob: float,
+    def _calculate_risk_score(self, position_pred: float, loss_prob: float,
                             alpha: float = 0.6, beta: float = 0.4,
-                            var_range: Tuple[float, float] = None) -> float:
+                            position_range: Tuple[float, float] = None) -> float:
         """
         Calculate weighted risk score.
 
@@ -262,34 +262,34 @@ class SignalGenerator:
             loss_prob: Loss probability prediction
             alpha: Weight for VaR component
             beta: Weight for loss probability component
-            var_range: VaR normalization range
+            position_range: Position normalization range
 
         Returns:
             Risk score (0-1 scale)
         """
-        if var_range is None:
-            var_range = (-50000, 0)  # Default range
+        if position_range is None:
+            position_range = (0.0, 1.5)  # Default position range
 
-        var_min, var_max = var_range
-        # Normalize VaR to [0, 1] (higher = higher risk)
-        if var_max != var_min:
-            normalized_var = (var_max - var_pred) / (var_max - var_min)
-            normalized_var = max(0, min(1, normalized_var))  # Clamp to 0-1
+        pos_min, pos_max = position_range
+        # Normalize position to [0, 1] (lower position = higher risk)
+        if pos_max != pos_min:
+            normalized_pos = (pos_max - position_pred) / (pos_max - pos_min)
+            normalized_pos = max(0, min(1, normalized_pos))  # Clamp to 0-1
         else:
-            normalized_var = 0.5
+            normalized_pos = 0.5
 
         # Loss probability is already 0-1 scale
         normalized_loss_prob = max(0, min(1, loss_prob))
 
         # Calculate weighted risk score
-        risk_score = alpha * normalized_var + beta * normalized_loss_prob
+        risk_score = alpha * normalized_pos + beta * normalized_loss_prob
 
         return risk_score
 
-    def classify_risk_level(self, trader_id: int, var_pred: float, loss_prob: float,
+    def classify_position_level(self, trader_id: int, position_pred: float, loss_prob: float,
                           use_weighted_formula: bool = True, alpha: float = 0.6,
                           beta: float = 0.4, thresholds: Dict[str, float] = None,
-                          var_range: Tuple[float, float] = None) -> str:
+                          position_range: Tuple[float, float] = None) -> str:
         """
         Classify risk level using either binary thresholds or weighted formula.
 
@@ -301,29 +301,29 @@ class SignalGenerator:
             alpha: Weight for VaR component
             beta: Weight for loss probability component
             thresholds: Risk level thresholds for weighted formula
-            var_range: VaR normalization range
+            position_range: Position normalization range
 
         Returns:
             Risk level classification
         """
         if use_weighted_formula:
             # Calculate weighted risk score
-            if var_range is None:
-                var_range = (-50000, 0)  # Default range
+            if position_range is None:
+                position_range = (0.0, 1.5)  # Default position range
 
-            var_min, var_max = var_range
-            # Normalize VaR to [0, 1] (higher = higher risk)
-            if var_max != var_min:
-                normalized_var = (var_max - var_pred) / (var_max - var_min)
-                normalized_var = max(0, min(1, normalized_var))  # Clamp to 0-1
+            pos_min, pos_max = position_range
+            # Normalize position to [0, 1] (lower position = higher risk)
+            if pos_max != pos_min:
+                normalized_pos = (pos_max - position_pred) / (pos_max - pos_min)
+                normalized_pos = max(0, min(1, normalized_pos))  # Clamp to 0-1
             else:
-                normalized_var = 0.5
+                normalized_pos = 0.5
 
             # Loss probability is already 0-1 scale
             normalized_loss_prob = max(0, min(1, loss_prob))
 
             # Calculate weighted risk score
-            risk_score = alpha * normalized_var + beta * normalized_loss_prob
+            risk_score = alpha * normalized_pos + beta * normalized_loss_prob
 
             # Default thresholds for 4-level classification
             if thresholds is None:
@@ -343,7 +343,7 @@ class SignalGenerator:
             else:
                 return 'neutral'
         else:
-            return self.risk_predictor.classify_risk_level(trader_id, var_pred, loss_prob)
+            return self.risk_predictor.classify_position_level(trader_id, position_pred, loss_prob)
 
     def generate_warning_signals(self, trader_id: int, row: pd.Series) -> List[str]:
         """Generate warning signals based on trader metrics and optimal thresholds."""
@@ -372,7 +372,7 @@ class SignalGenerator:
 
     def generate_alerts(self, predictions_dict: Dict[int, Dict], trader_names: Dict[int, str] = None,
                        use_weighted_formula: bool = True, alpha: float = 0.6, beta: float = 0.4,
-                       thresholds: Dict[str, float] = None, var_range: Tuple[float, float] = None) -> List[Dict]:
+                       thresholds: Dict[str, float] = None, position_range: Tuple[float, float] = None) -> List[Dict]:
         """Generate critical alerts based on risk classification levels."""
         alerts = []
 
@@ -380,7 +380,7 @@ class SignalGenerator:
             trader_names = self.get_trader_names()
 
         for trader_id, pred_data in predictions_dict.items():
-            var_prediction = pred_data['var_prediction']
+            position_prediction = pred_data.get('predicted_position_size', 1.0)
             loss_prob = pred_data['loss_probability']
 
             # Get trader name
@@ -388,29 +388,29 @@ class SignalGenerator:
             trader_label = f"Trader {trader_id} ({trader_name})"
 
             # Use the same risk classification logic as the main signal generation
-            risk_level = self.classify_risk_level(
-                trader_id, var_prediction, loss_prob,
-                use_weighted_formula, alpha, beta, thresholds, var_range
+            risk_level = self.classify_position_level(
+                trader_id, position_prediction, loss_prob,
+                use_weighted_formula, alpha, beta, thresholds, position_range
             )
 
             # Only generate alerts for high and medium risk levels
             if risk_level in ['high', 'medium']:
                 # Calculate risk score for alert message
                 risk_score = self._calculate_risk_score(
-                    var_prediction, loss_prob, alpha, beta, var_range
+                    position_prediction, loss_prob, alpha, beta, position_range
                 ) if use_weighted_formula else None
 
                 # Format alert message based on risk level
                 if risk_level == 'high':
                     if use_weighted_formula:
-                        message = f"HIGH RISK ALERT: Strong model signal to reduce position. Risk Score: {risk_score:.3f}, VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                        message = f"HIGH RISK ALERT: Strong model signal to reduce position. Risk Score: {risk_score:.3f}, Position Size: {position_prediction:.1%}, Loss Prob: {loss_prob:.1%}"
                     else:
-                        message = f"HIGH RISK ALERT: Strong model signal to reduce position. VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                        message = f"HIGH RISK ALERT: Strong model signal to reduce position. Position Size: {position_prediction:.1%}, Loss Prob: {loss_prob:.1%}"
                 else:  # medium risk
                     if use_weighted_formula:
-                        message = f"MEDIUM RISK ALERT: Model suggests caution. Risk Score: {risk_score:.3f}, VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                        message = f"MEDIUM RISK ALERT: Model suggests caution. Risk Score: {risk_score:.3f}, Position Size: {position_prediction:.1%}, Loss Prob: {loss_prob:.1%}"
                     else:
-                        message = f"MEDIUM RISK ALERT: Model suggests caution. VaR: ${var_prediction:,.0f}, Loss Prob: {loss_prob:.1%}"
+                        message = f"MEDIUM RISK ALERT: Model suggests caution. Position Size: {position_prediction:.1%}, Loss Prob: {loss_prob:.1%}"
 
                 alerts.append({
                     'trader_id': str(trader_id),
@@ -425,7 +425,7 @@ class SignalGenerator:
     def generate_daily_signals(self, target_date: str = None, use_weighted_formula: bool = True,
                              alpha: float = 0.6, beta: float = 0.4,
                              thresholds: Dict[str, float] = None,
-                             var_range: Tuple[float, float] = None) -> Dict:
+                             position_range: Tuple[float, float] = None) -> Dict:
         """
         Generate complete daily signal report using trader-specific models.
 
@@ -435,7 +435,7 @@ class SignalGenerator:
             alpha: Weight for VaR component (default 0.6)
             beta: Weight for loss probability component (default 0.4)
             thresholds: Risk level thresholds for weighted formula
-            var_range: VaR normalization range for weighted formula
+            position_range: Position normalization range for weighted formula
 
         Returns:
             Dictionary with signal data for email template
@@ -466,12 +466,12 @@ class SignalGenerator:
             data_series = latest_data.get(trader_id, pd.Series())
 
             # Calculate heatmap colors for each metric using normalized approach
-            # For VaR, we don't have historical range, so use a fixed baseline
-            var_color = self.calculate_heatmap_color(
-                abs(pred_data['var_prediction']),
-                20000,  # Reasonable high VaR value
-                0,      # Best VaR is 0
-                'lower_better'  # Lower VaR is better
+            # For position size, higher is generally better (more confident)
+            position_color = self.calculate_heatmap_color(
+                pred_data.get('predicted_position_size', 1.0),
+                1.5,    # Max position size
+                0.0,    # Min position size
+                'higher_better'  # Higher position size is better
             )
 
             # For loss probability, use 0-1 range
@@ -555,23 +555,23 @@ class SignalGenerator:
                 'trader_id': str(trader_id),
                 'trader_name': trader_name,
                 'trader_label': f"{trader_id} ({trader_name})",
-                'risk_level': self.classify_risk_level(
+                'risk_level': self.classify_position_level(
                     trader_id,
-                    pred_data['var_prediction'],
+                    pred_data.get('predicted_position_size', 1.0),
                     pred_data['loss_probability'],
                     use_weighted_formula,
                     alpha,
                     beta,
                     thresholds,
-                    var_range
+                    position_range
                 ),
-                'var_5pct': pred_data['var_prediction'],
+                'position_size': pred_data.get('predicted_position_size', 1.0),
                 'loss_probability': pred_data['loss_probability'],
                 'model_confidence': pred_data.get('model_confidence', 0.5),
                 'risk_score': self._calculate_risk_score(
-                    pred_data['var_prediction'],
+                    pred_data.get('predicted_position_size', 1.0),
                     pred_data['loss_probability'],
-                    alpha, beta, var_range
+                    alpha, beta, position_range
                 ) if use_weighted_formula else None,
                 'last_trade_date': str(db_metrics.get('last_trade_date', 'N/A')).replace('2025-', '') if db_metrics.get('last_trade_date', 'N/A') != 'N/A' else 'N/A',
                 'last_trading_day_pnl': db_metrics.get('last_trading_day_pnl', 0),
@@ -590,7 +590,7 @@ class SignalGenerator:
                 'warning_signals': self.generate_warning_signals(trader_id, data_series),
                 'optimal_thresholds': self.risk_predictor.optimal_thresholds.get(trader_id, {}),
                 # Heatmap colors for all relevant metrics
-                'var_heatmap': {'bg': var_color[0], 'text': var_color[1], 'class': var_color[2]},
+                'position_heatmap': {'bg': position_color[0], 'text': position_color[1], 'class': position_color[2]},
                 'loss_prob_heatmap': {'bg': loss_prob_color[0], 'text': loss_prob_color[1], 'class': loss_prob_color[2]},
                 'last_day_pnl_heatmap': {'bg': last_day_pnl_color[0], 'text': last_day_pnl_color[1], 'class': last_day_pnl_color[2]},
                 'sharpe_heatmap': {'bg': sharpe_color[0], 'text': sharpe_color[1], 'class': sharpe_color[2]},
@@ -620,17 +620,17 @@ class SignalGenerator:
 
         # Generate alerts using the same parameters as risk classification
         alerts = self.generate_alerts(
-            predictions, trader_names, use_weighted_formula, alpha, beta, thresholds, var_range
+            predictions, trader_names, use_weighted_formula, alpha, beta, thresholds, position_range
         )
 
         # Calculate summary statistics
         if trader_signals:
-            var_amounts = [abs(s['var_5pct']) for s in trader_signals]
+            position_sizes = [s['position_size'] for s in trader_signals]
             loss_probs = [s['loss_probability'] for s in trader_signals]
 
             summary_stats = {
-                'avg_var': np.mean(var_amounts),
-                'max_var': np.max(var_amounts),
+                'avg_position_size': np.mean(position_sizes),
+                'max_position_size': np.max(position_sizes),
                 'avg_loss_prob': np.mean(loss_probs),
                 'max_loss_prob': np.max(loss_probs),
                 'total_warning_signals': sum(len(s['warning_signals']) for s in trader_signals),

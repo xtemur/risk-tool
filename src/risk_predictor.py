@@ -18,8 +18,8 @@ logger = logging.getLogger(__name__)
 
 class RiskPredictor:
     """
-    Risk predictor using causal impact evaluation approach.
-    Provides VaR predictions and loss probabilities for trader risk assessment.
+    Risk predictor using position sizing optimization approach.
+    Provides position sizing predictions and loss probabilities for trader risk assessment.
     """
 
     def __init__(self, config: Dict):
@@ -49,7 +49,7 @@ class RiskPredictor:
             for trader_threshold in threshold_data['thresholds']:
                 trader_id = int(trader_threshold['trader_id'])
                 self.optimal_thresholds[trader_id] = {
-                    'var_threshold': trader_threshold['var_threshold'],
+                    'position_threshold': trader_threshold.get('position_threshold', 0.5),
                     'loss_prob_threshold': trader_threshold['loss_prob_threshold']
                 }
 
@@ -60,7 +60,7 @@ class RiskPredictor:
             # Set default thresholds if loading fails
             for trader_id in self.config.get('active_traders', []):
                 self.optimal_thresholds[trader_id] = {
-                    'var_threshold': -5000,
+                    'position_threshold': 0.5,
                     'loss_prob_threshold': 0.15
                 }
 
@@ -146,7 +146,7 @@ class RiskPredictor:
 
     def generate_prediction(self, trader_id: int, data_series: pd.Series) -> Optional[Dict[str, float]]:
         """
-        Generate VaR and loss probability prediction for a trader.
+        Generate position sizing and loss probability prediction for a trader.
 
         Args:
             trader_id: Trader account ID
@@ -175,15 +175,35 @@ class RiskPredictor:
                 logger.error(f"Missing var_model or classification_model for trader {trader_id}")
                 return None
 
-            # Generate predictions using causal impact approach
-            var_prediction = var_model.predict(X_test)[0]
+            # Check if this is a position sizing model
+            using_position_sizing = model_data.get('using_position_sizing', False) or model_data.get('model_type', 'legacy') == 'position_sizing'
+
+            # Generate predictions
+            raw_position_prediction = var_model.predict(X_test)[0]
             loss_probability = classification_model.predict_proba(X_test)[0, 1]  # Probability of loss
+
+            if using_position_sizing:
+                # For position sizing models, ensure output is in valid range (0.0 to 1.5)
+                position_prediction = max(0.0, min(1.5, raw_position_prediction))
+                logger.debug(f"Position sizing prediction for trader {trader_id}: {position_prediction:.3f}")
+            else:
+                # Legacy VAR model - convert to position sizing approximation
+                # Negative VAR values suggest reducing position
+                if raw_position_prediction <= -5000:
+                    position_prediction = 0.3  # Reduce position significantly
+                elif raw_position_prediction <= -2000:
+                    position_prediction = 0.6  # Reduce position moderately
+                elif raw_position_prediction <= 0:
+                    position_prediction = 0.8  # Slightly reduce position
+                else:
+                    position_prediction = 1.0  # Normal position
+                logger.debug(f"Legacy VAR converted to position sizing for trader {trader_id}: VAR={raw_position_prediction:.0f} -> Position={position_prediction:.3f}")
 
             # Calculate model confidence
             model_confidence = max(loss_probability, 1 - loss_probability)
 
             return {
-                'var_prediction': var_prediction,
+                'predicted_position_size': position_prediction,
                 'loss_probability': loss_probability,
                 'model_confidence': model_confidence,
                 'feature_count': len(X_test.columns)
@@ -209,49 +229,50 @@ class RiskPredictor:
             prediction = self.generate_prediction(trader_id, data_series)
             if prediction is not None:
                 predictions[trader_id] = prediction
-                logger.info(f"Generated prediction for trader {trader_id}: VaR=${prediction['var_prediction']:.2f}, P(Loss)={prediction['loss_probability']:.3f}")
+                logger.info(f"Generated prediction for trader {trader_id}: Position={prediction['predicted_position_size']:.2%}, P(Loss)={prediction['loss_probability']:.3f}")
 
         logger.info(f"Generated predictions for {len(predictions)} traders")
         return predictions
 
-    def classify_risk_level(self, trader_id: int, var_prediction: float, loss_probability: float) -> str:
+    def classify_position_level(self, trader_id: int, position_prediction: float, loss_probability: float) -> str:
         """
-        Classify risk level using causal impact intervention logic.
+        Classify position level using position sizing logic.
 
         Args:
             trader_id: Trader account ID
-            var_prediction: VaR prediction value
+            position_prediction: Position sizing prediction value
             loss_probability: Loss probability prediction
 
         Returns:
-            Risk level ('high' or 'low')
+            Position level ('reduce', 'conservative', 'normal', 'aggressive')
         """
         # Get trader-specific thresholds
         trader_thresholds = self.optimal_thresholds.get(trader_id, {
-            'var_threshold': -5000,
+            'position_threshold': 0.5,
             'loss_prob_threshold': 0.15
         })
 
-        var_threshold = trader_thresholds['var_threshold']
+        position_threshold = trader_thresholds['position_threshold']
         loss_prob_threshold = trader_thresholds['loss_prob_threshold']
 
-        # Apply intervention logic from causal impact evaluation
-        # High risk if model suggests intervention (don't trade)
-        should_intervene = (
-            (var_prediction <= var_threshold) or
-            (loss_probability >= loss_prob_threshold)
-        )
+        # Classify based on position size and loss probability
+        if position_prediction <= 0.5 or loss_probability >= loss_prob_threshold:
+            return 'reduce'  # High risk - reduce position
+        elif position_prediction <= 0.8:
+            return 'conservative'
+        elif position_prediction >= 1.2:
+            return 'aggressive'
+        else:
+            return 'normal'
 
-        return 'high' if should_intervene else 'low'
 
-
-    def generate_intervention_recommendation(self, trader_id: int, var_prediction: float, loss_probability: float) -> Dict[str, Any]:
+    def generate_intervention_recommendation(self, trader_id: int, position_prediction: float, loss_probability: float) -> Dict[str, Any]:
         """
-        Generate intervention recommendation based on thresholds.
+        Generate position sizing recommendation based on thresholds.
 
         Args:
             trader_id: Trader account ID
-            var_prediction: VaR prediction value
+            position_prediction: Position sizing prediction value
             loss_probability: Loss probability prediction
 
         Returns:
