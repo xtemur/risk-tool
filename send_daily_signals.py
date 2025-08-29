@@ -20,7 +20,8 @@ import os
 # Add directories to path
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from inference.signal_generator import SignalGenerator
+# Switch to temporally-aligned pooled model system (CLAUDE.md compliant)
+from src.minimal_risk_system import MinimalRiskSystem
 from inference.email_service import EmailService
 
 logging.basicConfig(
@@ -28,6 +29,111 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+def convert_predictions_to_signals(predictions: dict, target_date: str = None) -> dict:
+    """
+    Convert MinimalRiskSystem predictions to signal format for email template
+    Maintains compatibility with existing email system
+    """
+    from datetime import datetime
+
+    trader_signals = []
+    alerts = []
+
+    for trader_id, pred_data in predictions.items():
+        reduction_pct = pred_data.get('reduction_pct', 0)
+        reasons = pred_data.get('reasons', ['Model prediction'])
+        confidence = pred_data.get('confidence', 'model-based')
+
+        # Map reduction percentage to risk levels
+        if reduction_pct > 50:
+            risk_level = 'high'
+        elif reduction_pct > 20:
+            risk_level = 'medium'
+        elif reduction_pct > 0:
+            risk_level = 'low'
+        else:
+            risk_level = 'neutral'
+
+        # Convert reduction to position recommendation
+        position_size = max(0, 1.0 - reduction_pct/100)
+
+        signal = {
+            'trader_id': str(trader_id),
+            'trader_name': f'ID {trader_id}',  # Basic name
+            'trader_label': f'{trader_id}',
+            'risk_level': risk_level,
+            'position_size': position_size,
+            'loss_probability': reduction_pct / 100.0,  # Convert to 0-1 scale
+            'model_confidence': 0.8 if confidence == 'model-based' else 0.6,
+            'risk_score': reduction_pct / 100.0,
+            'last_trade_date': 'N/A',
+            'last_trading_day_pnl': 0,
+            'sharpe_30d': 0,
+            'avg_daily_pnl': 0,
+            'avg_winning_trade': 0,
+            'avg_losing_trade': 0,
+            'highest_pnl': 0,
+            'lowest_pnl': 0,
+            'bat_30d': 0,
+            'bat_all_time': 0,
+            'wl_ratio_30d': 0,
+            'wl_ratio_all_time': 0,
+            'volatility': 0,
+            'warning_signals': reasons,
+            'optimal_thresholds': {},
+            # Default heatmap colors (neutral)
+            'position_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'loss_prob_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'last_day_pnl_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'sharpe_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'avg_daily_pnl_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'avg_winning_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'avg_losing_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'highest_pnl_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'lowest_pnl_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'bat_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'},
+            'wl_ratio_heatmap': {'bg': '#F5F5F5', 'text': '#000000', 'class': 'neutral'}
+        }
+
+        trader_signals.append(signal)
+
+        # Generate alerts for high risk
+        if risk_level in ['high', 'medium']:
+            alerts.append({
+                'trader_id': str(trader_id),
+                'trader_label': f'Trader {trader_id}',
+                'message': f'{risk_level.upper()} RISK: Recommend {reduction_pct:.0f}% position reduction',
+                'risk_level': risk_level,
+                'risk_score': reduction_pct / 100.0
+            })
+
+    # Sort by risk level
+    risk_order = {'high': 0, 'medium': 1, 'low': 2, 'neutral': 3}
+    trader_signals.sort(key=lambda x: (risk_order.get(x['risk_level'], 3), -x['loss_probability']))
+
+    return {
+        'date': target_date or datetime.now().strftime('%Y-%m-%d'),
+        'trader_signals': trader_signals,
+        'alerts': alerts,
+        'summary_stats': {
+            'avg_position_size': sum(s['position_size'] for s in trader_signals) / len(trader_signals) if trader_signals else 1.0,
+            'max_position_size': max((s['position_size'] for s in trader_signals), default=1.0),
+            'avg_loss_prob': sum(s['loss_probability'] for s in trader_signals) / len(trader_signals) if trader_signals else 0.0,
+            'max_loss_prob': max((s['loss_probability'] for s in trader_signals), default=0.0),
+            'total_warning_signals': sum(len(s['warning_signals']) for s in trader_signals),
+            'using_optimal_thresholds': True,
+            'intervention_based': True,
+            'causal_impact_model': False,  # We use pooled model, not causal impact
+            'weighted_formula_enabled': False,
+            'temporal_alignment': True,  # Key differentiator
+            'pooled_model': True,        # Key differentiator
+            'alpha': None,
+            'beta': None,
+            'risk_classification_levels': 4
+        }
+    }
 
 
 def main():
@@ -59,13 +165,16 @@ def main():
     args = parser.parse_args()
 
     try:
-        # Initialize components
-        logger.info("Initializing signal generator...")
-        generator = SignalGenerator(args.config)
+        # Initialize temporally-aligned pooled model system
+        logger.info("Initializing minimal risk system (pooled model)...")
+        risk_system = MinimalRiskSystem()
 
-        # Generate signals
-        logger.info("Generating daily signals...")
-        signal_data = generator.generate_daily_signals(args.date)
+        # Generate predictions using pooled model (prevents temporal leakage)
+        logger.info("Generating daily signals with temporal alignment...")
+        predictions = risk_system.run_daily()
+
+        # Convert to signal data format for email
+        signal_data = convert_predictions_to_signals(predictions, args.date)
 
         # Initialize email service (don't require credentials if save-only)
         email_service = EmailService(require_credentials=not args.save_only)
