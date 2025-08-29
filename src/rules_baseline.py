@@ -93,11 +93,20 @@ class RulesBasedRiskSystem:
         return streak
 
     def _calculate_drawdown_pct(self, trader_data: pd.DataFrame) -> float:
-        """Calculate current drawdown percentage from recent peak"""
+        """Calculate current drawdown percentage from recent peak - FIXED"""
         cumulative = trader_data['pnl'].cumsum()
         running_max = cumulative.expanding().max()
-        current_drawdown = (cumulative.iloc[-1] - running_max.iloc[-1]) / (running_max.iloc[-1] + 1e-8)
-        return abs(current_drawdown) * 100
+
+        # CRITICAL FIX: Proper drawdown calculation
+        current_peak = running_max.iloc[-1]
+        current_value = cumulative.iloc[-1]
+
+        # Only calculate drawdown if there was a positive peak
+        if current_peak > 1000:  # Meaningful peak
+            drawdown = (current_peak - current_value) / current_peak * 100
+            return min(drawdown, 100.0)  # Cap at 100%
+        else:
+            return 0.0  # No meaningful peak to draw down from
 
 
 # This baseline must be beaten by at least 10% to justify ML complexity

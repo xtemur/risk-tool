@@ -10,7 +10,7 @@ class Config:
     # Risk parameters
     DEFAULT_LIMIT = 5000
     MAX_REDUCTION = 80  # Never reduce more than 80%
-    MIN_SAMPLES_FOR_ML = 5000  # Need this many rows before using ML
+    MIN_SAMPLES_FOR_ML = 200  # REDUCED: 15 traders * ~15 days = ~225 samples is realistic minimum
 
     # Features
     FEATURE_WINDOWS = [3, 5, 10, 20]  # Don't need more

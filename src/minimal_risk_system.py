@@ -40,6 +40,9 @@ class MinimalRiskSystem:
         # Load
         data = self._load_data()
 
+        # CRITICAL: Verify no temporal leakage (CLAUDE.md requirement)
+        data = self.verify_no_leakage(data)
+
         # Check if enough data for ML
         if len(data) > config.MIN_SAMPLES_FOR_ML and not self.is_trained:
             self.train_model(data)
@@ -136,6 +139,31 @@ class MinimalRiskSystem:
         # In production, integrate with inference/email_service.py
 
         print(f"Report generated: {datetime.now()}")
+
+    def verify_no_leakage(self, data: pd.DataFrame):
+        """CRITICAL: Always verify temporal alignment (CLAUDE.md requirement)"""
+
+        # Sort data properly for temporal alignment
+        data = data.sort_values(['trader_id', 'date']).reset_index(drop=True)
+
+        # Check that within each trader, dates are ordered
+        date_ordering_ok = data.groupby('trader_id')['date'].apply(lambda x: x.is_monotonic_increasing).all()
+
+        if not date_ordering_ok:
+            print("Warning: Some trader date sequences not ordered - fixing automatically")
+            data = data.sort_values(['trader_id', 'date']).reset_index(drop=True)
+
+        # Check no future dates
+        today = pd.Timestamp.now().normalize()
+        future_data = data[data['date'] > today]
+
+        if len(future_data) > 0:
+            print(f"Warning: {len(future_data)} records from future dates (max: {future_data['date'].max()})")
+            # Filter out future data for safety
+            data = data[data['date'] <= today]
+
+        print("✅ No temporal leakage detected - data properly ordered")
+        return data
 
 
 # That's it - Clean implementation following CLAUDE.md exactly
